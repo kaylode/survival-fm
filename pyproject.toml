@@ -1,0 +1,19 @@
+[project]
+name = "sirbu"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.12.12"
+dependencies = [
+    "lifelines>=0.30.0",
+    "numpy>=2.4.3",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.1",
+    "pycox>=0.3.0",
+    "scikit-learn>=1.8.0",
+    "seaborn>=0.13.2",
+    "torch>=2.10.0",
+    "torchtuples>=0.2.2",
+    "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
+    "tabpfn>=6.4.1",
+]
