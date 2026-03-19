@@ -55,7 +55,7 @@ def main():
     
     unique_classes = np.unique(y_test)
     for i, cls in enumerate(unique_classes):
-        mask = (y_test == cls)
+        mask = (y.values == cls)
         ax.scatter(
             X_2d[mask, 0], 
             X_2d[mask, 1], 

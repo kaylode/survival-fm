@@ -17,7 +17,6 @@ except ImportError:
 from typing import *
 
 from .utils import TabPFNClassifier
-from .embedding import TabPFNEmbedding
 from .styles import setup_figure, create_savefig_partial
 
 def get_tabpfn_embeddings(X_train, y_train, X_test, y_test):
@@ -31,16 +30,10 @@ def get_tabpfn_embeddings(X_train, y_train, X_test, y_test):
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
-    embedding_extractor = TabPFNEmbedding(
-        tabpfn_clf=clf,
-        n_fold=5,            # important for stability
-    )
+    clf.fit(X_train, y_train)
 
-    embeddings = embedding_extractor.get_embeddings(
-        X_train,
-        y_train,
-        X_test,
-        data_source="test"
-    )
-
+    train_embeddings = clf.get_embeddings(X_test, data_source='train')[0]
+    test_embeddings = clf.get_embeddings(X_test, data_source='test')[0]
+    embeddings = np.concatenate([train_embeddings, test_embeddings], axis=0)
+    
     return embeddings
