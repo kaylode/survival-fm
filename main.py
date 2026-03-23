@@ -102,14 +102,15 @@ def main():
 
             # 3. DeepSurv
             print("Model: DeepSurv")
-            _, surv_df, ev = train_deepsurv(df_train, df_test, task['duration'], task['event'], tune=args.tune, n_trials=args.trials)
-            results.append({"Task": task['name'], "Model": "DeepSurv", "Fold": fold+1, "C-index": ev.concordance_td()})
+            _, risk_ds, surv_p_ds, surv_t_ds = train_deepsurv(df_train, df_test, task['duration'], task['event'], tune=args.tune, n_trials=args.trials)
+            metrics_ds = evaluate_survival_model(df_train, df_test, task['duration'], task['event'], risk_ds, surv_probs=surv_p_ds, surv_times=surv_t_ds)
+            results.append({"Task": task['name'], "Model": "DeepSurv", "Fold": fold+1, **metrics_ds})
 
             # 4. DeepHit (if competing risks or single)
             if task['name'] in ["CV Mortality", "Myocardial Infarction", "Stroke (Ictus)"]:
                 print("Model: DeepHit")
-                _, surv_df, ev = train_deephit_competing_risks(df_train, df_test, task['duration'], task['event'], tune=args.tune, n_trials=args.trials)
-                results.append({"Task": task['name'], "Model": "DeepHit", "Fold": fold+1, "C-index": ev.concordance_td()})
+                _, surv_df_dh, ev_dh = train_deephit_competing_risks(df_train, df_test, task['duration'], task['event'], tune=args.tune, n_trials=args.trials)
+                results.append({"Task": task['name'], "Model": "DeepHit", "Fold": fold+1, "C-index": ev_dh.concordance_td()})
 
             # 5. Custom TorchSurv Model
             print("Model: Custom TorchSurv")
@@ -149,8 +150,19 @@ def main():
     stats_df.to_csv("results/statistical_pvalues.csv", index=False)
     print(stats_df)
 
-    plt.savefig("results/model_comparison_cindex.pdf")
-    plt.close()
+    # Visualization - C-index
+    if "C-index" in df_res.columns:
+        fig, ax = plt.subplots(figsize=(14, 7))
+        df_cindex = df_res.dropna(subset=["C-index"])
+        if not df_cindex.empty:
+            sns.barplot(data=df_cindex, x="Task", y="C-index", hue="Model",
+                        capsize=.1, errorbar="sd", ax=ax)
+            ax.set_title("Model Comparison across Tasks (C-index)")
+            ax.set_ylim(0.4, 1.0)
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            fig.tight_layout()
+        fig.savefig("results/model_comparison_cindex.pdf")
+        plt.close(fig)
 
     # Visualization - AUROC
     if "AUC_mean" in df_res.columns:

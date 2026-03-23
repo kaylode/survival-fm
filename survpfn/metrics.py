@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import warnings
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from sksurv.metrics import (
@@ -14,7 +19,93 @@ def _get_survival_array(y, duration_col, event_col):
         dtype=[('event', '?'), ('time', '<f8')]
     )
 
-def evaluate_survival_model(y_train, y_test, duration_col, event_col, risk_scores, surv_probs=None, surv_times=None, time_horizons=None):
+
+def _safe_time_grid(
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    n_points: int = 50,
+) -> np.ndarray:
+    """Return a uniform time grid within the shared support of train and test."""
+    lo = max(float(y_train["time"].min()), float(y_test["time"].min()))
+    hi = min(float(y_train["time"].max()), float(y_test["time"].max()))
+    if lo >= hi:
+        return np.array([])
+    return np.linspace(lo + 1e-6, hi - 1e-6, n_points)
+
+
+def d_calibration(
+    events: np.ndarray,
+    times: np.ndarray,
+    surv_probs: np.ndarray,
+    surv_times: np.ndarray,
+    n_bins: int = 10,
+) -> float:
+    """Compute D-calibration (distribution calibration) for survival models.
+
+    D-calibration measures whether the predicted survival probability at the
+    event time is uniformly distributed over [0, 1] for uncensored subjects.
+    A well-calibrated model produces a uniform histogram; the returned value
+    is the mean squared deviation from uniformity (lower is better).
+
+    Algorithm (Haider et al., 2020)
+    --------------------------------
+    For each uncensored subject i:
+    1. Interpolate S_i(t_i) — the predicted survival probability at the
+       observed event time.
+    2. Collect all S_i(t_i) values.
+    3. Check that the resulting distribution is approximately Uniform(0, 1)
+       by computing the chi-squared statistic against a uniform histogram.
+
+    Parameters
+    ----------
+    events:
+        Boolean array of event indicators.
+    times:
+        Time-to-event or censoring times (same length as events).
+    surv_probs:
+        Predicted survival matrix (n_samples, n_surv_times).
+    surv_times:
+        Time points for the survival matrix columns.
+    n_bins:
+        Number of histogram bins for the uniformity test.
+
+    Returns
+    -------
+    float
+        Mean squared deviation from the uniform density (normalised by bin
+        count).  0 = perfectly calibrated.
+    """
+    uncensored_mask = events.astype(bool)
+    if uncensored_mask.sum() < 2:
+        return float("nan")
+
+    event_times = times[uncensored_mask]
+    event_surv = surv_probs[uncensored_mask]
+
+    # Predicted survival at each subject's own event time
+    s_at_t = np.array([
+        float(np.interp(t, surv_times, s))
+        for t, s in zip(event_times, event_surv)
+    ])
+
+    # Histogram over [0, 1]
+    counts, _ = np.histogram(s_at_t, bins=n_bins, range=(0.0, 1.0))
+    expected = len(s_at_t) / n_bins
+    deviation = float(np.mean((counts - expected) ** 2) / (expected ** 2))
+    return deviation
+
+
+def evaluate_survival_model(
+    y_train,
+    y_test,
+    duration_col,
+    event_col,
+    risk_scores,
+    surv_probs=None,
+    surv_times=None,
+    time_horizons=None,
+    n_time_points: int = 50,
+):
     """
     Evaluate survival metrics.
     Args:
@@ -26,14 +117,15 @@ def evaluate_survival_model(y_train, y_test, duration_col, event_col, risk_score
         surv_probs: Matrix of survival probabilities shape (n_samples, n_times).
         surv_times: Array of times corresponding to columns of surv_probs.
         time_horizons: Specific times to evaluate time-dependent AUC and IBS.
+        n_time_points: Number of evenly spaced points for the IBS integral.
     Returns:
-        Dictionary of metrics {"C-index": ..., "IBS": ..., "AUC_mean": ...}
+        Dictionary of metrics {"C-index": ..., "IBS": ..., "AUC_mean": ..., "D-cal": ...}
     """
     y_train_sksurv = _get_survival_array(y_train, duration_col, event_col)
     y_test_sksurv = _get_survival_array(y_test, duration_col, event_col)
-    
+
     metrics = {}
-    
+
     # 1. Concordance Index
     # Some models predict survival (higher is better), risk scores must be higher for worse outcomes.
     try:
@@ -42,52 +134,59 @@ def evaluate_survival_model(y_train, y_test, duration_col, event_col, risk_score
         )
         metrics["C-index"] = c_index
     except Exception as e:
+        warnings.warn(f"C-index computation failed: {e}", stacklevel=2)
         metrics["C-index"] = np.nan
-        
+
     if surv_probs is not None and surv_times is not None:
-        # Filter evaluation times to be within train/test support
-        min_time = max(y_train_sksurv["time"].min(), y_test_sksurv["time"].min())
-        max_time = min(y_train_sksurv["time"].max(), y_test_sksurv["time"].max())
-        
-        # If min_time >= max_time, we cannot compute time-dependent metrics
-        if min_time >= max_time:
+        grid = _safe_time_grid(y_train_sksurv, y_test_sksurv, n_points=n_time_points)
+        if len(grid) == 0:
             return metrics
-            
+
         if time_horizons is None:
             # Pick a few percentiles from the test set event times
             mask = y_test_sksurv["event"]
             if sum(mask) > 0:
                 time_horizons = np.percentile(y_test_sksurv["time"][mask], [25, 50, 75])
             else:
-                time_horizons = []
-            
-        valid_times = np.array([t for t in time_horizons if min_time < t < max_time])
-        
+                time_horizons = grid[[len(grid) // 4, len(grid) // 2, 3 * len(grid) // 4]]
+
+        lo, hi = float(grid[0]), float(grid[-1])
+        valid_times = np.array([t for t in time_horizons if lo < t < hi])
+
         if len(valid_times) > 0:
             try:
-                # 2. Integrated Brier Score
-                # Align surv_probs with valid_times via interpolation
-                surv_probs_aligned = np.zeros((surv_probs.shape[0], len(valid_times)))
+                # 2. Integrated Brier Score — use full grid for proper integration
+                surv_at_grid = np.zeros((surv_probs.shape[0], len(grid)))
                 for i in range(surv_probs.shape[0]):
-                    surv_probs_aligned[i, :] = np.interp(valid_times, surv_times, surv_probs[i, :])
-                
+                    surv_at_grid[i, :] = np.interp(grid, surv_times, surv_probs[i, :])
+
                 ibs = integrated_brier_score(
-                    y_train_sksurv, y_test_sksurv, surv_probs_aligned, valid_times
+                    y_train_sksurv, y_test_sksurv, surv_at_grid, grid
                 )
                 metrics["IBS"] = ibs
-                
+
                 # 3. Time-dependent AUC
                 auc, mean_auc = cumulative_dynamic_auc(
                     y_train_sksurv, y_test_sksurv, risk_scores, valid_times
                 )
                 metrics["AUC_mean"] = mean_auc
-                
+
                 for t, a in zip(valid_times, auc):
                     metrics[f"AUC_t={t:.1f}"] = a
             except Exception as e:
                 # In case some metrics fail (e.g. no events before T)
-                pass
-                
+                warnings.warn(f"Time-dependent metrics computation failed: {e}", stacklevel=2)
+
+        # 4. D-calibration (reliability)
+        try:
+            metrics["D-cal"] = d_calibration(
+                y_test_sksurv["event"], y_test_sksurv["time"],
+                surv_probs, surv_times, n_bins=10
+            )
+        except Exception as e:
+            warnings.warn(f"D-calibration computation failed: {e}", stacklevel=2)
+            metrics["D-cal"] = float("nan")
+
     return metrics
 
 def run_statistical_tests(results_df, metric="C-index", reference_model="Multivariate Cox"):
@@ -126,9 +225,10 @@ def run_statistical_tests(results_df, metric="C-index", reference_model="Multiva
                     "Task": task,
                     "Reference": reference_model,
                     "Model": model,
-                    "Mean_Diff": np.mean(diff),
+                    "Mean_Diff": float(np.mean(diff)),
+                    "Median_Diff": float(np.median(diff)),
                     "p-value": p_val,
-                    "Significant": (p_val < 0.05) if not np.isnan(p_val) else False
+                    "Significant": bool(p_val < 0.05) if not np.isnan(p_val) else False
                 })
                 
     return pd.DataFrame(stats_res)

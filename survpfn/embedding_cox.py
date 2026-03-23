@@ -137,14 +137,11 @@ class EmbeddingCoxPH:
 
     def predict_survival(self, embeddings: np.ndarray) -> "pd.DataFrame":
         """
-        Restituisce un DataFrame (timepoints × soggetti) con le survival
-        probabilities. Valori attesi: float in (0, 1].
+        Returns a DataFrame (timepoints x subjects) with survival probabilities.
+        Expected values: float in (0, 1].
         """
         if self.model.baseline_hazards_ is None:
-            raise RuntimeError("Chiama compute_baseline() prima di predict_survival().")
-
-        x = embeddings.astype(np.float32)
-        return self.model.predict_surv_df(x)
+            raise RuntimeError("Call compute_baseline() before predict_survival().")
 
         x = embeddings.astype(np.float32)
         return self.model.predict_surv_df(x)
@@ -193,17 +190,19 @@ def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, 
     from optuna.storages import JournalStorage, JournalFileStorage
 
     X_train_raw = df_train.drop(columns=[duration_col, event_col])
-    y_train_raw = df_train[event_col]
     t_train = df_train[duration_col].values.astype(np.float32)
     e_train = df_train[event_col].values.astype(np.float32)
 
     X_test_raw = df_test.drop(columns=[duration_col, event_col])
-    y_test_raw = df_test[event_col]
     t_test = df_test[duration_col].values.astype(np.float32)
     e_test = df_test[event_col].values.astype(np.float32)
 
+    # Binarize event for TabPFN classifier (competing risks have values > 1)
+    y_train_binary = (df_train[event_col] > 0).astype(int)
+    y_test_binary = (df_test[event_col] > 0).astype(int)
+
     print("Generating TabPFN Embeddings...")
-    train_emb, test_emb = get_tabpfn_embeddings(X_train_raw, y_train_raw, X_test_raw, y_test_raw)
+    train_emb, test_emb = get_tabpfn_embeddings(X_train_raw, y_train_binary, X_test_raw, y_test_binary)
 
     params = {'lr': 1e-3, 'nodes': [128, 64], 'dropout': 0.1, 'batch_size': 128}
 

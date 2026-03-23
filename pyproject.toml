@@ -1,23 +1,72 @@
 [project]
 name = "survpfn"
 version = "0.1.0"
-description = "Add your description here"
+description = "Survival analysis benchmark suite for the Sirbu cardiovascular dataset"
 readme = "README.md"
-requires-python = "==3.12.12"
+# Pinned to 3.12 because tabpfn and torchtuples have strict compatibility
+# requirements. Change to ">=3.10" only after verifying all deps support it.
+requires-python = ">=3.10"
 dependencies = [
-    "lifelines>=0.30.0",
-    "numpy>=2.4.3",
-    "openpyxl>=3.1.5",
-    "pandas>=3.0.1",
-    "pycox>=0.3.0",
-    "scikit-learn>=1.8.0",
-    "seaborn>=0.13.2",
-    "torch>=2.10.0",
-    "torchtuples>=0.2.2",
-    "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
+    # --- core data -------------------------------------------------------
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "openpyxl>=3.1",           # reading .xlsx files
+
+    # --- survival analysis -----------------------------------------------
+    "lifelines>=0.27",          # CoxPH, KM, log-rank
+    "pycox>=0.3.0",             # DeepSurv, DeepHit (discrete-time)
+    "scikit-survival>=0.22",    # RSF, GBSA, sksurv metrics
+    "torchsurv>=0.1.4",         # torchsurv Cox loss (custom_model.py)
+
+    # --- deep learning ---------------------------------------------------
+    "torch>=2.0",
+    "torchtuples>=0.2.2",       # pycox helper (MLPVanilla, AdamWR)
+
+    # --- ML utilities ----------------------------------------------------
+    "scikit-learn>=1.3",
+    "scipy>=1.10",              # Wilcoxon test in metrics.py
+
+    # --- hyperparameter optimisation -------------------------------------
+    "optuna>=3.0",
+
+    # --- visualisation ---------------------------------------------------
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+
+    # --- TabPFN embedding model ------------------------------------------
     "tabpfn>=6.4.1",
-    "optuna>=4.8.0",
-    "scikit-survival>=0.27.0",
-    "torchsurv>=0.1.6",
-    "omegaconf>=2.3.0",
+    "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
+    "omegaconf>=2.3.0",         # config for aware_cox / TabPFNCoxModel
+
+    # --- notebook support ------------------------------------------------
+    "jupyter>=1.0",
+    "ipykernel>=6.0",
 ]
+
+[project.optional-dependencies]
+# Extra packages for development / testing
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
+]
+
+[project.scripts]
+# Run the full evaluation pipeline via CLI
+survpfn-eval = "src.evaluate:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["survpfn", "src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]

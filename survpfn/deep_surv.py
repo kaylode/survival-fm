@@ -79,7 +79,14 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
     model = CoxPH(net, optimizer)
     model.fit(X_train_tensor, (T_train_tensor, E_train_tensor), params['batch_size'], 100, verbose=True)
     model.compute_baseline_hazards()
-    surv = model.predict_surv_df(X_test_tensor)
-    ev = EvalSurv(surv, T_test.values, E_test.values, censor_surv='km')
-    return model, surv, ev
+    surv_df = model.predict_surv_df(X_test_tensor)
+
+    # Build standard return values matching the unified API:
+    # (model, risk_scores, surv_probs, surv_times)
+    # risk_scores: higher = worse prognosis, so use negative last-row survival
+    surv_times = surv_df.index.values.astype(float)
+    surv_probs = surv_df.values.T  # shape (n_test, n_times)
+    risk_scores = -surv_df.iloc[-1].values  # negative survival at last time point
+
+    return model, risk_scores, surv_probs, surv_times
 
