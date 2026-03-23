@@ -9,7 +9,7 @@ from sksurv.ensemble import RandomSurvivalForest, GradientBoostingSurvivalAnalys
 from optuna.storages import JournalStorage, JournalFileStorage
 
 
-def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results"):
+def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results", study_id=None):
     T_train = df_train[duration_col]
     E_train = df_train[event_col].astype(bool)
     X_train = df_train.drop(columns=[duration_col, event_col])
@@ -24,11 +24,13 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
         )
 
         os.makedirs(save_dir, exist_ok=True)
-        log_file = os.path.join(save_dir, "optuna_rsf.log")
+        log_name = f"optuna_rsf_{study_id}.log" if study_id else "optuna_rsf.log"
+        log_file = os.path.join(save_dir, log_name)
         storage = JournalStorage(JournalFileStorage(log_file))
 
+        study_name = f"rsf_tuning_{study_id}" if study_id else "rsf_tuning"
         study = optuna.create_study(
-            study_name="rsf_tuning",
+            study_name=study_name,
             direction="maximize",
             storage=storage,
             load_if_exists=True
@@ -61,7 +63,7 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
     return model, risk_scores, surv_probs, surv_times
 
 
-def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results"):
+def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results", study_id=None):
     T_train = df_train[duration_col]
     E_train = df_train[event_col].astype(bool)
     X_train = df_train.drop(columns=[duration_col, event_col])
@@ -76,11 +78,13 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
         )
 
         os.makedirs(save_dir, exist_ok=True)
-        log_file = os.path.join(save_dir, "optuna_gbsa.log")
+        log_name = f"optuna_gbsa_{study_id}.log" if study_id else "optuna_gbsa.log"
+        log_file = os.path.join(save_dir, log_name)
         storage = JournalStorage(JournalFileStorage(log_file))
 
+        study_name = f"gbsa_tuning_{study_id}" if study_id else "gbsa_tuning"
         study = optuna.create_study(
-            study_name="gbsa_tuning",
+            study_name=study_name,
             direction="maximize",
             storage=storage,
             load_if_exists=True

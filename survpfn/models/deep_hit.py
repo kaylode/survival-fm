@@ -183,6 +183,7 @@ def train_mtlr(
     n_trials: int = 10,
     save_dir: str = "results",
     random_state: int = 42,
+    study_id: str = None,
 ) -> tuple:
     """Train an MTLR (Multi-Task Logistic Regression) survival model.
 
@@ -230,9 +231,12 @@ def train_mtlr(
         y_tr = (y_tr_0, y_tr_1)
 
         os.makedirs(save_dir, exist_ok=True)
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, "optuna_mtlr.log")))
+        log_name = f"optuna_mtlr_{study_id}.log" if study_id else "optuna_mtlr.log"
+        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        
+        study_name = f"mtlr_tuning_{study_id}" if study_id else "mtlr_tuning"
         study = optuna.create_study(
-            study_name="mtlr_tuning", direction="maximize",
+            study_name=study_name, direction="maximize",
             storage=storage, load_if_exists=True,
         )
 
@@ -280,6 +284,7 @@ def train_pchazard(
     n_trials: int = 10,
     save_dir: str = "results",
     random_state: int = 42,
+    study_id: str = None,
 ) -> tuple:
     """Train a PC-Hazard (piecewise-constant / logistic-hazard) survival model.
 
@@ -324,9 +329,12 @@ def train_pchazard(
         y_tr = (y_tr_0, y_tr_1)
 
         os.makedirs(save_dir, exist_ok=True)
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, "optuna_pchazard.log")))
+        log_name = f"optuna_pchazard_{study_id}.log" if study_id else "optuna_pchazard.log"
+        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        
+        study_name = f"pchazard_tuning_{study_id}" if study_id else "pchazard_tuning"
         study = optuna.create_study(
-            study_name="pchazard_tuning", direction="maximize",
+            study_name=study_name, direction="maximize",
             storage=storage, load_if_exists=True,
         )
 
@@ -374,6 +382,7 @@ def train_deephit_single(
     n_trials: int = 10,
     save_dir: str = "results",
     random_state: int = 42,
+    study_id: str = None,
 ) -> tuple:
     """Train a DeepHit Single (discrete-time, single risk) survival model.
 
@@ -419,9 +428,12 @@ def train_deephit_single(
         y_tr = (y_tr_0, y_tr_1)
 
         os.makedirs(save_dir, exist_ok=True)
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, "optuna_deephit_single.log")))
+        log_name = f"optuna_deephit_single_{study_id}.log" if study_id else "optuna_deephit_single.log"
+        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        
+        study_name = f"deephit_single_tuning_{study_id}" if study_id else "deephit_single_tuning"
         study = optuna.create_study(
-            study_name="deephit_single_tuning", direction="maximize",
+            study_name=study_name, direction="maximize",
             storage=storage, load_if_exists=True,
         )
 

@@ -54,65 +54,65 @@ DURATION_COL = "duration"
 EVENT_COL = "event"
 
 
-def run_cox(df_train, df_test, tune, n_trials):
+def run_cox(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.classical import run_multivariate_cox
     _, _, _, c_index = run_multivariate_cox(df_train, df_test, DURATION_COL, EVENT_COL)
     return {"C-index": c_index}
 
 
-def run_rsf(df_train, df_test, tune, n_trials):
+def run_rsf(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.tree import train_rsf
     from survpfn.eval.metrics import evaluate_survival_model
     _, risk, surv_p, surv_t = train_rsf(df_train, df_test, DURATION_COL, EVENT_COL,
-                                         tune=tune, n_trials=n_trials)
+                                         tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_gbsa(df_train, df_test, tune, n_trials):
+def run_gbsa(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.tree import train_gbsa
     _, risk, surv_p, surv_t = train_gbsa(df_train, df_test, DURATION_COL, EVENT_COL,
-                                          tune=tune, n_trials=n_trials)
+                                          tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_deepsurv(df_train, df_test, tune, n_trials):
+def run_deepsurv(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.deep_surv import train_deepsurv
     _, risk, surv_p, surv_t = train_deepsurv(df_train, df_test, DURATION_COL, EVENT_COL,
-                                              tune=tune, n_trials=n_trials)
+                                              tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_mtlr(df_train, df_test, tune, n_trials):
+def run_mtlr(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.deep_hit import train_mtlr
     _, risk, surv_p, surv_t = train_mtlr(df_train, df_test, DURATION_COL, EVENT_COL,
-                                          tune=tune, n_trials=n_trials)
+                                          tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_pchazard(df_train, df_test, tune, n_trials):
+def run_pchazard(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.deep_hit import train_pchazard
     _, risk, surv_p, surv_t = train_pchazard(df_train, df_test, DURATION_COL, EVENT_COL,
-                                              tune=tune, n_trials=n_trials)
+                                              tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_deephit_single(df_train, df_test, tune, n_trials):
+def run_deephit_single(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.deep_hit import train_deephit_single
     _, risk, surv_p, surv_t = train_deephit_single(df_train, df_test, DURATION_COL, EVENT_COL,
-                                                    tune=tune, n_trials=n_trials)
+                                                    tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
 
-def run_embedding_cox(df_train, df_test, tune, n_trials):
+def run_embedding_cox(df_train, df_test, tune, n_trials, study_id=None):
     from survpfn.models.tabpfn.cox import train_embedding_cox
     _, risk, surv_p, surv_t = train_embedding_cox(df_train, df_test, DURATION_COL, EVENT_COL,
-                                                   tune=tune, n_trials=n_trials)
+                                                   tune=tune, n_trials=n_trials, study_id=study_id)
     return evaluate_survival_model(df_train, df_test, DURATION_COL, EVENT_COL,
                                    risk, surv_probs=surv_p, surv_times=surv_t)
 
@@ -194,8 +194,12 @@ def run_benchmark(
         for model_name in model_names:
             print(f"  Model: {model_name}", end=" ... ", flush=True)
             model_fn = ALL_MODELS[model_name]
+            
+            # Create a unique study_id for this dataset and fold
+            study_id = f"{dataset_name.lower()}_fold{fold + 1}"
+            
             try:
-                metrics = model_fn(df_train, df_test, tune, n_trials)
+                metrics = model_fn(df_train, df_test, tune, n_trials, study_id=study_id)
                 row = {
                     "Dataset": dataset_name,
                     "Model": model_name,
@@ -241,7 +245,7 @@ def main():
     parser.add_argument(
         "--datasets",
         nargs="+",
-        default=["SUPPORT2", "METABRIC", "GBSG"],
+        default=["SUPPORT2", "METABRIC", "GBSG", "SIRBU"],
         choices=list(BENCHMARK_DATASETS.keys()),
         help="Benchmark datasets to evaluate.",
     )

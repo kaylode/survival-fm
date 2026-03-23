@@ -402,7 +402,7 @@ class EmbeddingCoxPH:
         return ev.concordance_td(method=method)
 
 
-def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, save_dir="results"):
+def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, save_dir="results", study_id=None):
     from survpfn.models.tabpfn.embedding import get_tabpfn_embeddings
     import optuna
     from optuna.storages import JournalStorage, JournalFileStorage
@@ -430,11 +430,13 @@ def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, 
         )
 
         os.makedirs(save_dir, exist_ok=True)
-        log_file = os.path.join(save_dir, "optuna_embedding_cox.log")
+        log_name = f"optuna_embedding_cox_{study_id}.log" if study_id else "optuna_embedding_cox.log"
+        log_file = os.path.join(save_dir, log_name)
         storage = JournalStorage(JournalFileStorage(log_file))
-
+        
+        study_name = f"embedding_cox_tuning_{study_id}" if study_id else "embedding_cox_tuning"
         study = optuna.create_study(
-            study_name="embedding_cox_tuning",
+            study_name=study_name,
             direction="maximize",
             storage=storage,
             load_if_exists=True

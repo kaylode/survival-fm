@@ -185,6 +185,41 @@ def load_gbsg() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return X, y_time, y_event
 
 
+def load_sirbu() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Load and preprocess the SIRBU cardiovascular dataset.
+
+    Returns
+    -------
+    X : np.ndarray, shape (n, p)
+        Preprocessed feature matrix.
+    y_time : np.ndarray, shape (n,)
+        Follow-up duration (days).
+    y_event : np.ndarray, shape (n,)
+        Total mortality (1 = died, 0 = censored).
+    """
+    from survpfn.data.loader import load_and_merge_data
+    from survpfn.data.preprocessing import clean_and_impute, prepare_cox_data
+
+    # Load and merge raw Excel files
+    df_raw = load_and_merge_data("Dataset Sirbu")
+    
+    # Impute missing values and clean dates
+    df_clean = clean_and_impute(df_raw)
+    
+    # Drop outcome-correlated columns (leakage)
+    df_task = prepare_cox_data(df_clean)
+    
+    y_time = df_task["Follow Up Data"].values.astype(float)
+    y_event = df_task["Total mortality"].values.astype(float)
+    X_df = df_task.drop(columns=["Follow Up Data", "Total mortality"])
+    
+    # Scale continuous and encode categorical
+    X = _scale_and_encode(X_df)
+    X, y_time, y_event = _drop_na_rows(X, y_time, y_event)
+    
+    return X, y_time, y_event
+
+
 # ---------------------------------------------------------------------------
 # Other dataset loaders (private / semi-private)
 # ---------------------------------------------------------------------------
@@ -260,4 +295,5 @@ BENCHMARK_DATASETS: dict[str, Callable[[], tuple[np.ndarray, np.ndarray, np.ndar
     "SUPPORT2": load_support,
     "METABRIC": load_metabric,
     "GBSG": load_gbsg,
+    "SIRBU": load_sirbu,
 }

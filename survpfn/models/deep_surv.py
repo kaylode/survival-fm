@@ -11,7 +11,7 @@ import optuna
 from optuna.storages import JournalStorage, JournalFileStorage
 
 
-def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir="results"):
+def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir="results", study_id=None):
     T_train = df_train[duration_col]
     E_train = df_train[event_col]
     X_train = df_train.drop(columns=[duration_col, event_col])
@@ -41,11 +41,13 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
         X_val_t = torch.tensor(X_val, dtype=torch.float32)
 
         os.makedirs(save_dir, exist_ok=True)
-        log_file = os.path.join(save_dir, "optuna_deepsurv.log")
+        log_name = f"optuna_deepsurv_{study_id}.log" if study_id else "optuna_deepsurv.log"
+        log_file = os.path.join(save_dir, log_name)
         storage = JournalStorage(JournalFileStorage(log_file))
 
+        study_name = f"deepsurv_tuning_{study_id}" if study_id else "deepsurv_tuning"
         study = optuna.create_study(
-            study_name="deepsurv_tuning",
+            study_name=study_name,
             direction="maximize",
             storage=storage,
             load_if_exists=True
