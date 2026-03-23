@@ -105,9 +105,12 @@ class TransformerEncoderLayer(Module):
         elif isinstance(src_mask, int):
             assert src_key_padding_mask is None
             single_eval_position = src_mask
-            src_left = self.self_attn(src_[:single_eval_position], src_[:single_eval_position], src_[:single_eval_position])[0]
-            src_right = self.self_attn(src_[single_eval_position:], src_[:single_eval_position], src_[:single_eval_position])[0]
-            src2 = torch.cat([src_left, src_right], dim=0)
+            if single_eval_position == 0:
+                src2 = self.self_attn(src_, src_, src_)[0]
+            else:
+                src_left = self.self_attn(src_[:single_eval_position], src_[:single_eval_position], src_[:single_eval_position])[0]
+                src_right = self.self_attn(src_[single_eval_position:], src_[:single_eval_position], src_[:single_eval_position])[0]
+                src2 = torch.cat([src_left, src_right], dim=0)
         else:
             if self.recompute_attn:
                 src2 = checkpoint(self.self_attn, src_, src_, src_, src_key_padding_mask, True, src_mask)[0]
