@@ -1,5 +1,5 @@
 [project]
-name = "sirbu"
+name = "survpfn"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -16,4 +16,8 @@ dependencies = [
     "torchtuples>=0.2.2",
     "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
     "tabpfn>=6.4.1",
+    "optuna>=4.8.0",
+    "scikit-survival>=0.27.0",
+    "torchsurv>=0.1.6",
+    "omegaconf>=2.3.0",
 ]
