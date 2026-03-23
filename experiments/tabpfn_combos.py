@@ -53,13 +53,18 @@ try:
     from survpfn.tabpfn.utils import TabPFNClassifier
 
     _TABPFN_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _TABPFN_AVAILABLE = False
-    warnings.warn(
-        "tabpfn package not found. TabPFN embedding variants will be skipped.",
-        ImportWarning,
-        stacklevel=2,
-    )
+except ImportError:
+    try:
+        from survpfn.models.tabpfn.embedding import get_tabpfn_embeddings as _
+        from survpfn.tabpfn.utils import TabPFNClassifier
+        _TABPFN_AVAILABLE = True
+    except ImportError:  # pragma: no cover
+        _TABPFN_AVAILABLE = False
+        warnings.warn(
+            "tabpfn package not found. TabPFN embedding variants will be skipped.",
+            ImportWarning,
+            stacklevel=2,
+        )
 
 # MTLR import — optional pycox model
 try:
@@ -180,7 +185,7 @@ def get_embedding(
 
     if variant in ("tabpfn_kfold3", "tabpfn_kfold5"):
         n_fold = 3 if variant == "tabpfn_kfold3" else 5
-        from survpfn.tabpfn.embedding import TabPFNEmbedding
+        from survpfn.tabpfn.embedding import TabPFNEmbedding  # original path (still present)
 
         clf = _build_tabpfn_classifier()
         extractor = TabPFNEmbedding(tabpfn_clf=clf, n_fold=n_fold)
@@ -480,7 +485,7 @@ def load_dataset(dataset: str) -> tuple[pd.DataFrame, str, str]:
 
     if name == "sirbu":
         # Private dataset — requires local file
-        from survpfn.preprocessing import clean_and_impute, prepare_cox_data
+        from survpfn.data.preprocessing import clean_and_impute, prepare_cox_data
 
         data_path = os.environ.get(
             "SIRBU_DATA_PATH",
@@ -497,7 +502,7 @@ def load_dataset(dataset: str) -> tuple[pd.DataFrame, str, str]:
         return df, "Follow Up Data", "Total mortality"
 
     if name == "urrah":
-        from survpfn.other_datasets import load_urrah_dataset
+        from survpfn.data.benchmarks import load_urrah_dataset
 
         urrah_path = os.environ.get(
             "URRAH_DATA_PATH",

@@ -1,7 +1,7 @@
 [project]
 name = "survpfn"
 version = "0.1.0"
-description = "Survival analysis benchmark suite for the Sirbu cardiovascular dataset"
+description = "SurvPFN: In-Context Survival Analysis via Tabular Foundation Models with Retrieval Augmentation"
 readme = "README.md"
 # Pinned to 3.12 because tabpfn and torchtuples have strict compatibility
 # requirements. Change to ">=3.10" only after verifying all deps support it.
@@ -54,14 +54,14 @@ dev = [
 
 [project.scripts]
 # Run the full evaluation pipeline via CLI
-survpfn-eval = "src.evaluate:main"
+survpfn-train = "scripts.train:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["survpfn", "src"]
+packages = ["survpfn"]
 
 [tool.ruff]
 line-length = 100
