@@ -1,0 +1,28 @@
+Task,Reference,Model,Mean_Diff,p-value,Significant
+Total Mortality,Multivariate Cox,Kaplan-Meier,-0.29208268231253,0.0625,False
+Total Mortality,Multivariate Cox,DeepSurv,-0.48536800386457407,0.0625,False
+Total Mortality,Multivariate Cox,TorchSurv (Custom),-0.008959700453299413,0.0625,False
+Total Mortality,Multivariate Cox,RSF,-0.0019041580640584588,0.4375,False
+Total Mortality,Multivariate Cox,GBSA,-0.004496499249684938,0.125,False
+Total Mortality,Multivariate Cox,Embedding Cox,,,False
+CV Mortality,Multivariate Cox,Kaplan-Meier,-0.29176708219676806,0.0625,False
+CV Mortality,Multivariate Cox,DeepSurv,-0.6368873118624848,0.0625,False
+CV Mortality,Multivariate Cox,DeepHit,-0.008097553689888714,0.3125,False
+CV Mortality,Multivariate Cox,TorchSurv (Custom),-0.01279466245562937,0.0625,False
+CV Mortality,Multivariate Cox,RSF,-0.0012214306179247013,0.8125,False
+CV Mortality,Multivariate Cox,GBSA,-0.0019254360074562494,0.625,False
+CV Mortality,Multivariate Cox,Embedding Cox,,,False
+Myocardial Infarction,Multivariate Cox,Kaplan-Meier,-0.26298414806133286,0.0625,False
+Myocardial Infarction,Multivariate Cox,DeepSurv,-0.4940809969524687,0.0625,False
+Myocardial Infarction,Multivariate Cox,DeepHit,-0.07894970786586393,0.0625,False
+Myocardial Infarction,Multivariate Cox,TorchSurv (Custom),-0.007674871507703807,0.1875,False
+Myocardial Infarction,Multivariate Cox,RSF,0.0012765370915995388,0.8125,False
+Myocardial Infarction,Multivariate Cox,GBSA,1.8365111016360734e-05,0.625,False
+Myocardial Infarction,Multivariate Cox,Embedding Cox,,,False
+Stroke (Ictus),Multivariate Cox,Kaplan-Meier,-0.27567415285931773,0.0625,False
+Stroke (Ictus),Multivariate Cox,DeepSurv,-0.4625914255017177,0.0625,False
+Stroke (Ictus),Multivariate Cox,DeepHit,-0.2630899827380057,0.0625,False
+Stroke (Ictus),Multivariate Cox,TorchSurv (Custom),-0.012083289940676135,0.0625,False
+Stroke (Ictus),Multivariate Cox,RSF,-0.00039500105619445504,1.0,False
+Stroke (Ictus),Multivariate Cox,GBSA,-0.0025058504876823706,0.4375,False
+Stroke (Ictus),Multivariate Cox,Embedding Cox,,,False
