@@ -8,7 +8,8 @@ import torchtuples as tt
 from pycox.models import CoxPH
 from pycox.evaluation import EvalSurv
 import optuna
-from optuna.storages import JournalStorage, JournalFileStorage
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 
 
 def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir="results", study_id=None):
@@ -43,7 +44,7 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_deepsurv_{study_id}.log" if study_id else "optuna_deepsurv.log"
         log_file = os.path.join(save_dir, log_name)
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
 
         study_name = f"deepsurv_tuning_{study_id}" if study_id else "deepsurv_tuning"
         study = optuna.create_study(

@@ -36,7 +36,8 @@ from torch import nn
 import torchtuples as tt
 from pycox.evaluation import EvalSurv
 import optuna
-from optuna.storages import JournalStorage, JournalFileStorage
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 from sklearn.model_selection import train_test_split
 
 
@@ -77,7 +78,7 @@ def train_deephit_competing_risks(df_train, df_test, duration_col="Follow Up Dat
 
         os.makedirs(save_dir, exist_ok=True)
         log_file = os.path.join(save_dir, "optuna_deephit.log")
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
 
         study = optuna.create_study(
             study_name="deephit_tuning",
@@ -232,7 +233,7 @@ def train_mtlr(
 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_mtlr_{study_id}.log" if study_id else "optuna_mtlr.log"
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        storage = JournalStorage(JournalFileBackend(os.path.join(save_dir, log_name)))
         
         study_name = f"mtlr_tuning_{study_id}" if study_id else "mtlr_tuning"
         study = optuna.create_study(
@@ -330,7 +331,7 @@ def train_pchazard(
 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_pchazard_{study_id}.log" if study_id else "optuna_pchazard.log"
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        storage = JournalStorage(JournalFileBackend(os.path.join(save_dir, log_name)))
         
         study_name = f"pchazard_tuning_{study_id}" if study_id else "pchazard_tuning"
         study = optuna.create_study(
@@ -429,7 +430,7 @@ def train_deephit_single(
 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_deephit_single_{study_id}.log" if study_id else "optuna_deephit_single.log"
-        storage = JournalStorage(JournalFileStorage(os.path.join(save_dir, log_name)))
+        storage = JournalStorage(JournalFileBackend(os.path.join(save_dir, log_name)))
         
         study_name = f"deephit_single_tuning_{study_id}" if study_id else "deephit_single_tuning"
         study = optuna.create_study(

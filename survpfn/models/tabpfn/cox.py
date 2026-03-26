@@ -5,8 +5,9 @@ Merged from: aware_cox.py + embedding_cox.py
 
 Classes / functions
 -------------------
-* TabPFNCoxModel    — PyTorch nn.Module with TabPFN backbone + survival head
-* TabPFNCoxPH       — High-level wrapper with fit / predict_survival
+* TabPFNSurvModel   — PyTorch nn.Module with TabPFN backbone + survival head
+* TabPFNSurvPH      — High-level wrapper with fit / predict_survival
+* TabPFNCoxPH       — Alias for TabPFNSurvPH(head_type='cox')
 * MLPVanilla        — Custom MLP with Kaiming init (from embedding_cox.py)
 * EmbeddingCoxPH    — Cox PH fitted on TabPFN embeddings
 * train_embedding_cox — end-to-end helper (extract embeddings + fit EmbeddingCoxPH)
@@ -29,10 +30,14 @@ from survpfn.models.tabpfn.backbone.utils import load_model_workflow
 
 
 # ---------------------------------------------------------------------------
-# TabPFN-aware Cox model (from aware_cox.py)
+# TabPFN Survival model
 # ---------------------------------------------------------------------------
 
-class TabPFNCoxModel(nn.Module):
+# ---------------------------------------------------------------------------
+# TabPFN Survival Model (Backbone + Survival Head)
+# ---------------------------------------------------------------------------
+
+class TabPFNSurvModel(nn.Module):
     def __init__(
         self,
         n_out: int,
@@ -41,9 +46,10 @@ class TabPFNCoxModel(nn.Module):
         device: str = "cuda:0",
         freeze_tabpfn: bool = True,
         dtype: torch.dtype = torch.float32,
+        n_pfn_classes: int = 10,  # Default to TabPFN's usual 10-class capacity
     ):
         """
-        TabPFNCoxModel: Uses a pre-trained TabPFN model and adds a survival head.
+        TabPFNSurvModel: Uses a pre-trained TabPFN model and adds a survival head.
         Uses a forward hook to capture transformer embeddings for the survival task.
         """
         super().__init__()
@@ -65,10 +71,10 @@ class TabPFNCoxModel(nn.Module):
             param.requires_grad = not freeze_tabpfn
 
         self.ninp = self.tabpfn.ninp
-        self.num_classes = n_out
+        self.num_classes = n_pfn_classes
         self.num_expected_features = self.config.get('num_features', 100)
 
-        # Survival Head (MLP) mapping transformer output (ninp) -> Risk Score (1)
+        # Survival Head (MLP) mapping transformer output (ninp) -> Risk Score or Bins
         nodes = [self.ninp] + list(head_num_nodes)
         layers = []
         for i in range(len(nodes) - 1):
@@ -76,7 +82,9 @@ class TabPFNCoxModel(nn.Module):
             layers.append(nn.BatchNorm1d(nodes[i + 1]))
             layers.append(nn.ReLU())
             layers.append(nn.Dropout(p=dropout))
-        layers.append(nn.Linear(nodes[-1], 1, bias=False))
+        
+        # Output layer dimension depends on the head (Cox: 1, Discrete: num_durations)
+        layers.append(nn.Linear(nodes[-1], n_out, bias=False))
         self.survival_head = nn.Sequential(*layers)
 
         # Capturing embeddings using a forward hook
@@ -103,7 +111,6 @@ class TabPFNCoxModel(nn.Module):
         if y_pfn is not None:
              y_pfn = y_pfn.to(self.dtype)
         else:
-             # Provide dummy y_pfn to avoid AttributeError in TabPFN encoder
              y_pfn = torch.zeros(x.shape[0], device=x.device, dtype=self.dtype)
 
         # Match feature dimension
@@ -115,56 +122,90 @@ class TabPFNCoxModel(nn.Module):
             x = x[..., :self.num_expected_features]
 
         if eval_pos is None:
-            # For survival tasks, we typically want risk scores for the entire batch.
-            # Setting eval_pos to 0 treats the entire block as the query/target set.
             eval_pos = 0
 
-        # TabPFN forward pass (PFN classification + logic)
-        # Replaces manual sequence construction
-        with autocast('cuda', enabled=(self.dtype == torch.float16)):
+        # TabPFN forward pass
+        with autocast('cuda', enabled=(self.dtype == torch.float16 and 'cuda' in str(self.device))):
             logits_pfn = self.tabpfn((None, x, y_pfn), single_eval_pos=eval_pos)
-        # Capture the query embeddings from the transformer (stored by the hook)
-        # output is (Seq, Batch, Hidden). Query is at [eval_pos:]
+        
         query_embs = self._transformer_output[eval_pos:]
 
         # Survival forward
+        # If output dim is 1 (Cox), we want (BatchSize,)
+        # If output dim > 1 (Discrete), we want (BatchSize, n_out)
+        
         if query_embs.dim() == 3:
+            # SeqLen * BatchSize
             T, B, H = query_embs.shape
-            risk_scores = self.survival_head(query_embs.reshape(T * B, H)).view(T, B)
+            head_out = self.survival_head(query_embs.reshape(T * B, H)).view(T, B, -1)
+            # Take only the first time step if T > 1? 
+            # Or if seq_len is 1, just squeeze.
+            if T == 1:
+                head_out = head_out.squeeze(0)
+            else:
+                # If T > 1, the pycox loss will fail unless bdur matches. 
+                # For now, let's assume we want one output per input sample. 
+                # If each sample was processed independently, T=1.
+                head_out = head_out.squeeze(0) 
         else:
-            risk_scores = self.survival_head(query_embs).squeeze(-1)
+            head_out = self.survival_head(query_embs)
+            
+        if head_out.size(-1) == 1:
+            head_out = head_out.squeeze(-1)
 
         if return_pfn:
-            # Squeeze PFN logits if 3D (Seq, Batch, Classes)
-            if logits_pfn.dim() == 3:
-                logits_pfn = logits_pfn[:, :, :self.num_classes]
-            else:
-                logits_pfn = logits_pfn[:, :self.num_classes]
-            return risk_scores, logits_pfn
+            logits_pfn = logits_pfn[:, :self.num_classes] if logits_pfn.dim() == 2 else logits_pfn[:, :, :self.num_classes]
+            return head_out, logits_pfn
 
-        return risk_scores
+        return head_out
 
 
-class TabPFNCoxPH:
+class TabPFNSurvPH:
     def __init__(
         self,
-        n_out: int,
+        head_type: str = "cox",
+        num_durations: int = 100,
         head_num_nodes: List[int] = [128, 64],
         learning_rate: float = 1e-3,
         alpha: float = 1.0,
         dropout: float = 0.2,
         freeze_tabpfn: bool = True,
         dtype: torch.dtype = torch.float32,
-        device: str = "cuda:0"
+        device: str = "cuda:0",
+        n_out: Optional[int] = None,
+        n_pfn_classes: int = 2
     ):
+        self.head_type = head_type.lower()
         self.dtype = dtype
         self.device = device
         self.alpha = alpha
-        self.net = TabPFNCoxModel(
+        self.num_durations = num_durations
+        
+        if n_out is None:
+            n_out = 1 if self.head_type == "cox" else num_durations
+        
+        self.net = TabPFNSurvModel(
             n_out=n_out, head_num_nodes=head_num_nodes, dropout=dropout,
-            freeze_tabpfn=freeze_tabpfn, dtype=dtype, device=device
+            freeze_tabpfn=freeze_tabpfn, dtype=dtype, device=device,
+            n_pfn_classes=n_pfn_classes
         )
-        self.model = CoxPH(self.net, tt.optim.Adam(lr=learning_rate))
+        
+        from pycox.models import CoxPH, PCHazard, MTLR, DeepHitSingle
+        if self.head_type == "cox":
+            self.model = CoxPH(self.net, tt.optim.Adam(lr=learning_rate))
+            self.labtrans = None
+        elif self.head_type == "deephit":
+            from pycox.preprocessing.label_transforms import LabTransDiscreteTime
+            self.labtrans = LabTransDiscreteTime(num_durations)
+            self.model = DeepHitSingle(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
+        elif self.head_type == "pchazard":
+            self.labtrans = PCHazard.label_transform(num_durations)
+            self.model = PCHazard(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
+        elif self.head_type == "mtlr":
+            self.labtrans = MTLR.label_transform(num_durations)
+            self.model = MTLR(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
+        else:
+            raise ValueError(f"Unknown head_type: {head_type}")
 
     def fit(
         self,
@@ -173,17 +214,40 @@ class TabPFNCoxPH:
         events: np.ndarray,
         y_pfn: np.ndarray = None,
         epochs: int = 100,
-        batch_size: int = 256,
+        batch_size: int = 128,
         verbose: bool = True,
     ):
-        from pycox.models.loss import CoxPHLoss
-        criterion_cox = CoxPHLoss()
+        from pycox.models.loss import CoxPHLoss, DeepHitSingleLoss, NLLPCHazardLoss, NLLMTLRLoss
+        from pycox.models.data import pair_rank_mat
+        
+        if self.head_type == "cox":
+            criterion_surv = CoxPHLoss()
+        elif self.head_type == "deephit":
+            criterion_surv = DeepHitSingleLoss(alpha=0.2, sigma=0.1)
+        elif self.head_type == "pchazard":
+            criterion_surv = NLLPCHazardLoss()
+        elif self.head_type == "mtlr":
+            criterion_surv = NLLMTLRLoss()
+            
         criterion_pfn = nn.CrossEntropyLoss()
         optimizer = self.model.optimizer
 
         x_pt = torch.from_numpy(x).to(self.device, self.dtype)
-        durations_pt = torch.from_numpy(durations).to(self.device, self.dtype)
-        events_pt = torch.from_numpy(events).to(self.device, self.dtype)
+        
+        # Label transforms for discrete models
+        if self.labtrans is not None:
+            targets = self.labtrans.fit_transform(durations, events)
+            dur_pt = torch.from_numpy(targets[0]).to(self.device)
+            ev_pt = torch.from_numpy(targets[1]).to(self.device)
+            # Some transforms like PCHazard have a third element: interval_frac
+            frac_pt = None
+            if len(targets) > 2:
+                frac_pt = torch.from_numpy(targets[2]).to(self.device, self.dtype)
+        else:
+            dur_pt = torch.from_numpy(durations).to(self.device, self.dtype)
+            ev_pt = torch.from_numpy(events).to(self.device, self.dtype)
+            frac_pt = None
+            
         y_pfn_pt = torch.from_numpy(y_pfn).to(self.device) if y_pfn is not None else None
 
         for epoch in range(epochs):
@@ -192,38 +256,69 @@ class TabPFNCoxPH:
             epoch_loss = 0
             for i in range(0, x_pt.size(0), batch_size):
                 idx = indices[i:i + batch_size]
-                bx, bdur, bev = x_pt[idx], durations_pt[idx], events_pt[idx]
+                bx, bdur, bev = x_pt[idx], dur_pt[idx], ev_pt[idx]
+                bfrac = frac_pt[idx] if frac_pt is not None else None
                 by_pfn = y_pfn_pt[idx] if y_pfn_pt is not None else None
                 optimizer.zero_grad()
 
-                risk_scores, pfn_logits = self.net(bx, y_pfn=by_pfn, return_pfn=True)
+                head_out, pfn_logits = self.net(bx, y_pfn=by_pfn, return_pfn=True)
 
-                if not torch.isfinite(risk_scores).all():
-                     risk_scores = torch.nan_to_num(risk_scores, nan=0.0, posinf=10.0, neginf=-10.0)
-
-                if bev.sum() == 0:
-                     loss_cox = torch.tensor(0.0, device=self.device, requires_grad=True)
+                if self.head_type == "cox":
+                    loss_surv = criterion_surv(head_out, bdur, bev)
+                elif self.head_type == "deephit":
+                    # DeepHit requires a rank_mat
+                    # We might need to ensure it's a tensor on the correct device
+                    import numpy as np
+                    _bdur = bdur.cpu().numpy() if hasattr(bdur, 'cpu') else bdur
+                    _bev = bev.cpu().numpy() if hasattr(bev, 'cpu') else bev
+                    _rank_mat = pair_rank_mat(_bdur, _bev)
+                    rank_mat = torch.from_numpy(_rank_mat).to(self.device, self.dtype)
+                    loss_surv = criterion_surv(head_out, bdur, bev, rank_mat)
+                elif self.head_type == "pchazard":
+                    # PCHazard requires interval_frac
+                    loss_surv = criterion_surv(head_out, bdur, bev, bfrac)
                 else:
-                     loss_cox = criterion_cox(risk_scores, bdur, bev)
+                    # Discrete heads
+                    loss_surv = criterion_surv(head_out, bdur, bev)
 
                 loss_pfn = 0
                 if pfn_logits is not None and by_pfn is not None:
                      loss_pfn = criterion_pfn(pfn_logits.view(-1, pfn_logits.size(-1)), by_pfn.view(-1).long())
 
-                total_loss = loss_cox + self.alpha * loss_pfn
+                total_loss = loss_surv + self.alpha * loss_pfn
                 total_loss.backward()
                 optimizer.step()
                 epoch_loss += total_loss.item()
 
             if verbose and epoch % 10 == 0:
                 print(f"Epoch {epoch}: Average Loss {epoch_loss / (max(1, x_pt.size(0) // batch_size)):.4f}")
+        
+        # For Cox, compute baseline hazards
+        if self.head_type == "cox":
+            self.model.compute_baseline_hazards(input=x_pt, target=(dur_pt, ev_pt))
+            
         return self
 
-    def predict_survival(self, x: np.ndarray):
+    def predict_survival_df(self, x: np.ndarray):
         self.net.eval()
+        x_pt = torch.from_numpy(x).to(self.device, self.dtype)
         with torch.no_grad():
-            risk_scores = self.net(torch.from_numpy(x).to(self.device, self.dtype))
-        return risk_scores
+            if self.head_type == "cox":
+                return self.model.predict_surv_df(x_pt)
+            else:
+                # Discrete models: Check if interpolate is available (e.g., LogisticHazard, MTLR)
+                if hasattr(self.model, 'interpolate'):
+                    return self.model.interpolate(10).predict_surv_df(x_pt)
+                return self.model.predict_surv_df(x_pt)
+
+# Alias for backward compatibility
+class TabPFNCoxModel(TabPFNSurvModel):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class TabPFNCoxPH(TabPFNSurvPH):
+    def __init__(self, **kwargs):
+        super().__init__(head_type="cox", **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +500,8 @@ class EmbeddingCoxPH:
 def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, save_dir="results", study_id=None):
     from survpfn.models.tabpfn.embedding import get_tabpfn_embeddings
     import optuna
-    from optuna.storages import JournalStorage, JournalFileStorage
+    from optuna.storages import JournalStorage
+    from optuna.storages.journal import JournalFileBackend
 
     X_train_raw = df_train.drop(columns=[duration_col, event_col])
     t_train = df_train[duration_col].values.astype(np.float32)
@@ -432,7 +528,7 @@ def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_embedding_cox_{study_id}.log" if study_id else "optuna_embedding_cox.log"
         log_file = os.path.join(save_dir, log_name)
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
         
         study_name = f"embedding_cox_tuning_{study_id}" if study_id else "embedding_cox_tuning"
         study = optuna.create_study(

@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "deephit_single",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7099,
+  "n_test": 1774,
+  "n_features": 14,
+  "n_events_train": 4829,
+  "n_events_test": 1207,
+  "event_rate_train": 0.6802,
+  "event_rate_test": 0.6804,
+  "fit_time_s": 63.4362,
+  "eval_time_s": 0.0604,
+  "hpo_included_in_fit_time": true,
+  "n_params": 6084,
+  "timestamp": "2026-03-26T11:31:19.009612"
+}

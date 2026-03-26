@@ -8,7 +8,8 @@ from torchsurv.loss import cox
 import numpy as np
 from sklearn.model_selection import train_test_split
 import optuna
-from optuna.storages import JournalStorage, JournalFileStorage
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 
 
 class SurvivalDataset(Dataset):
@@ -48,7 +49,7 @@ def train_custom_torchsurv(df_train, df_test, duration_col, event_col, epochs=10
 
         os.makedirs(save_dir, exist_ok=True)
         log_file = os.path.join(save_dir, "optuna_custom.log")
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
 
         study = optuna.create_study(
             study_name="custom_torch_tuning",

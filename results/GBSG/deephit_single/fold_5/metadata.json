@@ -1,0 +1,19 @@
+{
+  "dataset": "GBSG",
+  "model": "deephit_single",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1786,
+  "n_test": 446,
+  "n_features": 7,
+  "n_events_train": 1014,
+  "n_events_test": 253,
+  "event_rate_train": 0.5677,
+  "event_rate_test": 0.5673,
+  "fit_time_s": 59.0217,
+  "eval_time_s": 0.0466,
+  "hpo_included_in_fit_time": true,
+  "n_params": 5860,
+  "timestamp": "2026-03-26T12:21:26.699998"
+}

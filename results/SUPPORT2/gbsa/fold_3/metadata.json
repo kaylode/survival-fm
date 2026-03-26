@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "gbsa",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7098,
+  "n_test": 1775,
+  "n_features": 14,
+  "n_events_train": 4829,
+  "n_events_test": 1207,
+  "event_rate_train": 0.6803,
+  "event_rate_test": 0.68,
+  "fit_time_s": 1134.6793,
+  "eval_time_s": 0.064,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-03-26T10:17:13.853622"
+}

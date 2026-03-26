@@ -18,8 +18,7 @@ except ImportError:
     umap = None
 from typing import *
 
-from survpfn.tabpfn.utils import TabPFNClassifier
-from survpfn.tabpfn.styles import setup_figure, create_savefig_partial
+from tabpfn import TabPFNClassifier
 
 
 def get_tabpfn_embeddings(X_train, y_train, X_test, y_test):

@@ -6,7 +6,8 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest, GradientBoostingSurvivalAnalysis
-from optuna.storages import JournalStorage, JournalFileStorage
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 
 
 def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results", study_id=None):
@@ -26,7 +27,7 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_rsf_{study_id}.log" if study_id else "optuna_rsf.log"
         log_file = os.path.join(save_dir, log_name)
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
 
         study_name = f"rsf_tuning_{study_id}" if study_id else "rsf_tuning"
         study = optuna.create_study(
@@ -80,7 +81,7 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_gbsa_{study_id}.log" if study_id else "optuna_gbsa.log"
         log_file = os.path.join(save_dir, log_name)
-        storage = JournalStorage(JournalFileStorage(log_file))
+        storage = JournalStorage(JournalFileBackend(log_file))
 
         study_name = f"gbsa_tuning_{study_id}" if study_id else "gbsa_tuning"
         study = optuna.create_study(
