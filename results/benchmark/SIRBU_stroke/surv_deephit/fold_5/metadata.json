@@ -1,0 +1,19 @@
+{
+  "dataset": "SIRBU_stroke",
+  "model": "surv_deephit",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 6452,
+  "n_test": 1613,
+  "n_features": 68,
+  "n_events_train": 1985,
+  "n_events_test": 497,
+  "event_rate_train": 0.3077,
+  "event_rate_test": 0.3081,
+  "fit_time_s": 68.389,
+  "eval_time_s": 0.057,
+  "hpo_included_in_fit_time": true,
+  "n_params": 80704,
+  "timestamp": "2026-03-27T09:40:12.174260"
+}

@@ -242,25 +242,3 @@ Dataset Sirbu/                      # Private Sirbu source Excel files (restrict
    ```
 4. Add tests under `tests/` — the project uses `pytest`.
 5. Open a pull request with a clear description of the change.
-
----
-
-## Citation
-
-If you use SurvPFN in your research, please cite:
-
-```bibtex
-@article{survpfn2026,
-  title     = {SurvPFN: In-Context Survival Analysis via Tabular Foundation Models
-               with Retrieval Augmentation},
-  author    = {...},
-  journal   = {arXiv preprint},
-  year      = {2026}
-}
-```
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).

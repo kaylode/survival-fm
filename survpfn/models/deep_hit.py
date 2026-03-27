@@ -348,7 +348,7 @@ def train_pchazard(
             m = PCHazard(net, tt.optim.Adam(lr_t), duration_index=labtrans.cuts)
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
-                surv = m.interpolate(10).predict_surv_df(X_val)
+                surv = m.predict_surv_df(X_val)
                 ev = EvalSurv(surv, y_val_0, y_val_1, censor_surv="km")
                 return ev.concordance_td()
             except Exception:
@@ -363,7 +363,7 @@ def train_pchazard(
     net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
     model = PCHazard(net, tt.optim.Adam(params["lr"]), duration_index=labtrans.cuts)
     model.fit(X_train, y_train_t, params["batch_size"], params["epochs"], verbose=True)
-    surv_df = model.interpolate(10).predict_surv_df(X_test)
+    surv_df = model.predict_surv_df(X_test)
 
     risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_df)
     return model, risk_scores, surv_probs, surv_times

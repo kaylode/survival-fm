@@ -1,0 +1,19 @@
+{
+  "dataset": "SIRBU_mi",
+  "model": "deephit_single",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 6452,
+  "n_test": 1613,
+  "n_features": 68,
+  "n_events_train": 2096,
+  "n_events_test": 523,
+  "event_rate_train": 0.3249,
+  "event_rate_test": 0.3242,
+  "fit_time_s": 65.6705,
+  "eval_time_s": 0.0455,
+  "hpo_included_in_fit_time": true,
+  "n_params": 15332,
+  "timestamp": "2026-03-27T03:55:01.524209"
+}

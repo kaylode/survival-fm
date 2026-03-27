@@ -1,0 +1,19 @@
+{
+  "dataset": "SIRBU",
+  "model": "cox",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 6452,
+  "n_test": 1613,
+  "n_features": 68,
+  "n_events_train": 1926,
+  "n_events_test": 481,
+  "event_rate_train": 0.2985,
+  "event_rate_test": 0.2982,
+  "fit_time_s": 1.2383,
+  "eval_time_s": 0.0711,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-03-26T19:09:21.766836"
+}

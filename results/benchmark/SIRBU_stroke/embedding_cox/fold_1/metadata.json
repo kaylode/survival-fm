@@ -1,0 +1,19 @@
+{
+  "dataset": "SIRBU_stroke",
+  "model": "embedding_cox",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 6452,
+  "n_test": 1613,
+  "n_features": 68,
+  "n_events_train": 1986,
+  "n_events_test": 496,
+  "event_rate_train": 0.3078,
+  "event_rate_test": 0.3075,
+  "fit_time_s": 118.1247,
+  "eval_time_s": 0.0626,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-03-27T07:05:24.017591"
+}

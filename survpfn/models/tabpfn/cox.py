@@ -538,10 +538,13 @@ def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, 
             load_if_exists=True
         )
 
+        _nodes_map = {"64-64": [64, 64], "128-64": [128, 64], "256-128": [256, 128]}
+
         def objective(trial):
             lr_trial = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
             dropout_trial = trial.suggest_float('dropout', 0.0, 0.5)
-            nodes_trial = trial.suggest_categorical('nodes', [[64, 64], [128, 64], [256, 128]])
+            nodes_key = trial.suggest_categorical('nodes', list(_nodes_map.keys()))
+            nodes_trial = _nodes_map[nodes_key]
 
             model = EmbeddingCoxPH(
                 embedding_dim=train_emb.shape[1],
