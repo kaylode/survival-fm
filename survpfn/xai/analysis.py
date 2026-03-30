@@ -54,8 +54,8 @@ MODEL_ORDER = [
     "km", "cox",
     "rsf", "gbsa",
     "deepsurv", "mtlr", "pchazard", "deephit_single",
-    "embedding_cox",
-    "surv_cox", "surv_deephit", "surv_pchazard", "surv_mtlr",
+    "tabpfn_embedding_cox",
+    "tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr",
 ]
 
 MODEL_LABELS = {
@@ -67,19 +67,19 @@ MODEL_LABELS = {
     "mtlr":           "MTLR",
     "pchazard":       "PC-Hazard",
     "deephit_single": "DeepHit",
-    "embedding_cox":  "TabPFN-Cox",
-    "surv_cox":       "Surv-Cox",
-    "surv_deephit":   "Surv-DeepHit",
-    "surv_pchazard":  "Surv-PCHaz",
-    "surv_mtlr":      "Surv-MTLR",
+    "tabpfn_embedding_cox":  "TabPFN-Cox (frozen)",
+    "tabpfn_cox":       "TabPFN-Cox",
+    "tabpfn_deephit":   "TabPFN-DeepHit",
+    "tabpfn_pchazard":  "TabPFN-PCHaz",
+    "tabpfn_mtlr":      "TabPFN-MTLR",
 }
 
 MODEL_GROUPS = {
     "Baseline": ["km", "cox"],
     "Tree":     ["rsf", "gbsa"],
     "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single"],
-    "TabPFN-A": ["embedding_cox"],
-    "TabPFN-C": ["surv_cox", "surv_deephit", "surv_pchazard", "surv_mtlr"],
+    "TabPFN-A": ["tabpfn_embedding_cox"],
+    "TabPFN-C": ["tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
@@ -92,7 +92,7 @@ GROUP_COLORS = {
 }
 
 DATASET_ORDER = [
-    "SUPPORT2", "METABRIC", "GBSG",
+    "SUPPORT2", "METABRIC", "GBSG", "FLCHAIN", "VETERANS", "WHAS500",
     "SIRBU_mortality", "SIRBU_cv", "SIRBU_mi", "SIRBU_stroke",
     "SIRBU",
 ]
@@ -105,8 +105,11 @@ DATASET_LABELS = {
     "SIRBU_cv":       "Sirbu-CV",
     "SIRBU_mi":       "Sirbu-MI",
     "SIRBU_stroke":   "Sirbu-Stroke",
+    "FLCHAIN":        "FL-Chain",
+    "VETERANS":       "Veterans",
+    "WHAS500":        "WHAS500",
 }
-PUBLIC_DATASETS = ["SUPPORT2", "METABRIC", "GBSG"]
+PUBLIC_DATASETS = ["SUPPORT2", "METABRIC", "GBSG", "FLCHAIN", "VETERANS", "WHAS500"]
 SIRBU_DATASETS  = ["SIRBU_mortality", "SIRBU_cv", "SIRBU_mi", "SIRBU_stroke", "SIRBU"]
 
 plt.rcParams.update({
@@ -227,8 +230,7 @@ def present(df: pd.DataFrame, lst: list[str]) -> list[str]:
 
 def save_fig(fig: plt.Figure, out_dir: Path, name: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    for ext in ("pdf", "png"):
-        fig.savefig(out_dir / f"{name}.{ext}", bbox_inches="tight")
+    fig.savefig(out_dir / f"{name}.pdf", bbox_inches="tight")
     plt.close(fig)
     print(f"  ✓ {name}")
 
@@ -587,10 +589,10 @@ def fig07_model_family_boxplot(df: pd.DataFrame, out_dir: Path) -> None:
 
 def fig08_tabpfn_ablation(df: pd.DataFrame, out_dir: Path) -> None:
     pairs = [
-        ("cox",           "embedding_cox",  "Cox PH",   "TabPFN-Cox"),
-        ("cox",           "surv_cox",       "Cox PH",   "Surv-Cox"),
-        ("mtlr",          "surv_mtlr",      "MTLR",     "Surv-MTLR"),
-        ("deephit_single","surv_deephit",   "DeepHit",  "Surv-DeepHit"),
+        ("cox",           "tabpfn_embedding_cox", "Cox PH",   "TabPFN-Cox (frozen)"),
+        ("cox",           "tabpfn_cox",           "Cox PH",   "TabPFN-Cox"),
+        ("mtlr",          "tabpfn_mtlr",          "MTLR",     "TabPFN-MTLR"),
+        ("deephit_single","tabpfn_deephit",       "DeepHit",  "TabPFN-DeepHit"),
     ]
     valid_pairs = [(a, b, la, lb) for a, b, la, lb in pairs
                    if a in df["Model"].unique() and b in df["Model"].unique()]
@@ -617,7 +619,7 @@ def fig08_tabpfn_ablation(df: pd.DataFrame, out_dir: Path) -> None:
 
         ax.bar(x - w/2, b_m, w, yerr=b_s, label=base_l,
                color=get_model_color(base_m), capsize=3, edgecolor="white")
-        tabpfn_col = (GROUP_COLORS["TabPFN-C"] if tabpfn_m.startswith("surv_")
+        tabpfn_col = (GROUP_COLORS["TabPFN-C"] if tabpfn_m.startswith("tabpfn_")
                       else GROUP_COLORS["TabPFN-A"])
         ax.bar(x + w/2, t_m, w, yerr=t_s, label=tabpfn_l,
                color=tabpfn_col, capsize=3, edgecolor="white")
@@ -956,8 +958,8 @@ def main() -> None:
         description="SurvPFN comprehensive analysis — generates all figures.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--results-dir", default="results", type=Path)
-    parser.add_argument("--output-dir",  default="xai/figures", type=Path)
+    parser.add_argument("--results-dir", default="results/benchmark", type=Path)
+    parser.add_argument("--output-dir",  default="results/xai/figures", type=Path)
     parser.add_argument("--top-k",       default=15, type=int,
                         help="Max features in importance plots.")
     args = parser.parse_args()
