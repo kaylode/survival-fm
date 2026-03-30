@@ -100,6 +100,7 @@ def train_deephit_competing_risks(df_train, df_test, duration_col="Follow Up Dat
             try:
                 model.fit(X_tr, y_tr, batch_size=params['batch_size'], epochs=20, verbose=False)
                 surv = model.predict_surv_df(X_val)
+                # Use continuous validation data for precise C-index
                 ev = EvalSurv(surv, T_val, E_val, censor_surv='km')
                 return ev.concordance_td()
             except Exception:
@@ -144,7 +145,18 @@ def _prep_discrete(
     X_train = df_train.drop(columns=[duration_col, event_col]).values.astype(np.float32)
     X_test = df_test.drop(columns=[duration_col, event_col]).values.astype(np.float32)
 
-    labtrans = model_cls.label_transform(num_durations)
+    # Scale features (mandatory for neural models)
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # Use quantile binning by default for better event distribution
+    try:
+        labtrans = model_cls.label_transform(num_durations, scheme='quantiles')
+    except TypeError:
+        labtrans = model_cls.label_transform(num_durations)
+        
     y_train_t = labtrans.fit_transform(T_train, E_train)
 
     return X_train, X_test, y_train_t, T_test, E_test, X_train.shape[1], labtrans
@@ -166,7 +178,15 @@ def _surv_df_to_arrays(
     """
     surv_times = surv_df.index.values.astype(float)
     surv_probs = surv_df.values.T   # (n_test, n_times)
-    risk_scores = -surv_df.iloc[-1].values  # negative survival at last time = risk
+    
+    # Use integrated survival (AUC) as an robust risk score instead of S(T_max)
+    # Higher AUC = longer life expectancy = lower risk.
+    # risk = -AUC
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    if _trapz is None:
+        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
+    auc = _trapz(surv_df.values.T, surv_times)
+    risk_scores = -auc
     return risk_scores, surv_probs, surv_times
 
 
@@ -230,6 +250,12 @@ def train_mtlr(
             test_size=0.2, random_state=random_state,
         )
         y_tr = (y_tr_0, y_tr_1)
+        
+        # Split original continuous data for proper evaluation
+        T_tr, T_val, E_tr, E_val = train_test_split(
+            df_train[duration_col].values, df_train[event_col].values,
+            test_size=0.2, random_state=random_state,
+        )
 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_mtlr_{study_id}.log" if study_id else "optuna_mtlr.log"
@@ -251,7 +277,8 @@ def train_mtlr(
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.interpolate(10).predict_surv_df(X_val)
-                ev = EvalSurv(surv, y_val_0, y_val_1, censor_surv="km")
+                # Use continuous evaluation for accurate Antolini C-index
+                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
                 return ev.concordance_td()
             except Exception:
                 return 0.0
@@ -329,6 +356,12 @@ def train_pchazard(
         )
         y_tr = (y_tr_0, y_tr_1)
 
+        # Get continuous ground truth for HPO evaluation
+        T_tr, T_val, E_tr, E_val = train_test_split(
+            df_train[duration_col].values, df_train[event_col].values,
+            test_size=0.2, random_state=random_state,
+        )
+
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_pchazard_{study_id}.log" if study_id else "optuna_pchazard.log"
         storage = JournalStorage(JournalFileBackend(os.path.join(save_dir, log_name)))
@@ -349,7 +382,8 @@ def train_pchazard(
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.predict_surv_df(X_val)
-                ev = EvalSurv(surv, y_val_0, y_val_1, censor_surv="km")
+                # Use continuous ground truth
+                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
                 return ev.concordance_td()
             except Exception:
                 return 0.0
@@ -427,6 +461,12 @@ def train_deephit_single(
             test_size=0.2, random_state=random_state,
         )
         y_tr = (y_tr_0, y_tr_1)
+        
+        # Continuous ground-truth for tuning evaluation
+        T_tr, T_val, E_tr, E_val = train_test_split(
+            df_train[duration_col].values, df_train[event_col].values,
+            test_size=0.2, random_state=random_state,
+        )
 
         os.makedirs(save_dir, exist_ok=True)
         log_name = f"optuna_deephit_single_{study_id}.log" if study_id else "optuna_deephit_single.log"
@@ -452,7 +492,8 @@ def train_deephit_single(
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.interpolate(10).predict_surv_df(X_val)
-                ev = EvalSurv(surv, y_val_0, y_val_1, censor_surv="km")
+                # Continuous evaluation for higher quality tuning
+                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
                 return ev.concordance_td()
             except Exception:
                 return 0.0

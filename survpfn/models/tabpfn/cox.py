@@ -1,16 +1,17 @@
 """
-survpfn.models.tabpfn.cox — TabPFN-aware and embedding-based Cox PH models.
+survpfn.models.tabpfn.cox — TabPFN-aware and embedding-based survival models.
 
 Merged from: aware_cox.py + embedding_cox.py
 
 Classes / functions
 -------------------
-* TabPFNSurvModel   — PyTorch nn.Module with TabPFN backbone + survival head
-* TabPFNSurvPH      — High-level wrapper with fit / predict_survival
-* TabPFNCoxPH       — Alias for TabPFNSurvPH(head_type='cox')
-* MLPVanilla        — Custom MLP with Kaiming init (from embedding_cox.py)
-* EmbeddingCoxPH    — Cox PH fitted on TabPFN embeddings
-* train_embedding_cox — end-to-end helper (extract embeddings + fit EmbeddingCoxPH)
+* TabPFNSurvModel     — PyTorch nn.Module with TabPFN backbone + survival head
+                        (jointly-trained variant; supports cox/deephit/pchazard/mtlr)
+* TabPFNSurvPH        — High-level wrapper with fit / predict_survival
+* MLPVanilla          — Re-exported from survpfn.models.heads (backward compat)
+* EmbeddingCoxPH      — Re-exported from survpfn.models.heads (backward compat)
+* train_tabpfn_embedding_cox — Thin wrapper over train_fm_embedding_surv (head_type="cox")
+* train_embedding_surv — Full wrapper supporting all four head types
 """
 
 import os
@@ -27,6 +28,14 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from survpfn.models.tabpfn.backbone.utils import load_model_workflow
+
+# Re-export shared head utilities so existing imports continue to work.
+from survpfn.models.heads import (  # noqa: F401
+    MLPVanilla,
+    EmbeddingCoxPH,
+    EmbeddingSurvHead,
+    train_fm_embedding_surv,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -196,13 +205,20 @@ class TabPFNSurvPH:
             self.labtrans = None
         elif self.head_type == "deephit":
             from pycox.preprocessing.label_transforms import LabTransDiscreteTime
-            self.labtrans = LabTransDiscreteTime(num_durations)
+            # Quantile binning is essential for skewed medical data
+            self.labtrans = LabTransDiscreteTime(num_durations, scheme='quantiles')
             self.model = DeepHitSingle(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
         elif self.head_type == "pchazard":
-            self.labtrans = PCHazard.label_transform(num_durations)
+            try:
+                self.labtrans = PCHazard.label_transform(num_durations, scheme='quantiles')
+            except TypeError:
+                self.labtrans = PCHazard.label_transform(num_durations)
             self.model = PCHazard(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
         elif self.head_type == "mtlr":
-            self.labtrans = MTLR.label_transform(num_durations)
+            try:
+                self.labtrans = MTLR.label_transform(num_durations, scheme='quantiles')
+            except TypeError:
+                self.labtrans = MTLR.label_transform(num_durations)
             self.model = MTLR(self.net, tt.optim.Adam(lr=learning_rate), duration_index=self.labtrans.cuts)
         else:
             raise ValueError(f"Unknown head_type: {head_type}")
@@ -232,7 +248,7 @@ class TabPFNSurvPH:
         criterion_pfn = nn.CrossEntropyLoss()
         optimizer = self.model.optimizer
 
-        x_pt = torch.from_numpy(x).to(self.device, self.dtype)
+        x_pt = torch.from_numpy(x.copy()).to(self.device, self.dtype)
         
         # Label transforms for discrete models
         if self.labtrans is not None:
@@ -244,11 +260,11 @@ class TabPFNSurvPH:
             if len(targets) > 2:
                 frac_pt = torch.from_numpy(targets[2]).to(self.device, self.dtype)
         else:
-            dur_pt = torch.from_numpy(durations).to(self.device, self.dtype)
-            ev_pt = torch.from_numpy(events).to(self.device, self.dtype)
+            dur_pt = torch.from_numpy(durations.copy()).to(self.device, self.dtype)
+            ev_pt = torch.from_numpy(events.copy()).to(self.device, self.dtype)
             frac_pt = None
             
-        y_pfn_pt = torch.from_numpy(y_pfn).to(self.device) if y_pfn is not None else None
+        y_pfn_pt = torch.from_numpy(y_pfn.copy()).to(self.device) if y_pfn is not None else None
 
         for epoch in range(epochs):
             self.net.train()
@@ -311,268 +327,76 @@ class TabPFNSurvPH:
                     return self.model.interpolate(10).predict_surv_df(x_pt)
                 return self.model.predict_surv_df(x_pt)
 
-# Alias for backward compatibility
-class TabPFNCoxModel(TabPFNSurvModel):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-class TabPFNCoxPH(TabPFNSurvPH):
-    def __init__(self, **kwargs):
-        super().__init__(head_type="cox", **kwargs)
-
-
 # ---------------------------------------------------------------------------
-# Embedding-based Cox PH (from embedding_cox.py)
+# Embedding-based survival heads — thin wrappers over survpfn.models.heads
 # ---------------------------------------------------------------------------
-
-class MLPVanilla(nn.Module):
-    def __init__(
-        self,
-        in_features: int,
-        num_nodes: list,
-        out_features: int,
-        batch_norm: bool = True,
-        dropout: float = None,
-        activation=nn.ReLU,
-        output_activation=None,
-        output_bias: bool = True,
-    ):
-        super().__init__()
-
-        nodes = [in_features] + list(num_nodes)
-        layers = []
-
-        for i in range(len(nodes) - 1):
-            layers.append(nn.Linear(nodes[i], nodes[i + 1]))
-            if batch_norm:
-                layers.append(nn.BatchNorm1d(nodes[i + 1]))
-            layers.append(activation())
-            if dropout is not None:
-                layers.append(nn.Dropout(p=dropout))
-
-        # Output layer — NO batch norm, NO dropout
-        out_layer = nn.Linear(nodes[-1], out_features, bias=output_bias)
-        nn.init.kaiming_normal_(out_layer.weight, nonlinearity='relu')
-        nn.init.zeros_(out_layer.bias)
-        layers.append(out_layer)
-
-        if output_activation is not None:
-            layers.append(output_activation())
-
-        self.net = nn.Sequential(*layers)
-
-        # Init hidden layer weights
-        self._init_weights()
-
-    def _init_weights(self):
-        layers = list(self.net.children())
-        output_layer = layers[-1] if not isinstance(layers[-1], nn.Module.__class__) else None
-
-        for i, m in enumerate(self.net):
-            if isinstance(m, nn.Linear) and m is not list(self.net.children())[-1]:
-                nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
-                nn.init.zeros_(m.bias)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+# MLPVanilla, EmbeddingCoxPH, and EmbeddingSurvHead are imported at the top
+# of this file from survpfn.models.heads and re-exported for backward compat.
 
 
-class EmbeddingCoxPH:
-    def __init__(
-        self,
-        embedding_dim: int,
-        num_nodes: list = [64, 64],
-        out_features: int = 1,
-        batch_norm: bool = True,
-        dropout: float = 0.1,
-        learning_rate: float = 1e-3,
-    ):
-        net = MLPVanilla(
-            in_features=embedding_dim,
-            num_nodes=num_nodes,
-            out_features=out_features,
-            batch_norm=batch_norm,
-            dropout=dropout,
-            output_activation=None,
-        )
+def train_embedding_surv(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    duration_col: str,
+    event_col: str,
+    head_type: str = "cox",
+    tune: bool = False,
+    n_trials: int = 10,
+    save_dir: str = "results",
+    study_id: Optional[str] = None,
+) -> tuple:
+    """Frozen TabPFN embedding + any survival head.
 
-        self.model = CoxPH(net, tt.optim.Adam(lr=learning_rate))
+    Parameters
+    ----------
+    head_type : one of "cox", "deephit", "pchazard", "mtlr"
 
-        # Store training data for compute_baseline_hazards
-        self._x_train = None
-        self._y_train = None
-
-    def fit(
-        self,
-        embeddings: np.ndarray,
-        durations: np.ndarray,
-        events: np.ndarray,
-        val_data: tuple = None,
-        epochs: int = 100,
-        batch_size: int = 256,
-        callbacks=None,
-        verbose: bool = True,
-    ):
-        x = embeddings.astype(np.float32)
-        y = (durations.astype(np.float32), events.astype(np.float32))
-
-        self._x_train = x
-        self._y_train = y
-
-        val = None
-        if val_data is not None:
-            x_val, dur_val, ev_val = val_data
-            val = (
-                x_val.astype(np.float32),
-                (dur_val.astype(np.float32), ev_val.astype(np.float32)),
-            )
-
-        self.log = self.model.fit(
-            x, y,
-            batch_size=batch_size,
-            epochs=epochs,
-            callbacks=callbacks,
-            verbose=verbose,
-            val_data=val,
-        )
-        return self
-
-    def compute_baseline(self):
-        if self._x_train is None:
-            raise RuntimeError("Call fit() before compute_baseline().")
-
-        self.model.compute_baseline_hazards(
-            input=self._x_train,
-            target=self._y_train,
-        )
-        return self
-
-    def predict_survival(self, embeddings: np.ndarray) -> "pd.DataFrame":
-        """
-        Returns a DataFrame (timepoints x subjects) with survival probabilities.
-        Expected values: float in (0, 1].
-        """
-        if self.model.baseline_hazards_ is None:
-            raise RuntimeError("Call compute_baseline() before predict_survival().")
-
-        x = embeddings.astype(np.float32)
-        return self.model.predict_surv_df(x)
-
-    def concordance_index(
-        self,
-        embeddings: np.ndarray,
-        durations: np.ndarray,
-        events: np.ndarray,
-        method: str = "antolini",
-    ) -> float:
-        """
-        Compute the concordance index on the provided set.
-
-        Parameters
-        ----------
-        embeddings : np.ndarray
-            Feature matrix (n_samples, embedding_dim)
-        durations : np.ndarray
-            Observation times
-        events : np.ndarray
-            Event indicator (1 = event, 0 = censored)
-        method : str
-            'antolini' for time-dependent C-index (default),
-            or other methods supported by EvalSurv.
-
-        Returns
-        -------
-        float
-            Concordance index in [0, 1]. 0.5 = random, 1.0 = perfect.
-        """
-        surv_df = self.predict_survival(embeddings)
-
-        ev = EvalSurv(
-            surv=surv_df,
-            durations=durations,
-            events=events,
-            censor_surv="km",
-        )
-
-        return ev.concordance_td(method=method)
-
-
-def train_embedding_cox(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, save_dir="results", study_id=None):
+    Returns
+    -------
+    (model, risk_scores, surv_probs, surv_times)
+    """
     from survpfn.models.tabpfn.embedding import get_tabpfn_embeddings
-    import optuna
-    from optuna.storages import JournalStorage
-    from optuna.storages.journal import JournalFileBackend
 
-    X_train_raw = df_train.drop(columns=[duration_col, event_col])
-    t_train = df_train[duration_col].values.astype(np.float32)
-    e_train = df_train[event_col].values.astype(np.float32)
-
-    X_test_raw = df_test.drop(columns=[duration_col, event_col])
-    t_test = df_test[duration_col].values.astype(np.float32)
-    e_test = df_test[event_col].values.astype(np.float32)
-
-    # Binarize event for TabPFN classifier (competing risks have values > 1)
-    y_train_binary = (df_train[event_col] > 0).astype(int)
-    y_test_binary = (df_test[event_col] > 0).astype(int)
-
-    print("Generating TabPFN Embeddings...")
-    train_emb, test_emb = get_tabpfn_embeddings(X_train_raw, y_train_binary, X_test_raw, y_test_binary)
-
-    params = {'lr': 1e-3, 'nodes': [128, 64], 'dropout': 0.1, 'batch_size': 128}
-
-    if tune:
-        X_tr, X_val, T_tr, T_val, E_tr, E_val = train_test_split(
-            train_emb, t_train, e_train, test_size=0.2, random_state=42, stratify=e_train
+    def _embedding_fn(X_train: np.ndarray, y_bin: np.ndarray,
+                      X_test: np.ndarray) -> tuple:
+        # TabPFN's extractor also accepts test labels (used as a dummy class
+        # for the in-context classifier); pass zeros for the test set.
+        y_test_zeros = np.zeros(len(X_test), dtype=np.float32)
+        return get_tabpfn_embeddings(
+            pd.DataFrame(X_train),
+            pd.Series(y_bin.astype(int)),
+            pd.DataFrame(X_test),
+            pd.Series(y_test_zeros.astype(int)),
         )
 
-        os.makedirs(save_dir, exist_ok=True)
-        log_name = f"optuna_embedding_cox_{study_id}.log" if study_id else "optuna_embedding_cox.log"
-        log_file = os.path.join(save_dir, log_name)
-        storage = JournalStorage(JournalFileBackend(log_file))
-        
-        study_name = f"embedding_cox_tuning_{study_id}" if study_id else "embedding_cox_tuning"
-        study = optuna.create_study(
-            study_name=study_name,
-            direction="maximize",
-            storage=storage,
-            load_if_exists=True
-        )
-
-        _nodes_map = {"64-64": [64, 64], "128-64": [128, 64], "256-128": [256, 128]}
-
-        def objective(trial):
-            lr_trial = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-            dropout_trial = trial.suggest_float('dropout', 0.0, 0.5)
-            nodes_key = trial.suggest_categorical('nodes', list(_nodes_map.keys()))
-            nodes_trial = _nodes_map[nodes_key]
-
-            model = EmbeddingCoxPH(
-                embedding_dim=train_emb.shape[1],
-                num_nodes=nodes_trial,
-                dropout=dropout_trial,
-                learning_rate=lr_trial
-            )
-            model.fit(X_tr, T_tr, E_tr, epochs=50, batch_size=params['batch_size'], verbose=False)
-            model.compute_baseline()
-            return model.concordance_index(X_val, T_val, E_val)
-
-        study.optimize(objective, n_trials=n_trials)
-        params.update(study.best_params)
-
-    model = EmbeddingCoxPH(
-        embedding_dim=train_emb.shape[1],
-        num_nodes=params['nodes'],
-        dropout=params['dropout'],
-        learning_rate=params['lr']
+    return train_fm_embedding_surv(
+        df_train, df_test, duration_col, event_col,
+        embedding_fn=_embedding_fn,
+        head_type=head_type,
+        tune=tune,
+        n_trials=n_trials,
+        save_dir=save_dir,
+        study_id=study_id,
+        fm_name="tabpfn",
     )
-    model.fit(train_emb, t_train, e_train, epochs=200, batch_size=params['batch_size'], verbose=True)
-    model.compute_baseline()
 
-    surv_df = model.predict_survival(test_emb)
-    # Align risk scores: higher hazard = lower survival
-    risk_scores = -surv_df.iloc[-1].values
 
-    surv_times = surv_df.index.values
-    surv_probs = surv_df.values.T
-
-    return model, risk_scores, surv_probs, surv_times
+def train_tabpfn_embedding_cox(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    duration_col: str,
+    event_col: str,
+    tune: bool = False,
+    n_trials: int = 10,
+    save_dir: str = "results",
+    study_id: Optional[str] = None,
+) -> tuple:
+    """Backward-compatible alias for train_embedding_surv(head_type='cox')."""
+    return train_embedding_surv(
+        df_train, df_test, duration_col, event_col,
+        head_type="cox",
+        tune=tune,
+        n_trials=n_trials,
+        save_dir=save_dir,
+        study_id=study_id,
+    )
