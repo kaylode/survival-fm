@@ -1,0 +1,10 @@
+{
+  "best_params": {
+    "lr": 0.0010572203040554624,
+    "dropout": 0.0020575840609245166,
+    "nodes": "64-64"
+  },
+  "best_value": 0.9318882118350379,
+  "n_completed_trials": 20,
+  "best_trial_number": 15
+}

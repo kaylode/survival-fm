@@ -1,0 +1,16 @@
+{
+  "type": "impurity",
+  "features": {
+    "Age_in_years": 0.0,
+    "Karnofsky_score": 0.6706246313693203,
+    "Months_from_Diagnosis": 0.07738545668759277,
+    "Celltype_adeno": 0.0056030342311264225,
+    "Celltype_large": 0.0,
+    "Celltype_smallcell": 0.09107212504261786,
+    "Celltype_squamous": 0.0856025980298471,
+    "Prior_therapy_no": 0.03444931897894964,
+    "Prior_therapy_yes": 0.028682557343398855,
+    "Treatment_standard": 0.0039162209217617015,
+    "Treatment_test": 0.002664057395385386
+  }
+}
