@@ -220,11 +220,12 @@ class ICLearning(nn.Module):
         train_size = y_train.shape[1]
         R[:, :train_size] = R[:, :train_size] + self.y_encoder(y_train.float())
         src = self.tf_icl(R, attn_mask=train_size)
+        emb = src.cpu()
         if self.norm_first:
             src = self.ln(src)
         out = self.decoder(src)  # (B, T, max_classes)
 
-        return out
+        return out, emb
 
     def _predict_standard(
         self,
@@ -260,7 +261,7 @@ class ICLearning(nn.Module):
 
         train_size = y_train.shape[1]
         num_classes = len(torch.unique(y_train[0]))
-        out = self.inference_mgr(
+        out, emb = self.inference_mgr(
             self._icl_predictions, inputs=OrderedDict([("R", R), ("y_train", y_train)]), auto_batch=auto_batch
         )
         out = out[:, train_size:, :num_classes]
@@ -268,7 +269,7 @@ class ICLearning(nn.Module):
         if not return_logits:
             out = torch.softmax(out / softmax_temperature, dim=-1)
 
-        return out
+        return out, emb
 
     def _predict_hierarchical(self, R_test: Tensor, softmax_temperature: float = 0.9) -> Tensor:
         """Generate predictions using the hierarchical classification tree.
@@ -463,9 +464,9 @@ class ICLearning(nn.Module):
 
         if self.training:
             train_size = y_train.shape[1]
-            out = self._icl_predictions(R, y_train)
+            out, emb = self._icl_predictions(R, y_train)
             out = out[:, train_size:]
+            return out, emb
         else:
             out = self._inference_forward(R, y_train, return_logits, softmax_temperature, mgr_config)
-
-        return out
+            return out

@@ -8,7 +8,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from .model import TabDPTModel
 from .models_utils import Task, convert_to_torch_tensor, pad_x
-from .utils import FAISS, DataPreprocessor, standardize, seed_everything
+from .retrieval import FAISS
 
 _DEFAULT_DEVICE = "cuda:0"
 _INF_BATCH_SIZE = 512
@@ -76,9 +76,6 @@ class TabDPTEstimator(BaseEstimator):
             assert X.ndim == 2, "X must be a 2D array"
             assert y.ndim == 1, "y must be a 1D array"
 
-            self.preprocessor = DataPreprocessor()
-            X = self.preprocessor.fit_transform(X)
-
         # initialize the Faiss index if not provided
         self.faiss_knn = faiss_index if faiss_index is not None else FAISS(X)
 
@@ -101,10 +98,7 @@ class TabDPTEstimator(BaseEstimator):
         """
 
         # preprocess the input data
-        if not self.tensor_eval:
-            self.X_test = self.preprocessor.transform(X)
-        else:
-            self.X_test = X
+        self.X_test = X
 
         train_x, train_y, test_x = (
             convert_to_torch_tensor(self.X_train).to(self.device).float(),
@@ -413,113 +407,67 @@ class TabDPTClassifier(TabDPTEstimator, ClassifierMixin):
             X, temperature=temperature, context_size=context_size, use_retrieval=use_retrieval
         ).argmax(axis=-1)
 
-
-class TabDPTRegressor(TabDPTEstimator, RegressorMixin):
-    """A PyTorch-based implementation of TabDPT for regression tasks."""
-
-    def __init__(
-        self,
-        model: Optional[TabDPTModel] = None,
-        path: str = "",
-        mode: Task = Task.REG,
-        inf_batch_size: int = _INF_BATCH_SIZE,
-        device: str = _DEFAULT_DEVICE,
-        tensor_eval: bool = False,
-    ):
-        super().__init__(
-            model=model,
-            path=path,
-            mode=mode,
-            inf_batch_size=inf_batch_size,
-            device=device,
-            tensor_eval=tensor_eval,
-        )
-
     @torch.no_grad()
-    def predict(
+    def predict_embeddings(
         self,
         X: np.ndarray,
         context_size: int = _DEFAULT_CONTEXT_SIZE,
         use_retrieval: bool = _DEFAULT_RETRIEVAL,
+        return_full: bool = True,
     ) -> np.ndarray:
-        """predict regression values for the input data.
-
+        """Extract penultimate-layer embeddings.
+        
         Args:
-            X (np.ndarray): input features for prediction.
-            context_size (int, optional): size of the conte. Defaults to True.xt. Defaults to 128.
-            use_retrieval (bool, optional): whether to use retrieval.
-                - If use_retrieval=True, do KNN retrieval (batched).
-                - If use_retrieval=False, create a single random context and do [N_context + N_test, 1, d] once.
-            Defaults to True.
+            X (np.ndarray): input features (query).
+            context_size (int): number of context samples.
+            use_retrieval (bool): whether to use retrieval.
+            return_full (bool): If True, returns (n_ctx + n_query, 1, ninp).
+                If False, returns (n_query, ninp).
+        
         Returns:
-            np.ndarray: regression values for each test instance.
+            np.ndarray: embeddings.
         """
         train_x, train_y, test_x = self._prepare_prediction(X)
         n_test = test_x.shape[0]
 
-        # 1) If context_size >= entire training set => use them all
-        if context_size >= self.n_instances:
-            X_train = pad_x(train_x[:, None, :], self.max_features).to(self.device)
-            X_test = pad_x(test_x[:, None, :], self.max_features).to(self.device)
-            y_train = train_y[:, None].float()
-
-            # standardize
-            y_train, y_means, y_stds = standardize(y_train)
-
+        # 1) Non-retrieval case
+        if not use_retrieval:
+            X_context, y_context, X_eval = self.no_retrieval_data(
+                train_x, train_y, test_x, context_size=context_size
+            )
             with self.autocast, sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-                pred = self.model(
-                    x=torch.cat([X_train, X_test], dim=0),
-                    y=y_train,
+                _, src = self.model(
+                    x=torch.cat([X_context, X_eval], dim=0),
+                    y=y_context,
+                    return_embeddings=True,
                 )
-            pred = pred[..., -1].float()
-            # last n_test rows => test preds
-            test_preds = pred[-n_test:, 0]  # shape: [n_test]
-            test_preds = test_preds * y_stds + y_means
-            return test_preds.detach().cpu().numpy()
+            res = src.detach().cpu().numpy()
+            if not return_full:
+                # src is [ctx_size + n_test, 1, ninp]
+                res = res[-n_test:, 0, :]
+            return res
 
-        # 2) If we want retrieval
-        if use_retrieval:
-            pred_list = []
+        # 2) Retrieval case
+        else:
+            embeddings = []
             for b in range(math.ceil(n_test / self.inf_batch_size)):
                 X_nni, y_nni, X_eval = self.batch_retrieval_data(
                     train_x, train_y, test_x, b, context_size
                 )
-                # standardize context targets
-                y_nni, y_means, y_stds = standardize(y_nni)
-
-                # forward pass
                 with self.autocast, sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-                    pred = self.model(
+                    _, src = self.model(
                         x=torch.cat([X_nni, X_eval], dim=0),
                         y=y_nni,
+                        return_embeddings=True,
                     )
-                pred = pred[..., -1].float()
-                # last row => predictions for the test batch
-                batch_preds = pred[-1, :]  # shape: [batch_size]
-                # reverse standardization
-                batch_preds = batch_preds * y_stds + y_means
-                pred_list.append(batch_preds.cpu())
-
-            return torch.cat(pred_list).squeeze().detach().cpu().numpy()
-
-        # 3) If we want NO retrieval => single pass
-        else:
-            X_ctx, y_ctx, X_eval = self.no_retrieval_data(train_x, train_y, test_x)
-            # standardize y_ctx
-            y_ctx_norm, y_means, y_stds = standardize(y_ctx)
-
-            # forward pass
-            with self.autocast, sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-                pred = self.model(
-                    x=torch.cat([X_ctx, X_eval], dim=0),  # shape: [n_context + n_test, 1, d]
-                    y=y_ctx_norm,
-                )
-            # shape: [n_context + n_test, 1, out_dim]
-            # The last dimension presumably has the regression output at the last index
-            pred = pred[..., -1].float()
-
-            # The last n_test positions are the test predictions
-            test_preds = pred[-n_test:, 0]  # shape: [n_test]
-            # reverse standardization
-            test_preds = test_preds * y_stds + y_means
-            return test_preds.detach().cpu().numpy()
+                # src is [context_size + n_batch, batch_size, ninp]
+                # We only want the last token for each sample in the batch
+                batch_emb = src[-1, :, :].detach().cpu().numpy()
+                embeddings.append(batch_emb)
+            
+            res = np.concatenate(embeddings, axis=0)
+            if return_full:
+                # For retrieval, we don't have a single shared "full" sequence
+                # Just return query embeddings as [n_test, 1, ninp]
+                return res[:, None, :]
+            return res

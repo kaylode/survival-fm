@@ -17,7 +17,6 @@ Supported head types
 Environment variables
 ---------------------
 TABDPT_CHECKPOINT   : path to the .ckpt file (required unless passed explicitly)
-TABDPT_CONTEXT_SIZE : int, default 128
 TABDPT_DEVICE       : torch device string, default "cpu"
 """
 
@@ -46,6 +45,7 @@ def train_tabdpt_embedding_surv(
     study_id: Optional[str] = None,
     checkpoint_path: Optional[str] = None,
     context_size: Optional[int] = None,
+    use_retrieval: bool = True,
     device: Optional[str] = None,
 ) -> tuple:
     """Frozen TabDPT embedding + any survival head.
@@ -63,7 +63,7 @@ def train_tabdpt_embedding_surv(
     ctx  = context_size    or int(os.environ.get("TABDPT_CONTEXT_SIZE", "128"))
     dev  = device          or os.environ.get("TABDPT_DEVICE", "cpu")
 
-    emb_kwargs = dict(checkpoint_path=ckpt, context_size=ctx, device=dev)
+    emb_kwargs = dict(checkpoint_path=ckpt, context_size=ctx, use_retrieval=use_retrieval, device=dev)
 
     return train_fm_embedding_surv(
         df_train, df_test, duration_col, event_col,
@@ -86,14 +86,15 @@ def train_tabdpt_embedding_surv(
 def train_tabdpt_embedding_cox(
     df_train, df_test, duration_col, event_col,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    checkpoint_path=None, context_size=None, device=None,
+    checkpoint_path=None, context_size=None, use_retrieval=True, device=None,
 ) -> tuple:
     """Backward-compatible alias for train_tabdpt_embedding_surv(head_type='cox')."""
     return train_tabdpt_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="cox",
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        checkpoint_path=checkpoint_path, context_size=context_size, device=device,
+        checkpoint_path=checkpoint_path, context_size=context_size, 
+        use_retrieval=use_retrieval, device=device,
     )
 
 
@@ -101,13 +102,14 @@ def train_tabdpt_embedding_deephit(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    checkpoint_path=None, context_size=None, device=None,
+    checkpoint_path=None, context_size=None, use_retrieval=True, device=None,
 ) -> tuple:
     return train_tabdpt_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="deephit", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        checkpoint_path=checkpoint_path, context_size=context_size, device=device,
+        checkpoint_path=checkpoint_path, context_size=context_size, 
+        use_retrieval=use_retrieval, device=device,
     )
 
 
@@ -115,13 +117,14 @@ def train_tabdpt_embedding_pchazard(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    checkpoint_path=None, context_size=None, device=None,
+    checkpoint_path=None, context_size=None, use_retrieval=True, device=None,
 ) -> tuple:
     return train_tabdpt_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="pchazard", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        checkpoint_path=checkpoint_path, context_size=context_size, device=device,
+        checkpoint_path=checkpoint_path, context_size=context_size, 
+        use_retrieval=use_retrieval, device=device,
     )
 
 
@@ -129,11 +132,12 @@ def train_tabdpt_embedding_mtlr(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    checkpoint_path=None, context_size=None, device=None,
+    checkpoint_path=None, context_size=None, use_retrieval=True, device=None,
 ) -> tuple:
     return train_tabdpt_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="mtlr", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        checkpoint_path=checkpoint_path, context_size=context_size, device=device,
+        checkpoint_path=checkpoint_path, context_size=context_size, 
+        use_retrieval=use_retrieval, device=device,
     )

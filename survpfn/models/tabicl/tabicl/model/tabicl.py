@@ -185,9 +185,11 @@ class TabICL(nn.Module):
         )
 
         # Dataset-wise in-context learning
-        out = self.icl_predictor(representations, y_train=y_train)
-
-        return out
+        res = self.icl_predictor(representations, y_train=y_train)
+        if isinstance(res, tuple):
+            out, emb = res
+            return out, emb
+        return res
 
     def _inference_forward(
         self,
@@ -257,7 +259,7 @@ class TabICL(nn.Module):
         )
 
         # Dataset-wise in-context learning
-        out = self.icl_predictor(
+        out, emb = self.icl_predictor(
             representations,
             y_train=y_train,
             return_logits=return_logits,
@@ -265,7 +267,7 @@ class TabICL(nn.Module):
             mgr_config=inference_config.ICL_CONFIG,
         )
 
-        return out
+        return out, emb
 
     def forward(
         self,
@@ -277,6 +279,7 @@ class TabICL(nn.Module):
         return_logits: bool = True,
         softmax_temperature: float = 0.9,
         inference_config: InferenceConfig = None,
+        return_embeddings: bool = False,
     ) -> Tensor:
         """Column-wise embedding -> row-wise interaction -> dataset-wise in-context learning.
 
@@ -325,9 +328,9 @@ class TabICL(nn.Module):
         """
 
         if self.training:
-            out = self._train_forward(X, y_train, d=d, embed_with_test=embed_with_test)
+            res = self._train_forward(X, y_train, d=d, embed_with_test=embed_with_test)
         else:
-            out = self._inference_forward(
+            res = self._inference_forward(
                 X,
                 y_train,
                 feature_shuffles=feature_shuffles,
@@ -337,4 +340,11 @@ class TabICL(nn.Module):
                 inference_config=inference_config,
             )
 
+        if isinstance(res, tuple):
+            out, emb = res
+        else:
+            out, emb = res, None
+
+        if return_embeddings:
+            return out, emb
         return out

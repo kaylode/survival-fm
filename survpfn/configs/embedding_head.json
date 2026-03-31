@@ -1,0 +1,13 @@
+{
+  "tuning": {
+    "lr": {"type": "float", "low": 1e-4, "high": 1e-1, "log": true},
+    "dropout": {"type": "float", "low": 0.0, "high": 0.5},
+    "nodes": {"type": "categorical", "choices": ["64-64", "128-64", "256-128"]}
+  },
+  "default": {
+    "lr": 1e-3,
+    "nodes": [128, 64],
+    "dropout": 0.1,
+    "batch_size": 128
+  }
+}

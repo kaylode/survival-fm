@@ -466,6 +466,7 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
             shuffle_patterns = np.array_split(shuffle_patterns, n_batches)
 
         outputs = []
+        embeddings = []
         for X_batch, y_batch, pattern_batch in zip(Xs, ys, shuffle_patterns):
             X_batch = torch.from_numpy(X_batch).float().to(self.device_)
             y_batch = torch.from_numpy(y_batch).float().to(self.device_)
@@ -473,7 +474,7 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
                 pattern_batch = pattern_batch.tolist()
 
             with torch.no_grad():
-                out = self.model_(
+                out, embs = self.model_(
                     X_batch,
                     y_batch,
                     feature_shuffles=pattern_batch,
@@ -482,10 +483,11 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
                     inference_config=self.inference_config_,
                 )
             outputs.append(out.float().cpu().numpy())
+            embeddings.append(embs.float().cpu().numpy())
 
-        return np.concatenate(outputs, axis=0)
+        return np.concatenate(outputs, axis=0), np.concatenate(embeddings, axis=0)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, return_embeddings=False):
         """Predict class probabilities for test samples.
 
         Applies the ensemble of TabICL models to make predictions, with each ensemble
@@ -537,10 +539,14 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
 
         data = self.ensemble_generator_.transform(X)
         outputs = []
+        embeddings = []
         for norm_method, (Xs, ys) in data.items():
             shuffle_patterns = self.ensemble_generator_.feature_shuffle_patterns_[norm_method]
-            outputs.append(self._batch_forward(Xs, ys, shuffle_patterns))
+            out, embs = self._batch_forward(Xs, ys, shuffle_patterns)
+            outputs.append(out)
+            embeddings.append(embs)
         outputs = np.concatenate(outputs, axis=0)
+        embeddings = np.concatenate(embeddings, axis=0)
 
         # Extract class shift offsets from ensemble generator
         class_shift_offsets = []
@@ -573,10 +579,14 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
         if self.n_jobs is not None:
             torch.set_num_threads(old_n_threads)
 
-        # Normalize probabilities to sum to 1
-        return avg / avg.sum(axis=1, keepdims=True)
+        out = avg / avg.sum(axis=1, keepdims=True)
+        if return_embeddings:
+            return out, embeddings
 
-    def predict(self, X):
+        # Normalize probabilities to sum to 1
+        return out
+
+    def predict(self, X, return_embeddings=False):
         """Predict class labels for test samples.
 
         Uses predict_proba to get class probabilities and returns the class with

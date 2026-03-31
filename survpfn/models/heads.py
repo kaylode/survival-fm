@@ -33,6 +33,7 @@ import torch.nn as nn
 import torchtuples as tt
 from pycox.evaluation import EvalSurv
 from pycox.models import CoxPH, DeepHitSingle, MTLR, PCHazard
+from survpfn.utils.config import load_model_config, apply_tuning_params
 
 
 # ---------------------------------------------------------------------------
@@ -192,53 +193,64 @@ class EmbeddingSurvHead:
         it is not needed.
         """
         x = embeddings.astype(np.float32)
-        net = self._build_net()
-        opt = tt.optim.Adam(lr=self.lr)
 
+        # 1. Determine label transform and actual number of output nodes.
+        # For discrete heads, the requested num_durations might be reduced
+        # if there are not enough unique time points in the training data.
+        y_train = None
         if self.head_type == "cox":
             self.labtrans = None
-            self.model = CoxPH(net, opt)
-            y = (durations.astype(np.float32), events.astype(np.float32))
-            self._x_train = x
-            self._y_train = y
-            self.model.fit(x, y, batch_size=batch_size, epochs=epochs,
-                           verbose=verbose)
-
+            n_out = 1
         elif self.head_type == "deephit":
             from pycox.preprocessing.label_transforms import LabTransDiscreteTime
-            # Use quantile binning to ensure balanced events per bin
             self.labtrans = LabTransDiscreteTime(self.num_durations, scheme='quantiles')
-            y_disc = self.labtrans.fit_transform(durations, events)
-            # Default alpha=0.2, sigma=0.1 from pycox
-            self.model = DeepHitSingle(net, opt,
-                                       duration_index=self.labtrans.cuts)
-            self.model.fit(x, y_disc, batch_size=batch_size, epochs=epochs,
-                           verbose=verbose)
-
+            y_train = self.labtrans.fit_transform(durations, events)
+            n_out = len(self.labtrans.cuts)
         elif self.head_type == "pchazard":
-            # PCHazard.label_transform supports scheme since pycox 0.2.0
             try:
                 self.labtrans = PCHazard.label_transform(self.num_durations, scheme='quantiles')
             except TypeError:
                 self.labtrans = PCHazard.label_transform(self.num_durations)
-            
-            y_disc = self.labtrans.fit_transform(durations, events)
-            self.model = PCHazard(net, opt,
-                                  duration_index=self.labtrans.cuts)
-            self.model.fit(x, y_disc, batch_size=batch_size, epochs=epochs,
-                           verbose=verbose)
-
+            y_train = self.labtrans.fit_transform(durations, events)
+            n_out = len(self.labtrans.cuts)
         elif self.head_type == "mtlr":
-            # MTLR.label_transform supports scheme
             try:
                 self.labtrans = MTLR.label_transform(self.num_durations, scheme='quantiles')
             except TypeError:
                 self.labtrans = MTLR.label_transform(self.num_durations)
-                
-            y_disc = self.labtrans.fit_transform(durations, events)
-            self.model = MTLR(net, opt,
-                              duration_index=self.labtrans.cuts)
-            self.model.fit(x, y_disc, batch_size=batch_size, epochs=epochs,
+            y_train = self.labtrans.fit_transform(durations, events)
+            n_out = len(self.labtrans.cuts)
+
+        # Update num_durations to match actual bins (critical for discrete heads)
+        if self.head_type != "cox":
+            self.num_durations = n_out
+
+        # 2. Build net and optimizer now that n_out is finalised
+        net = self._build_net()
+        opt = tt.optim.Adam(lr=self.lr)
+
+        # 3. Initialize pycox model and fit
+        if self.head_type == "cox":
+            self.model = CoxPH(net, opt)
+            y_train = (durations.astype(np.float32), events.astype(np.float32))
+            self._x_train = x
+            self._y_train = y_train
+            self.model.fit(x, y_train, batch_size=batch_size, epochs=epochs,
+                           verbose=verbose)
+
+        elif self.head_type == "deephit":
+            self.model = DeepHitSingle(net, opt, duration_index=self.labtrans.cuts)
+            self.model.fit(x, y_train, batch_size=batch_size, epochs=epochs,
+                           verbose=verbose)
+
+        elif self.head_type == "pchazard":
+            self.model = PCHazard(net, opt, duration_index=self.labtrans.cuts)
+            self.model.fit(x, y_train, batch_size=batch_size, epochs=epochs,
+                           verbose=verbose)
+
+        elif self.head_type == "mtlr":
+            self.model = MTLR(net, opt, duration_index=self.labtrans.cuts)
+            self.model.fit(x, y_train, batch_size=batch_size, epochs=epochs,
                            verbose=verbose)
 
         return self
@@ -378,17 +390,18 @@ def tune_embedding_head(
         stratify=(e_train > 0).astype(int),
     )
 
+    config = load_model_config("embedding_head")
+
     def objective(trial: optuna.Trial) -> float:
-        lr_t  = trial.suggest_float("lr",      1e-4, 1e-1, log=True)
-        dr_t  = trial.suggest_float("dropout", 0.0,  0.5)
-        nd_t  = _NODES_MAP[trial.suggest_categorical("nodes", list(_NODES_MAP))]
+        p = apply_tuning_params(trial, config["tuning"])
+        nd_t = _NODES_MAP[p["nodes"]]
         m = EmbeddingSurvHead(
             embedding_dim=emb_dim,
             head_type=head_type,
             num_durations=num_durations,
             num_nodes=nd_t,
-            dropout=dr_t,
-            lr=lr_t,
+            dropout=p["dropout"],
+            lr=p["lr"],
         )
         m.fit(X_tr, T_tr, E_tr, epochs=50,
               batch_size=fixed_params["batch_size"], verbose=False)
@@ -478,12 +491,8 @@ def train_fm_embedding_surv(
     emb_dim = train_emb.shape[1]
     print(f"[{fm_name}] Embedding dim = {emb_dim}")
 
-    params: dict = {
-        "lr":         1e-3,
-        "nodes":      [128, 64],
-        "dropout":    0.1,
-        "batch_size": 128,
-    }
+    config = load_model_config("embedding_head")
+    params = config["default"]
 
     if tune:
         params = tune_embedding_head(

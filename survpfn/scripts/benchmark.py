@@ -115,22 +115,25 @@ def get_feature_importance(
     if model is None:
         return None
 
-    if model_name in ("rsf", "gbsa") and hasattr(model, "feature_importances_"):
-        return {
-            "type": "impurity",
-            "features": dict(zip(feature_names, model.feature_importances_.tolist())),
-        }
+    try:
+        if model_name in ("rsf", "gbsa") and hasattr(model, "feature_importances_"):
+            return {
+                "type": "impurity",
+                "features": dict(zip(feature_names, model.feature_importances_.tolist())),
+            }
 
-    if model_name == "cox" and hasattr(model, "summary"):
-        s = model.summary.reset_index()
-        feat_col = "covariate" if "covariate" in s.columns else s.columns[0]
-        feats = s[feat_col].tolist()
-        return {
-            "type": "cox_coefficients",
-            "coef":     dict(zip(feats, s["coef"].tolist())),
-            "exp_coef": dict(zip(feats, np.exp(s["coef"]).tolist())),
-            "p":        dict(zip(feats, s["p"].tolist())),
-        }
+        if model_name == "cox" and hasattr(model, "summary"):
+            s = model.summary.reset_index()
+            feat_col = "covariate" if "covariate" in s.columns else s.columns[0]
+            feats = s[feat_col].tolist()
+            return {
+                "type": "cox_coefficients",
+                "coef":     dict(zip(feats, s["coef"].tolist())),
+                "exp_coef": dict(zip(feats, np.exp(s["coef"]).tolist())),
+                "p":        dict(zip(feats, s["p"].tolist())),
+            }
+    except (NotImplementedError, Exception):
+        return None
 
     return None
 
@@ -315,6 +318,7 @@ def _train_fm_embedding(
             tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
             checkpoint_path=kw.get("tabdpt_checkpoint", None),
             context_size=kw.get("tabdpt_context_size", None),
+            use_retrieval=kw.get("tabdpt_use_retrieval", True),
             device=kw.get("device", None),
         )
     if fm == "tabicl":
@@ -324,7 +328,6 @@ def _train_fm_embedding(
             head_type=head,
             tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
             device=kw.get("device", None),
-            context_size=kw.get("tabicl_context_size", None),
         )
     raise ValueError(f"Unknown FM backbone: {fm!r}")
 

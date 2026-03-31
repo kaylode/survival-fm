@@ -57,6 +57,7 @@ class TabDPTModel(nn.Module):
         y: torch.Tensor,
         eval_pos: int = None,
         return_log_act_norms: bool = False,
+        return_embeddings: bool = False,
         **kwargs
     ) -> torch.Tensor:
         """Forward pass of the TabDPTModel.
@@ -107,8 +108,11 @@ class TabDPTModel(nn.Module):
 
         if return_log_act_norms:
             return pred[eval_pos:], log_act_norms
-        else:
-            return pred[eval_pos:]
+            
+        if return_embeddings:
+            return pred[eval_pos:], src
+
+        return pred[eval_pos:]
 
     @classmethod
     def load(cls, model_state: dict, config: DictConfig) -> nn.Module:

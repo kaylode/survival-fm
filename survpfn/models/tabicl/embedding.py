@@ -69,14 +69,10 @@ class TabICLEmbeddingExtractor:
         device: str = "cpu",
         model_path: Optional[str] = None,
         checkpoint_version: str = "tabicl-classifier-v1.1-0506.ckpt",
-        context_size: int = 1000,
-        hook_point: str = "post_icl",
     ) -> None:
         from survpfn.models.tabicl.tabicl.sklearn.classifier import TabICLClassifier
 
         self.device = device
-        self.context_size = context_size
-        self.hook_point = hook_point
 
         # Build a 1-estimator classifier (no ensembling) to expose the raw model
         self._clf = TabICLClassifier(
@@ -99,31 +95,10 @@ class TabICLEmbeddingExtractor:
         # Now access the underlying TabICL nn.Module
         self._tabicl_model: nn.Module = self._clf.model_  # TabICL instance
 
-        # Register hook to capture representations
-        self._hook_output: Optional[torch.Tensor] = None
-
-        if self.hook_point == "pre_icl":
-            # After RowInteraction, before ICLearning: representations
-            def _hook(module, inp, out):
-                self._hook_output = out.detach()   # (B, T, icl_dim)
-            self._tabicl_model.row_interactor.register_forward_hook(_hook)
-        else:
-            # After ICLearning (default): post-ICL representation
-            # ICLearning.forward returns logits; we need the pre-head activations.
-            # Hook on the last transformer block inside ICLearning.
-            icl = self._tabicl_model.icl_predictor
-            last_block = icl.blocks[-1]  # Last ICL transformer block
-            def _hook(module, inp, out):
-                self._hook_output = out.detach()   # (B, T, icl_dim)
-            last_block.register_forward_hook(_hook)
-
         # Embedding dim
         embed_dim     = self._tabicl_model.col_embedder.embed_dim
         row_num_cls   = self._tabicl_model.row_interactor.num_cls
         self.emb_dim  = embed_dim * row_num_cls
-
-        # Feature preprocessor
-        self._scaler = StandardScaler()
 
     def _warm_up(self) -> None:
         """Trigger checkpoint load on minimal dummy data."""
@@ -135,18 +110,6 @@ class TabICLEmbeddingExtractor:
             self._clf.predict_proba(X_dummy[:2])
         except Exception:
             pass
-
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> "TabICLEmbeddingExtractor":
-        """Store scaled training context.
-
-        Parameters
-        ----------
-        X_train : (n_train, n_features) raw features
-        y_train : (n_train,) binary event labels (0/1)
-        """
-        self._X_train = self._scaler.fit_transform(X_train.astype(np.float32))
-        self._y_train = y_train.astype(np.float32)
-        return self
 
     @torch.no_grad()
     def _embed_batch(
@@ -167,7 +130,6 @@ class TabICLEmbeddingExtractor:
         -------
         emb : (n_query, emb_dim)
         """
-        ctx_size = X_ctx.shape[0]
         n_query  = X_query.shape[0]
 
         X_all = np.concatenate([X_ctx, X_query], axis=0)  # (ctx+query, features)
@@ -176,76 +138,17 @@ class TabICLEmbeddingExtractor:
         x_t = torch.from_numpy(X_all).float().unsqueeze(0).to(self.device)   # (1, T, H)
         y_t = torch.from_numpy(y_ctx).long().unsqueeze(0).to(self.device)    # (1, ctx_size)
 
-        # Forward pass through the raw TabICL model
+        # Ensure model is in eval mode
+        self._tabicl_model.eval()
+
+        # Forward pass
         with torch.autocast(
             device_type="cuda" if "cuda" in self.device else "cpu",
             dtype=torch.float16, enabled="cuda" in self.device
         ):
-            _ = self._tabicl_model(x_t, y_train=y_t)
+            _, embs = self._tabicl_model(x_t, y_train=y_t, return_embeddings=True)
 
-        # self._hook_output: (1, T, emb_dim)
-        hook = self._hook_output                         # (1, ctx+query, emb_dim)
-        test_emb = hook[0, ctx_size:, :].float()         # (n_query, emb_dim)
-        return test_emb.cpu().numpy()
-
-    def transform(self, X_test: np.ndarray) -> np.ndarray:
-        """Extract embeddings for X_test using stored training context.
-
-        Returns
-        -------
-        emb : (n_test, emb_dim)
-        """
-        if not hasattr(self, "_X_train"):
-            raise RuntimeError("Call fit() before transform().")
-
-        X_test_scaled = self._scaler.transform(X_test.astype(np.float32))
-        n_train = self._X_train.shape[0]
-        n_test  = X_test_scaled.shape[0]
-
-        if n_train <= self.context_size:
-            # All training samples fit in context — single forward pass per test batch
-            # TabICL can handle large test sets in one pass (no N² over test)
-            return self._embed_batch(self._X_train, self._y_train, X_test_scaled)
-
-        # Subsample training context (random subset, no retrieval for simplicity)
-        rng = np.random.default_rng(42)
-        ctx_idx = rng.choice(n_train, size=self.context_size, replace=False)
-        X_ctx = self._X_train[ctx_idx]
-        y_ctx = self._y_train[ctx_idx]
-        return self._embed_batch(X_ctx, y_ctx, X_test_scaled)
-
-    def fit_transform(
-        self, X_train: np.ndarray, y_train: np.ndarray
-    ) -> np.ndarray:
-        """Fit and extract training embeddings (leave-out random subset as context)."""
-        self.fit(X_train, y_train)
-        n = X_train.shape[0]
-        X_scaled = self._X_train
-
-        if n <= self.context_size + 1:
-            # LOO: for each sample use all others as context
-            embeddings = np.zeros((n, self.emb_dim), dtype=np.float32)
-            for i in range(n):
-                mask = np.ones(n, dtype=bool); mask[i] = False
-                embeddings[i] = self._embed_batch(
-                    X_scaled[mask], self._y_train[mask], X_scaled[i:i+1]
-                )[0]
-            return embeddings
-
-        # Large dataset: use a fixed random context excluding each sample
-        rng = np.random.default_rng(42)
-        embeddings = np.zeros((n, self.emb_dim), dtype=np.float32)
-        # Process in chunks to amortise context prep cost
-        chunk = 64
-        for start in range(0, n, chunk):
-            end = min(n, start + chunk)
-            # Random context from samples NOT in this chunk
-            non_chunk = np.concatenate([np.arange(0, start), np.arange(end, n)])
-            ctx_idx = rng.choice(non_chunk, size=min(self.context_size, len(non_chunk)), replace=False)
-            X_ctx = X_scaled[ctx_idx]
-            y_ctx = self._y_train[ctx_idx]
-            embeddings[start:end] = self._embed_batch(X_ctx, y_ctx, X_scaled[start:end])
-        return embeddings
+        return embs.cpu().numpy()
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +162,6 @@ def get_tabicl_embeddings(
     device: str = "cpu",
     model_path: Optional[str] = None,
     checkpoint_version: str = "tabicl-classifier-v1.1-0506.ckpt",
-    context_size: int = 1000,
-    hook_point: str = "post_icl",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract frozen TabICL embeddings for train and test sets.
 
@@ -282,9 +183,9 @@ def get_tabicl_embeddings(
         device=device,
         model_path=model_path,
         checkpoint_version=checkpoint_version,
-        context_size=context_size,
-        hook_point=hook_point,
     )
-    train_emb = extractor.fit_transform(X_train, y_train)
-    test_emb  = extractor.transform(X_test)
+
+    emb = extractor._embed_batch(X_train, y_train, X_test)
+    train_emb = emb[:, :X_train.shape[0]].squeeze(0)
+    test_emb  = emb[:, X_train.shape[0]:].squeeze(0)
     return train_emb, test_emb

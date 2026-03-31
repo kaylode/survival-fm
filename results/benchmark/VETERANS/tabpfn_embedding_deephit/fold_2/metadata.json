@@ -1,0 +1,19 @@
+{
+  "dataset": "VETERANS",
+  "model": "tabpfn_embedding_deephit",
+  "fold": 2,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 109,
+  "n_test": 28,
+  "n_features": 11,
+  "n_events_train": 102,
+  "n_events_test": 26,
+  "event_rate_train": 0.9358,
+  "event_rate_test": 0.9286,
+  "fit_time_s": 5.6383,
+  "eval_time_s": 0.0045,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-03-31T12:21:21.672779"
+}

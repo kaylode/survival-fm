@@ -1,0 +1,19 @@
+{
+  "tuning": {
+    "lr": {"type": "float", "low": 1e-4, "high": 1e-1, "log": true},
+    "dropout": {"type": "float", "low": 0.0, "high": 0.5},
+    "layers": {"type": "int", "low": 1, "high": 3},
+    "nodes": {"type": "categorical", "choices": [32, 64, 128]},
+    "alpha": {"type": "float", "low": 0.0, "high": 0.5},
+    "sigma": {"type": "float", "low": 0.01, "high": 1.0, "log": true}
+  },
+  "default": {
+    "lr": 1e-3,
+    "num_nodes": [64, 64],
+    "dropout": 0.1,
+    "batch_size": 256,
+    "epochs": 100,
+    "alpha": 0.2,
+    "sigma": 0.1
+  }
+}

@@ -17,7 +17,6 @@ Supported head types
 Environment variables
 ---------------------
 TABICL_DEVICE       : torch device (default "cpu")
-TABICL_CONTEXT_SIZE : int, max training context (default 1000)
 TABICL_CHECKPOINT   : local checkpoint path (default: auto-download from HuggingFace)
 """
 
@@ -45,9 +44,7 @@ def train_tabicl_embedding_surv(
     save_dir: str = "results",
     study_id: Optional[str] = None,
     device: Optional[str] = None,
-    context_size: Optional[int] = None,
     model_path: Optional[str] = None,
-    hook_point: str = "post_icl",
 ) -> tuple:
     """Frozen TabICL embedding + any survival head.
 
@@ -62,14 +59,11 @@ def train_tabicl_embedding_surv(
     (model, risk_scores, surv_probs, surv_times)
     """
     dev  = device       or os.environ.get("TABICL_DEVICE", "cpu")
-    ctx  = context_size or int(os.environ.get("TABICL_CONTEXT_SIZE", "1000"))
     ckpt = model_path   or os.environ.get("TABICL_CHECKPOINT", None)
 
     emb_kwargs = dict(
         device=dev,
-        context_size=ctx,
         model_path=ckpt,
-        hook_point=hook_point,
     )
 
     return train_fm_embedding_surv(
@@ -93,15 +87,15 @@ def train_tabicl_embedding_surv(
 def train_tabicl_embedding_cox(
     df_train, df_test, duration_col, event_col,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    device=None, context_size=None, model_path=None, hook_point="post_icl",
+    device=None,  model_path=None,
 ) -> tuple:
     """Backward-compatible alias for train_tabicl_embedding_surv(head_type='cox')."""
     return train_tabicl_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="cox",
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        device=device, context_size=context_size,
-        model_path=model_path, hook_point=hook_point,
+        device=device, 
+        model_path=model_path,
     )
 
 
@@ -109,14 +103,14 @@ def train_tabicl_embedding_deephit(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    device=None, context_size=None, model_path=None, hook_point="post_icl",
+    device=None,  model_path=None, 
 ) -> tuple:
     return train_tabicl_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="deephit", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        device=device, context_size=context_size,
-        model_path=model_path, hook_point=hook_point,
+        device=device, 
+        model_path=model_path, 
     )
 
 
@@ -124,14 +118,14 @@ def train_tabicl_embedding_pchazard(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    device=None, context_size=None, model_path=None, hook_point="post_icl",
+    device=None,  model_path=None, 
 ) -> tuple:
     return train_tabicl_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="pchazard", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        device=device, context_size=context_size,
-        model_path=model_path, hook_point=hook_point,
+        device=device, 
+        model_path=model_path, 
     )
 
 
@@ -139,12 +133,12 @@ def train_tabicl_embedding_mtlr(
     df_train, df_test, duration_col, event_col,
     num_durations=100,
     tune=False, n_trials=20, save_dir="results", study_id=None,
-    device=None, context_size=None, model_path=None, hook_point="post_icl",
+    device=None,  model_path=None, 
 ) -> tuple:
     return train_tabicl_embedding_surv(
         df_train, df_test, duration_col, event_col,
         head_type="mtlr", num_durations=num_durations,
         tune=tune, n_trials=n_trials, save_dir=save_dir, study_id=study_id,
-        device=device, context_size=context_size,
-        model_path=model_path, hook_point=hook_point,
+        device=device, 
+        model_path=model_path, 
     )

@@ -39,6 +39,7 @@ import optuna
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalFileBackend
 from sklearn.model_selection import train_test_split
+from survpfn.utils.config import load_model_config, apply_tuning_params
 
 
 # ---------------------------------------------------------------------------
@@ -267,13 +268,13 @@ def train_mtlr(
             storage=storage, load_if_exists=True,
         )
 
+        config = load_model_config("mtlr")
+        params.update(config["default"])
+
         def objective(trial):
-            lr_t = trial.suggest_float("lr", 1e-4, 1e-1, log=True)
-            dropout_t = trial.suggest_float("dropout", 0.0, 0.5)
-            layers = trial.suggest_int("layers", 1, 3)
-            nodes = trial.suggest_categorical("nodes", [32, 64, 128])
-            net = _build_net(in_features, [nodes] * layers, out_features, dropout_t)
-            m = MTLR(net, tt.optim.Adam(lr_t), duration_index=labtrans.cuts)
+            p = apply_tuning_params(trial, config["tuning"])
+            net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+            m = MTLR(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.interpolate(10).predict_surv_df(X_val)
@@ -372,13 +373,13 @@ def train_pchazard(
             storage=storage, load_if_exists=True,
         )
 
+        config = load_model_config("pchazard")
+        params.update(config["default"])
+
         def objective(trial):
-            lr_t = trial.suggest_float("lr", 1e-4, 1e-1, log=True)
-            dropout_t = trial.suggest_float("dropout", 0.0, 0.5)
-            layers = trial.suggest_int("layers", 1, 3)
-            nodes = trial.suggest_categorical("nodes", [32, 64, 128])
-            net = _build_net(in_features, [nodes] * layers, out_features, dropout_t)
-            m = PCHazard(net, tt.optim.Adam(lr_t), duration_index=labtrans.cuts)
+            p = apply_tuning_params(trial, config["tuning"])
+            net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+            m = PCHazard(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.predict_surv_df(X_val)
@@ -478,17 +479,15 @@ def train_deephit_single(
             storage=storage, load_if_exists=True,
         )
 
+        config = load_model_config("deephit_single")
+        params.update(config["default"])
+
         def objective(trial):
-            lr_t = trial.suggest_float("lr", 1e-4, 1e-1, log=True)
-            dropout_t = trial.suggest_float("dropout", 0.0, 0.5)
-            layers = trial.suggest_int("layers", 1, 3)
-            nodes = trial.suggest_categorical("nodes", [32, 64, 128])
-            alpha_t = trial.suggest_float("alpha", 0.0, 0.5)
-            sigma_t = trial.suggest_float("sigma", 0.01, 1.0, log=True)
-            net = _build_net(in_features, [nodes] * layers, out_features, dropout_t)
-            m = DeepHitSingle(net, tt.optim.Adam(lr_t),
-                              alpha=alpha_t, sigma=sigma_t,
-                              duration_index=labtrans.cuts)
+            p = apply_tuning_params(trial, config["tuning"])
+            net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+            m = DeepHitSingle(net, tt.optim.Adam(p["lr"]),
+                               alpha=p["alpha"], sigma=p["sigma"],
+                               duration_index=labtrans.cuts)
             try:
                 m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
                 surv = m.interpolate(10).predict_surv_df(X_val)

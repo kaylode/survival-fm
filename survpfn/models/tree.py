@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sksurv.ensemble import RandomSurvivalForest, GradientBoostingSurvivalAnalysis
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalFileBackend
+from survpfn.utils.config import load_model_config, apply_tuning_params
 
 
 def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, save_dir="results", study_id=None):
@@ -37,14 +38,13 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
             load_if_exists=True
         )
 
-        def objective(trial):
-            n_est = trial.suggest_int('n_estimators', 50, 200)
-            ms_split = trial.suggest_int('min_samples_split', 5, 20)
-            ms_leaf = trial.suggest_int('min_samples_leaf', 5, 20)
+        config = load_model_config("rsf")
+        params.update(config["default"])
 
+        def objective(trial):
+            p = apply_tuning_params(trial, config["tuning"])
             model = RandomSurvivalForest(
-                n_estimators=n_est, min_samples_split=ms_split,
-                min_samples_leaf=ms_leaf, n_jobs=-1, random_state=random_state
+                **{**params, **p, "n_jobs": -1, "random_state": random_state}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)
@@ -91,14 +91,13 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
             load_if_exists=True
         )
 
-        def objective(trial):
-            lr = trial.suggest_float('learning_rate', 0.01, 0.2, log=True)
-            n_est = trial.suggest_int('n_estimators', 50, 200)
-            m_depth = trial.suggest_int('max_depth', 2, 5)
+        config = load_model_config("gbsa")
+        params.update(config["default"])
 
+        def objective(trial):
+            p = apply_tuning_params(trial, config["tuning"])
             model = GradientBoostingSurvivalAnalysis(
-                learning_rate=lr, n_estimators=n_est, max_depth=m_depth,
-                random_state=random_state
+                **{**params, **p, "random_state": random_state}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)

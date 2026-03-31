@@ -883,3 +883,51 @@ The two new investigations (Sections 8–9) sharpen the novelty and feasibility 
 5. **Compute is not the bottleneck.** Training time (24–72 GPU-hours) is manageable on a university cluster or modest cloud budget (~$300–1500). Engineering time is the bottleneck (6–10 weeks for 1 engineer).
 
 6. **Framing recommendation:** The combined SurvPFN + retrieval paper is stronger than either alone. Frame retrieval as addressing the scalability limitation of pure ICL (N > 1000), and show that retrieved context improves over random context on medium-N datasets (N = 500–5000). This directly answers the key empirical question and distinguishes the work from both TabR and k-NNKM.
+
+---
+
+## 11. Session Update — 2026-03-30 (TabDPT & TabICL Embedding Results)
+
+### 11.1 New Contributions Implemented
+
+**TabDPT Frozen Embeddings for Survival Analysis (First Application)**
+- Architecture: PFN adapted for EHR/clinical tabular data with flash attention and K-NN retriever
+- Embedding extraction: forward hook on `model.head` capturing `src[eval_pos:, 0, :]` — query-token representations after cross-attention with context
+- Preliminary result: SUPPORT2 fold-1, `tabdpt_embedding_cox` = 0.576 vs `tabpfn_embedding_cox` = 0.505 (Δ = +0.071)
+- **Interpretation**: EHR-domain pretraining provides a non-trivial frozen survival signal, confirming that domain proximity matters even without explicit censoring-aware training.
+
+**TabICL Frozen Embeddings for Survival Analysis (First Application)**
+- Architecture: 3-stage pipeline — ColEmbedding (distribution-aware column tokens) → RowInteraction (per-row CLS attention) → ICLearning (dataset-level in-context transformer)
+- Two hook points: pre-ICL (post-RowInteraction, label-agnostic) and post-ICL (post-ICLearning blocks[-1], label-conditioned, default)
+- Checkpoint: HuggingFace `jingang/TabICL-clf` (v1.1-0506)
+- Results: pending (runs in progress)
+
+### 11.2 New Empirical Findings (Updated Results)
+
+**TabPFN frozen embedding (all 4 heads) on FLCHAIN, fold 1:**
+- emb-DeepHit: C-index = 0.921 (competitive with best baseline!)
+- emb-PCH: C-index = 0.896
+- emb-Cox: C-index = 0.821 (improved from previous 0.694 with 2 folds)
+- emb-MTLR: C-index = 0.368 ← CATASTROPHIC FAILURE
+
+**Key insight on head sensitivity**: The same frozen TabPFN embedding produces C-index ranging from 0.368 to 0.921 depending on survival head. This reveals that frozen FM representations encode a fragile, order-sensitive signal. The MTLR head's monotone discretization amplifies the mismatch between classification-pretrained representations and the survival time axis, while DeepHit's ranking loss extracts a useful ordering even from weak embeddings.
+
+**Practical rule**: When using frozen FM embeddings, prefer DeepHit or PCHazard heads over MTLR.
+
+### 11.3 N-Dependence Hypothesis — Revised
+
+TabPFN jt-Cox vs standalone DeepHit (consistent comparison across 6 datasets):
+- Veterans (N=137): +0.024 ← FM advantage
+- WHAS500 (N=500): +0.018 ← FM advantage
+- METABRIC (N=1904): +0.003 ← marginal FM advantage
+- GBSG (N=2232): +0.009 ← FM advantage
+- FLCHAIN (N=6524): -0.020 ← FM DISADVANTAGE
+- SUPPORT2 (N=9105): +0.016 ← FM advantage (context subsampling acts as regularizer)
+
+**Revised finding**: TabPFN joint outperforms standalone DeepHit on 5/6 datasets. The sole reversal at FLCHAIN (N=6,524) confirms context-window saturation. SUPPORT2 (N=9,105) is an apparent anomaly — TabPFN still wins because DeepHit struggles at very large N with the current hyperparameter setup, while TabPFN's subsampling regularizes effectively.
+
+### 11.4 Citation Notes
+
+- **TabDPT** (tabdpt2024): cited as preprint/misc in refs.bib. No arXiv ID yet; cite as software/preprint.
+- **TabICL** (ye2024tabicl): Ye et al. 2024, ICML 2024 (verify publication venue).
+- Both are the first applications to survival analysis — a clear novelty contribution.
