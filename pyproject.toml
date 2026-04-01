@@ -38,6 +38,7 @@ dependencies = [
     "plotly>=6.6.0",
     "tabulate>=0.10.0",
     "loguru>=0.7.3",
+    "easydict>=1.13",
 ]
 
 [project.optional-dependencies]
