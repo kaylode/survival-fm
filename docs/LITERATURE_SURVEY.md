@@ -931,3 +931,131 @@ TabPFN jt-Cox vs standalone DeepHit (consistent comparison across 6 datasets):
 - **TabDPT** (tabdpt2024): cited as preprint/misc in refs.bib. No arXiv ID yet; cite as software/preprint.
 - **TabICL** (ye2024tabicl): Ye et al. 2024, ICML 2024 (verify publication venue).
 - Both are the first applications to survival analysis — a clear novelty contribution.
+
+---
+
+## 12. Zero-Shot ICL Survival Analysis — Session Update 2026-04-01
+
+### 12.1 Kim, Lai & Zhang (2026) — "Tabular Foundation Models Can Do Survival Analysis"
+
+- **arXiv:** 2601.22259 (submitted January 2026)
+- **Key idea:** Reformulate survival analysis as K binary classification tasks at K discrete time boundaries {t_1, …, t_K}. For patient i and bin k, create label Y_{ik} = 𝟙(T_i ≤ t_k), included only when t_k < C_i (censoring mask). The full expanded dataset is fed to a pretrained TFM (TabPFN or MITRA) via in-context learning — no parameter updates.
+- **Loss:** Masked binary cross-entropy: L = (1/n) Σ_i Σ_k 𝟙(t_k < C_i) · BCE(p̂(X_i, t_k), Y_{ik}). Right-censored observations contribute only to bins before their censoring time.
+- **Theoretical guarantee (Theorem 3.1):** Under conditionally independent censoring, minimising the masked BCE recovers the true survival probabilities P(T > t_k | X) asymptotically. This is the key statistical justification for the surrogate.
+- **ICL deployment:** Time t_k is appended as an extra feature, creating rows (X_i ⊕ t_k, Y_{ik}). A single TFM forward pass answers all K queries for a test patient.
+- **Dynamic extension:** For longitudinal covariates, H_{i,t_k} (covariate history) and prior survival status are appended per row, enabling landmark-style predictions.
+- **Monotonicity:** Post-hoc isotonic regression enforces non-increasing S(t).
+- **Datasets:** 43 SurvSet datasets (median N=461) + 5 dynamic datasets.
+- **Results (static, mean C-index ± SE):**
+  | Model | C-index |
+  |---|---|
+  | MITRA | 0.677 ± 0.016 |
+  | XGBoost | 0.686 ± 0.017 |
+  | CoxPH | 0.682 ± 0.017 |
+  | DeepHit | 0.574 ± 0.013 |
+  MITRA achieves best average rank (2.8) across C-index, IBS, and Integrated AUC. Correlation r=0.89 between BCE loss and IBS validates the classification surrogate.
+- **Limitations:** No principled K selection; no ablation on bin granularity; DeepHit/DeepSurv underperformance not addressed.
+- **Relation to SurvPFN:** This paper validates the zero-shot ICL approach for survival. Our work extends it to TabPFN v2, TabDPT, and TabICL; compares against frozen-embedding + survival head variants; and evaluates on clinical EHR datasets not covered in their benchmark.
+
+### 12.2 TabSurv (medRxiv 2025.10.03.25337265) — Regression on Uncensored Observations
+
+- **Venue:** medRxiv preprint, October 2025
+- **Key idea:** Frame survival prediction as standard regression, **discarding all censored observations** from the ICL context. TabPFN predicts a continuous event time T_i using only uncensored (X_i, T_i) pairs as context. No survival-specific loss; no time-bin discretisation.
+- **Key contributions:**
+  1. Regression-on-uncensored ICL using TabPFN — zero-shot, no fine-tuning.
+  2. Counterfactual treatment arm estimation: duplicates each test instance across candidate treatment arms within a single forward pass.
+  3. **Stability score:** Novel metric combining mean C-index with its variability across splits, penalising inconsistent models.
+- **Datasets:** 12 breast cancer genomic datasets (RNA-seq/microarray; mix of METABRIC, NKI, UPP, GSE6532, etc.).
+- **Results:** TabSurv competitive or superior to all seven baselines (LogisticHazard, PMF, DeepHit, PCHazard, MTLR, DeepSurv, RSF) on C-index and stability score, particularly in high-dimensional low-sample settings.
+- **Limitations:** Discarding censored data is statistically inefficient and biased under informative censoring; no competing-risk support; restricted to genomic high-dimensional data; no full survival function output.
+- **Contrast with Kim et al.:**
+  | | Kim et al. (2026) | TabSurv (2025) |
+  |---|---|---|
+  | Censoring strategy | Mask BCE at t > C_i | Discard censored cases |
+  | Bias | Low (theoretically consistent) | Higher (informative censoring) |
+  | Info retention | High | Low (50%+ discarded) |
+  | Output | Full S(t) | Point estimate of T |
+- **Relation to SurvPFN:** TabSurv is a simple baseline. Kim et al.'s masked BCE approach is more principled and is the basis of our `ZeroShotSurvivalPredictor`. Our contribution: apply the masked BCE framework to TabPFN v2, TabDPT, TabICL, and compare under a consistent 5-fold CV protocol on 6 standard benchmark datasets.
+
+### 12.3 Implementation Notes
+
+Our `ZeroShotSurvivalPredictor` (`survpfn/models/zeroshot_surv.py`) implements the Kim et al. algorithm with two modes:
+- `single_context`: time t_k appended as feature; FM fit once on expanded context (faithful to arXiv:2601.22259).
+- `per_bin`: FM fit separately per bin without time appended (ablation baseline).
+
+Both modes enforce monotonicity via `sklearn.isotonic.IsotonicRegression`. Benchmark integration adds `tabpfn_zeroshot`, `tabdpt_zeroshot`, `tabicl_zeroshot` (and `*_perbin` variants) to `benchmark.py` and `run.sh`.
+
+---
+
+## 13. Transformer-Based Survival Analysis — Session Update 2026-04-01
+
+### 13.1 SurvTRACE (Wang & Sun, 2022)
+
+- **Paper:** "SurvTRACE: Transformers for Survival Analysis with Competing Events"
+- **Authors:** Zifeng Wang, Jimeng Sun (UIUC)
+- **Venue:** ACM BCB 2022 (arXiv:2110.00855)
+- **Architecture:** BERT-style transformer trained from scratch on tabular survival data. Feature-value pairs are tokenised and embedded; the shared encoder feeds competing-risk-specific output heads. Multi-task auxiliary objectives (masked feature reconstruction) pre-train the encoder before survival fine-tuning.
+- **Key novelty:**
+  - First transformer applied to *competing-risk* tabular survival analysis.
+  - Explicitly models confounders causing selection bias in multi-event observational settings.
+  - Attention weights provide covariate-level interpretability.
+- **Results:**
+  - METABRIC: TD C-index (IPCW) ~0.735 @ 0.25 quantile
+  - SUPPORT: TD C-index ~0.669 @ 0.25 quantile
+  - SEER (n~470k): claims "all-around superiority" over DeepHit/DeepSurv/RSF
+- **Limitation:** Trained from scratch — requires large N; no transferable pre-trained weights; feature schema is fixed to training data.
+- **Relevance to SurvPFN:** Direct baseline for METABRIC and SUPPORT2. Use their TD C-index numbers as benchmark targets. Competing-risk architecture is a model for our multi-event Sirbu evaluation.
+
+### 13.2 OSTransformer (Caruso et al., 2024)
+
+- **Paper:** "A Deep Learning Approach for Overall Survival Prediction in Lung Cancer with Missing Values"
+- **Authors:** Caruso, Guarrasi, Ramella, Soda (Campus Bio-Medico University of Rome)
+- **Venue:** *Computer Methods and Programs in Biomedicine*, 254, 2024 (arXiv:2307.11465)
+- **Architecture:** Transformer encoder with named-feature positional encoding. Missing values are handled natively by masking the corresponding token in self-attention — no imputation required. Cause-specific MLP subnets branch from the shared encoder; trained with survival log-likelihood + ranking loss.
+- **Key novelty:**
+  - First use of masked self-attention as an imputation-free strategy for tabular survival data.
+  - Directly addresses high-missingness clinical settings (NSCLC, real-world EHR).
+- **Results (NSCLC private dataset, 6-year follow-up):**
+  - Ct-index: 71.97 (1-month), 77.58 (1-year), 80.72 (2-year)
+  - Outperforms all baselines regardless of imputation method used in comparators.
+- **Limitation:** Single private dataset; non-standard Ct-index metric makes cross-paper comparison difficult.
+- **Relevance to SurvPFN:** The native-masking idea is directly applicable to the Sirbu dataset (up to 99% missing in LVH/VES). A masked-attention variant could replace our current aggressive `dropna()` strategy.
+
+### 13.3 SA Transformer (Hu et al., 2021)
+
+- **Paper:** "Transformer-Based Deep Survival Analysis"
+- **Authors:** Shi Hu, Egill Fridgeirsson, Guido van Wingen, Max Welling (University of Amsterdam)
+- **Venue:** AAAI Spring Symposium on Survival Prediction — PMLR Vol. 146, pp. 132–148, 2021
+- **Architecture:** Vanilla transformer encoder on patient feature sequences. Ordinal regression models discrete-time survival probabilities over a time grid; a pairwise ranking loss penalises discordant pairs.
+- **Key novelty:**
+  - First paper to apply self-attention to survival analysis (predates SurvTRACE).
+  - Introduces MAE on uncensored subjects as a complementary metric to C-index, arguing that C-index alone is insufficient for model selection.
+- **Results:** METABRIC and one additional public dataset; C-index competitive with DeepHit; paper highlights MAE superiority but no single headline C-index is reported.
+- **Limitation:** Workshop paper; codebase targets PyTorch 1.1/Python 3.6 (obsolete); single-event only; thin reproducibility.
+- **Relevance to SurvPFN:** Historical baseline; consider adopting MAE alongside C-index as a secondary metric in our evaluation.
+
+### 13.4 SAT — Survival Analysis Transformer Toolkit (open-disease-risk, 2024)
+
+- **Repo:** https://github.com/open-disease-risk/sat
+- **Authors/Maintainers:** Dominik Dahlem, Mahed Abroshan (GPL-3.0, active 2024–present)
+- **No associated paper** — this is a production-grade framework, not a standalone publication.
+- **Architecture:** Full pipeline (tokenise → pre-train → fine-tune → inference) built on HuggingFace Transformers (BERT backbone) with Hydra configuration. Composable MetaLoss combines NLLPCHazard, DeepHit, SurvivalFocalLoss, and ranking losses (SampleRanking, MultiEventRanking, ListMLE variants) with five dynamic balancing strategies (fixed, scale, gradient, uncertainty, adaptive). Multi-task heads support simultaneous survival + classification + regression objectives.
+- **Key features:**
+  - MoCo-enhanced loss buffer for highly censored data.
+  - Native MEDS healthcare data format (compatible with FEMR/CLMBR cohorts).
+  - Built-in EDA: Weibull/LogNormal/LogLogistic fitting, censoring bias tests.
+  - Optuna HPO and k-fold CV with IPCW Brier/C-index logging.
+- **Limitation:** No associated paper or published C-index results; empirical validation absent.
+- **Relevance to SurvPFN:** The composable loss design (DeepHit + ranking + focal + MoCo buffer) is worth adopting for our survival heads. The MEDS format integration is directly applicable for Sirbu/URRAH EHR data loading.
+
+### 13.5 Summary Comparison
+
+| Model | Year | Architecture | Competing risks | Missing data | Pre-trained | Best C-index reported |
+|---|---|---|---|---|---|---|
+| SA Transformer | 2021 | Vanilla Transformer + ordinal | ✗ | ✗ | ✗ | ~0.64 METABRIC |
+| SurvTRACE | 2022 | BERT from scratch + multi-head | ✓ | ✗ | ✗ | 0.735 METABRIC TD |
+| OSTransformer | 2024 | Masked self-attention | ✓ | ✓ (native) | ✗ | 80.72 Ct-index NSCLC |
+| SAT toolkit | 2024 | BERT + composable losses | ✓ | ✗ | ✗ | N/A (no paper) |
+| **SurvPFN (ours)** | **2026** | **Frozen pre-trained FM** | **✓** | **via FM** | **✓** | **TBD** |
+
+**Key differentiator for SurvPFN:** All four transformer approaches train from scratch on the target dataset. SurvPFN is the first to use *pre-trained* tabular foundation models (TabPFN, TabDPT, TabICL) as frozen encoders, enabling zero-shot or few-shot survival prediction without any architecture-specific training.

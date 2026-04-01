@@ -481,6 +481,7 @@ class TabICLClassifier(ClassifierMixin, BaseEstimator):
                     return_logits=True if self.average_logits else False,
                     softmax_temperature=self.softmax_temperature,
                     inference_config=self.inference_config_,
+                    return_embeddings=True,
                 )
             outputs.append(out.float().cpu().numpy())
             embeddings.append(embs.float().cpu().numpy())
