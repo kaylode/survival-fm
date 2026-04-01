@@ -33,14 +33,18 @@ Available model names
 ---------------------
   cox, km
   rsf, gbsa
-  deepsurv, mtlr, pchazard, deephit_single
+  survtrace, deepsurv, mtlr, pchazard, deephit_single
   tabpfn_embedding_cox, tabpfn_embedding_deephit, tabpfn_embedding_pchazard, tabpfn_embedding_mtlr
                                                (TabPFN frozen → survival head)
   tabpfn_cox, tabpfn_deephit, tabpfn_pchazard, tabpfn_mtlr
                                                (TabPFN jointly trained)
   tabdpt_embedding_{cox,deephit,pchazard,mtlr} (TabDPT frozen; needs TABDPT_CHECKPOINT)
   tabicl_embedding_{cox,deephit,pchazard,mtlr} (TabICL frozen; auto-downloads checkpoint)
-  all  (runs all of the above)
+  tabpfn_zeroshot, tabdpt_zeroshot, tabicl_zeroshot
+                                               (zero-shot ICL; single_context mode)
+  tabpfn_zeroshot_perbin, tabdpt_zeroshot_perbin, tabicl_zeroshot_perbin
+                                               (zero-shot ICL; per_bin mode)
+  all  (runs all of the above, excluding *_perbin variants)
 """
 
 from __future__ import annotations
@@ -150,6 +154,7 @@ _OPTUNA_STUDY: dict[str, tuple[str, str]] = {
     "mtlr":           ("optuna_mtlr.log",            "mtlr_tuning"),
     "pchazard":       ("optuna_pchazard.log",        "pchazard_tuning"),
     "deephit_single": ("optuna_deephit_single.log",  "deephit_single_tuning"),
+    "survtrace":      ("optuna_survtrace.log",       "survtrace_tuning"),
     # TabPFN frozen embedding heads
     "tabpfn_embedding_cox":          ("optuna_tabpfn_cox.log",           "tabpfn_cox"),
     "tabpfn_embedding_deephit":      ("optuna_tabpfn_deephit.log",       "tabpfn_deephit"),
@@ -291,6 +296,18 @@ def _train_deephit_single(df_train, df_test, dur_col, ev_col, tune, n_trials, ou
                                 tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
 
 
+def _train_survtrace(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
+    from survpfn.models.survtrace.survival import train_survtrace
+    return train_survtrace(
+        df_train, df_test, dur_col, ev_col,
+        tune=tune, n_trials=n_trials, save_dir=out_dir,
+        epochs=kw.get("epochs", 100),
+        batch_size=kw.get("batch_size", 64),
+        learning_rate=kw.get("lr", 1e-3),
+        device=kw.get("device", "cuda:0"),
+    )
+
+
 def _train_fm_embedding(
     fm: str,
     head: str,
@@ -390,6 +407,23 @@ def _make_fm_embedding(fm: str, head: str) -> Callable:
     return _fn
 
 
+def _make_zeroshot(backbone: str, method: str = "single_context") -> Callable:
+    """Build a benchmark-compatible callable for zero-shot ICL survival."""
+    def _fn(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
+        from survpfn.models.zeroshot_surv import train_zeroshot_surv
+        return train_zeroshot_surv(
+            df_train, df_test, dur_col, ev_col,
+            backbone=backbone,
+            method=method,
+            device=kw.get("device", "cpu"),
+            checkpoint_path=kw.get("tabdpt_checkpoint", None),
+            context_size=kw.get("tabdpt_context_size", 128),
+            use_retrieval=kw.get("tabdpt_use_retrieval", True),
+        )
+    _fn.__name__ = f"_train_{backbone}_zeroshot"
+    return _fn
+
+
 ALL_MODELS: dict[str, Callable] = {
     # ── Classical ──────────────────────────────────────────────────────────
     "cox":            _train_cox,
@@ -402,6 +436,7 @@ ALL_MODELS: dict[str, Callable] = {
     "mtlr":           _train_mtlr,
     "pchazard":       _train_pchazard,
     "deephit_single": _train_deephit_single,
+    "survtrace":      _train_survtrace,
     # ── TabPFN frozen embedding × 4 heads ──────────────────────────────────
     "tabpfn_embedding_cox":         _make_fm_embedding("tabpfn", "cox"),
     "tabpfn_embedding_deephit":     _make_fm_embedding("tabpfn", "deephit"),
@@ -424,6 +459,14 @@ ALL_MODELS: dict[str, Callable] = {
     "tabicl_embedding_deephit":  _make_fm_embedding("tabicl", "deephit"),
     "tabicl_embedding_pchazard": _make_fm_embedding("tabicl", "pchazard"),
     "tabicl_embedding_mtlr":     _make_fm_embedding("tabicl", "mtlr"),
+    # ── Zero-shot ICL survival (no survival head; FM used directly) ────────
+    "tabpfn_zeroshot":  _make_zeroshot("tabpfn"),
+    "tabdpt_zeroshot":  _make_zeroshot("tabdpt"),
+    "tabicl_zeroshot":  _make_zeroshot("tabicl"),
+    # per-bin variant (slower but more accurate per bin)
+    "tabpfn_zeroshot_perbin":  _make_zeroshot("tabpfn", method="per_bin"),
+    "tabdpt_zeroshot_perbin":  _make_zeroshot("tabdpt", method="per_bin"),
+    "tabicl_zeroshot_perbin":  _make_zeroshot("tabicl", method="per_bin"),
 }
 
 

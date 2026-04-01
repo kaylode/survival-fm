@@ -53,11 +53,14 @@ warnings.filterwarnings("ignore")
 MODEL_ORDER = [
     "km", "cox",
     "rsf", "gbsa",
-    "deepsurv", "mtlr", "pchazard", "deephit_single",
+    "deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace",
     "tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr",
     "tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
     "tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
     "tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
+    "tabpfn_zeroshot",  "tabpfn_zeroshot_perbin",
+    "tabdpt_zeroshot", "tabdpt_zeroshot_perbin",
+    "tabicl_zeroshot", "tabicl_zeroshot_perbin",
 ]
 
 MODEL_LABELS = {
@@ -69,6 +72,8 @@ MODEL_LABELS = {
     "mtlr":           "MTLR",
     "pchazard":       "PC-Hazard",
     "deephit_single": "DeepHit",
+    "survtrace":      "SurvTrace",
+
     "tabpfn_embedding_cox":  "TabPFN-Emb-Cox",
     "tabpfn_embedding_deephit":  "TabPFN-Emb-DeepHit",
     "tabpfn_embedding_pchazard":  "TabPFN-Emb-PCHaz",
@@ -87,16 +92,26 @@ MODEL_LABELS = {
     "tabicl_embedding_deephit":  "TabICL-Emb-DeepHit",
     "tabicl_embedding_pchazard":  "TabICL-Emb-PCHaz",
     "tabicl_embedding_mtlr":  "TabICL-Emb-MTLR",
+
+    "tabpfn_zeroshot": "TabPFN-ZS",
+    "tabdpt_zeroshot": "TabDPT-ZS",
+    "tabicl_zeroshot": "TabICL-ZS",
+    "tabpfn_zeroshot_perbin": "TabPFN-ZS-PB",
+    "tabdpt_zeroshot_perbin": "TabDPT-ZS-PB",
+    "tabicl_zeroshot_perbin": "TabICL-ZS-PB",
 }
 
 MODEL_GROUPS = {
     "Baseline": ["km", "cox"],
     "Tree":     ["rsf", "gbsa"],
-    "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single"],
+    "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace"],
     "TabPFN-Joint": ["tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr"],
     "TabPFN-Emb": ["tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr"],
     "TabDPT-Emb": ["tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr"],
     "TabICL-Emb": ["tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr"],
+    "TabPFN-ZS": ["tabpfn_zeroshot", "tabpfn_zeroshot_perbin"],
+    "TabDPT-ZS": ["tabdpt_zeroshot", "tabdpt_zeroshot_perbin"],
+    "TabICL-ZS": ["tabicl_zeroshot", "tabicl_zeroshot_perbin"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
@@ -108,6 +123,9 @@ GROUP_COLORS = {
     "TabPFN-Joint": "#9467bd",
     "TabDPT-Emb": "#76b6b2",
     "TabICL-Emb": "#af7aa1",
+    "TabPFN-ZS": "#ff9da7",
+    "TabDPT-ZS": "#ffb3ba",
+    "TabICL-ZS": "#ffdfba",
 }
 
 DATASET_ORDER = [

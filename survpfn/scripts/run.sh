@@ -54,22 +54,24 @@ ALL_DATASETS="$PUBLIC_DATASETS"
 
 # ── Model groups ──────────────────────────────────────────────────────────────
 CLASSICAL_MODELS="cox km rsf gbsa"
-DEEP_MODELS="deepsurv mtlr pchazard deephit_single"
+DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace"
 
 TABPFN_JOINT="tabpfn_cox tabpfn_deephit tabpfn_pchazard tabpfn_mtlr"
 TABPFN_EMBEDDING="tabpfn_embedding_cox tabpfn_embedding_deephit tabpfn_embedding_pchazard tabpfn_embedding_mtlr"
 TABDPT_MODELS="tabdpt_embedding_cox tabdpt_embedding_deephit tabdpt_embedding_pchazard tabdpt_embedding_mtlr"
 TABICL_MODELS="tabicl_embedding_cox tabicl_embedding_deephit tabicl_embedding_pchazard tabicl_embedding_mtlr"
 FM_EMBEDDING="$TABPFN_EMBEDDING $TABDPT_MODELS $TABICL_MODELS"
+ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot"
+ZEROSHOT_PERBIN="tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
 
-ALL_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $TABPFN_JOINT $FM_EMBEDDING"
+ALL_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $TABPFN_JOINT $FM_EMBEDDING $ZEROSHOT_MODELS"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 usage() {
     echo "Usage: $0 [group] [\"dataset1 dataset2 ...\"] [--parallel]"
     echo ""
     echo "Groups:    all (default) | classical | deep | tabpfn | tabpfn_embedding"
-    echo "           tabdpt | tabicl | fm_embedding"
+    echo "           tabdpt | tabicl | fm_embedding | zeroshot | zeroshot_perbin"
     echo "Datasets:  $PUBLIC_DATASETS"
     echo "Flags:     --parallel   run each dataset as a background job"
     exit 0
@@ -81,10 +83,10 @@ timestamp() { date +"%Y%m%d_%H%M%S"; }
 _extra_args() {
     local models="$1"
     local args=()
-    if echo "$models" | grep -qE "tabpfn_|tabdpt_|tabicl_"; then
+    if echo "$models" | grep -qE "tabpfn_|tabdpt_|tabicl_|survtrace"; then
         args+=("--epochs" "$EPOCHS" "--lr" "$LR" "--device" "$DEVICE")
     fi
-    if echo "$models" | grep -q "tabdpt_" && [[ -n "$TABDPT_CHECKPOINT" ]]; then
+    if echo "$models" | grep -qE "tabdpt_" && [[ -n "$TABDPT_CHECKPOINT" ]]; then
         args+=("--tabdpt-checkpoint" "$TABDPT_CHECKPOINT"
                "--tabdpt-context-size" "$TABDPT_CONTEXT_SIZE")
     fi
@@ -170,6 +172,8 @@ case "$GROUP" in
     tabdpt)           MODELS="$TABDPT_MODELS" ;;
     tabicl)           MODELS="$TABICL_MODELS" ;;
     fm_embedding)     MODELS="$FM_EMBEDDING" ;;
+    zeroshot)         MODELS="$ZEROSHOT_MODELS" ;;
+    zeroshot_perbin)  MODELS="$ZEROSHOT_PERBIN" ;;
     *) echo "Unknown group: $GROUP"; usage ;;
 esac
 
