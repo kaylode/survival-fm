@@ -1,0 +1,6 @@
+{"op_code":0,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","study_name":"tabpfn_pchazard","directions":[2]}
+{"op_code":4,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","study_id":0,"datetime_start":"2026-03-30T14:20:04.042265"}
+{"op_code":5,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","trial_id":0,"param_name":"lr","param_value_internal":0.060334331487735884,"distribution":"{\"name\": \"FloatDistribution\", \"attributes\": {\"step\": null, \"low\": 0.0001, \"high\": 0.1, \"log\": true}}"}
+{"op_code":5,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","trial_id":0,"param_name":"dropout","param_value_internal":0.42548356982775126,"distribution":"{\"name\": \"FloatDistribution\", \"attributes\": {\"step\": null, \"low\": 0.0, \"high\": 0.5, \"log\": false}}"}
+{"op_code":5,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","trial_id":0,"param_name":"nodes","param_value_internal":2,"distribution":"{\"name\": \"CategoricalDistribution\", \"attributes\": {\"choices\": [\"64-64\", \"128-64\", \"256-128\"]}}"}
+{"op_code":6,"worker_id":"b028cf3f-f3e1-4c28-9280-2b1a6d533c52-140611610289984","trial_id":0,"state":3,"values":null,"datetime_complete":"2026-03-30T14:20:04.089722"}

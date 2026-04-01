@@ -32,7 +32,9 @@ def _safe_time_grid(
     hi = min(float(y_train["time"].max()), float(y_test["time"].max()))
     if lo >= hi:
         return np.array([])
-    return np.linspace(lo + 1e-6, hi - 1e-6, n_points)
+    # Use a relative margin (0.1% of the range) to avoid precision issues at boundaries.
+    margin = (hi - lo) * 0.001
+    return np.linspace(lo + margin, hi - margin, n_points)
 
 
 def d_calibration(

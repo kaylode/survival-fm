@@ -16,30 +16,35 @@ result folders into a single CSV, then xai/plot_comparison.py for figures.
 
 CLI
 ---
-    # All datasets, all models
-    uv run python -m survpfn.scripts.benchmark --datasets SUPPORT2 METABRIC GBSG
-
-    # Sirbu multi-task
+    # All public datasets, all models
     uv run python -m survpfn.scripts.benchmark \\
-        --datasets SIRBU_mortality SIRBU_cv SIRBU_mi SIRBU_stroke
+        --datasets SUPPORT2 METABRIC GBSG WHAS500 VETERANS FLCHAIN
 
     # Selected models with tuning
     uv run python -m survpfn.scripts.benchmark \\
         --datasets GBSG --models cox rsf gbsa --tune --trials 20
 
     # TabPFN jointly-trained models
-    uv run python -m survpfn.scripts.benchmark \\
-        --datasets GBSG --models surv_cox surv_deephit \\
+    uv run python -m survpfn.scripts.benchmark \
+        --datasets GBSG --models tabpfn_cox tabpfn_deephit \
         --epochs 100 --lr 1e-3 --device cuda:0
 
 Available model names
 ---------------------
   cox, km
   rsf, gbsa
-  deepsurv, mtlr, pchazard, deephit_single
-  embedding_cox
-  surv_cox, surv_deephit, surv_pchazard, surv_mtlr
-  all  (runs all of the above)
+  survtrace, deepsurv, mtlr, pchazard, deephit_single
+  tabpfn_embedding_cox, tabpfn_embedding_deephit, tabpfn_embedding_pchazard, tabpfn_embedding_mtlr
+                                               (TabPFN frozen → survival head)
+  tabpfn_cox, tabpfn_deephit, tabpfn_pchazard, tabpfn_mtlr
+                                               (TabPFN jointly trained)
+  tabdpt_embedding_{cox,deephit,pchazard,mtlr} (TabDPT frozen; needs TABDPT_CHECKPOINT)
+  tabicl_embedding_{cox,deephit,pchazard,mtlr} (TabICL frozen; auto-downloads checkpoint)
+  tabpfn_zeroshot, tabdpt_zeroshot, tabicl_zeroshot
+                                               (zero-shot ICL; single_context mode)
+  tabpfn_zeroshot_perbin, tabdpt_zeroshot_perbin, tabicl_zeroshot_perbin
+                                               (zero-shot ICL; per_bin mode)
+  all  (runs all of the above, excluding *_perbin variants)
 """
 
 from __future__ import annotations
@@ -114,22 +119,25 @@ def get_feature_importance(
     if model is None:
         return None
 
-    if model_name in ("rsf", "gbsa") and hasattr(model, "feature_importances_"):
-        return {
-            "type": "impurity",
-            "features": dict(zip(feature_names, model.feature_importances_.tolist())),
-        }
+    try:
+        if model_name in ("rsf", "gbsa") and hasattr(model, "feature_importances_"):
+            return {
+                "type": "impurity",
+                "features": dict(zip(feature_names, model.feature_importances_.tolist())),
+            }
 
-    if model_name == "cox" and hasattr(model, "summary"):
-        s = model.summary.reset_index()
-        feat_col = "covariate" if "covariate" in s.columns else s.columns[0]
-        feats = s[feat_col].tolist()
-        return {
-            "type": "cox_coefficients",
-            "coef":     dict(zip(feats, s["coef"].tolist())),
-            "exp_coef": dict(zip(feats, np.exp(s["coef"]).tolist())),
-            "p":        dict(zip(feats, s["p"].tolist())),
-        }
+        if model_name == "cox" and hasattr(model, "summary"):
+            s = model.summary.reset_index()
+            feat_col = "covariate" if "covariate" in s.columns else s.columns[0]
+            feats = s[feat_col].tolist()
+            return {
+                "type": "cox_coefficients",
+                "coef":     dict(zip(feats, s["coef"].tolist())),
+                "exp_coef": dict(zip(feats, np.exp(s["coef"]).tolist())),
+                "p":        dict(zip(feats, s["p"].tolist())),
+            }
+    except (NotImplementedError, Exception):
+        return None
 
     return None
 
@@ -146,7 +154,22 @@ _OPTUNA_STUDY: dict[str, tuple[str, str]] = {
     "mtlr":           ("optuna_mtlr.log",            "mtlr_tuning"),
     "pchazard":       ("optuna_pchazard.log",        "pchazard_tuning"),
     "deephit_single": ("optuna_deephit_single.log",  "deephit_single_tuning"),
-    "embedding_cox":  ("optuna_embedding_cox.log",   "embedding_cox_tuning"),
+    "survtrace":      ("optuna_survtrace.log",       "survtrace_tuning"),
+    # TabPFN frozen embedding heads
+    "tabpfn_embedding_cox":          ("optuna_tabpfn_cox.log",           "tabpfn_cox"),
+    "tabpfn_embedding_deephit":      ("optuna_tabpfn_deephit.log",       "tabpfn_deephit"),
+    "tabpfn_embedding_pchazard":     ("optuna_tabpfn_pchazard.log",      "tabpfn_pchazard"),
+    "tabpfn_embedding_mtlr":         ("optuna_tabpfn_mtlr.log",          "tabpfn_mtlr"),
+    # TabDPT frozen embedding heads
+    "tabdpt_embedding_cox":      ("optuna_tabdpt_cox.log",        "tabdpt_cox"),
+    "tabdpt_embedding_deephit":  ("optuna_tabdpt_deephit.log",    "tabdpt_deephit"),
+    "tabdpt_embedding_pchazard": ("optuna_tabdpt_pchazard.log",   "tabdpt_pchazard"),
+    "tabdpt_embedding_mtlr":     ("optuna_tabdpt_mtlr.log",       "tabdpt_mtlr"),
+    # TabICL frozen embedding heads
+    "tabicl_embedding_cox":      ("optuna_tabicl_cox.log",        "tabicl_cox"),
+    "tabicl_embedding_deephit":  ("optuna_tabicl_deephit.log",    "tabicl_deephit"),
+    "tabicl_embedding_pchazard": ("optuna_tabicl_pchazard.log",   "tabicl_pchazard"),
+    "tabicl_embedding_mtlr":     ("optuna_tabicl_mtlr.log",       "tabicl_mtlr"),
 }
 
 
@@ -273,10 +296,60 @@ def _train_deephit_single(df_train, df_test, dur_col, ev_col, tune, n_trials, ou
                                 tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
 
 
-def _train_embedding_cox(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.tabpfn.cox import train_embedding_cox
-    return train_embedding_cox(df_train, df_test, dur_col, ev_col,
-                               tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
+def _train_survtrace(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
+    from survpfn.models.survtrace.survival import train_survtrace
+    return train_survtrace(
+        df_train, df_test, dur_col, ev_col,
+        tune=tune, n_trials=n_trials, save_dir=out_dir,
+        epochs=kw.get("epochs", 100),
+        batch_size=kw.get("batch_size", 64),
+        learning_rate=kw.get("lr", 1e-3),
+        device=kw.get("device", "cuda:0"),
+    )
+
+
+def _train_fm_embedding(
+    fm: str,
+    head: str,
+    df_train, df_test, dur_col, ev_col,
+    tune, n_trials, out_dir,
+    **kw,
+):
+    """Generic dispatcher: FM backbone × survival head.
+
+    fm   : "tabpfn" | "tabdpt" | "tabicl"
+    head : "cox" | "deephit" | "pchazard" | "mtlr"
+    """
+    if fm == "tabpfn":
+        from survpfn.models.tabpfn import train_tabpfn_embedding_surv
+        return train_tabpfn_embedding_surv(
+            df_train, df_test, dur_col, ev_col,
+            head_type=head,
+            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
+            num_durations=kw.get("num_durations", 10),
+        )
+    if fm == "tabdpt":
+        from survpfn.models.tabdpt import train_tabdpt_embedding_surv
+        return train_tabdpt_embedding_surv(
+            df_train, df_test, dur_col, ev_col,
+            head_type=head,
+            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
+            checkpoint_path=kw.get("tabdpt_checkpoint", None),
+            context_size=kw.get("tabdpt_context_size", None),
+            use_retrieval=kw.get("tabdpt_use_retrieval", True),
+            device=kw.get("device", None),
+            num_durations=kw.get("num_durations", 10),
+        )
+    if fm == "tabicl":
+        from survpfn.models.tabicl import train_tabicl_embedding_surv
+        return train_tabicl_embedding_surv(
+            df_train, df_test, dur_col, ev_col,
+            head_type=head,
+            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
+            device=kw.get("device", None),
+            num_durations=kw.get("num_durations", 10),
+        )
+    raise ValueError(f"Unknown FM backbone: {fm!r}")
 
 
 def _train_tabpfn_surv(
@@ -288,7 +361,7 @@ def _train_tabpfn_surv(
     **kwargs,
 ):
     """Shared implementation for jointly-trained TabPFN survival heads."""
-    from survpfn.models.tabpfn.cox import TabPFNSurvPH
+    from survpfn.models.tabpfn import TabPFNSurvPH
     model = TabPFNSurvPH(
         head_type=head_type,
         learning_rate=kwargs.get("lr", 1e-3),
@@ -305,7 +378,17 @@ def _train_tabpfn_surv(
         verbose=False,
     )
     surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
-    risk = -surv_df.iloc[-1].values
+    
+    # Use integrated survival (AUC) as a more robust risk score.
+    # Lower AUC (shorter life expectancy) = Higher risk.
+    times = surv_df.index.values
+    surv_array = surv_df.values  # (n_times, n_subjects)
+    # Average survival over time for each subject
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    if _trapz is None:
+        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
+    auc = _trapz(surv_array.T, times)
+    risk = -auc
     return model, risk, surv_df.values.T, surv_df.index.values
 
 
@@ -313,27 +396,77 @@ def _train_tabpfn_surv(
 # Model registry
 # ---------------------------------------------------------------------------
 
+def _make_fm_embedding(fm: str, head: str) -> Callable:
+    """Build a benchmark-compatible callable for (fm, head) pair."""
+    def _fn(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
+        return _train_fm_embedding(
+            fm, head, df_train, df_test, dur_col, ev_col,
+            tune, n_trials, out_dir, **kw,
+        )
+    _fn.__name__ = f"_train_{fm}_embedding_{head}"
+    return _fn
+
+
+def _make_zeroshot(backbone: str, method: str = "single_context") -> Callable:
+    """Build a benchmark-compatible callable for zero-shot ICL survival."""
+    def _fn(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
+        from survpfn.models.zeroshot_surv import train_zeroshot_surv
+        return train_zeroshot_surv(
+            df_train, df_test, dur_col, ev_col,
+            backbone=backbone,
+            method=method,
+            device=kw.get("device", "cpu"),
+            checkpoint_path=kw.get("tabdpt_checkpoint", None),
+            context_size=kw.get("tabdpt_context_size", 128),
+            use_retrieval=kw.get("tabdpt_use_retrieval", True),
+        )
+    _fn.__name__ = f"_train_{backbone}_zeroshot"
+    return _fn
+
+
 ALL_MODELS: dict[str, Callable] = {
-    # Classical
+    # ── Classical ──────────────────────────────────────────────────────────
     "cox":            _train_cox,
     "km":             _train_km,
-    # Tree
+    # ── Tree ───────────────────────────────────────────────────────────────
     "rsf":            _train_rsf,
     "gbsa":           _train_gbsa,
-    # Deep survival
+    # ── Deep survival (classical DL heads on raw features) ─────────────────
     "deepsurv":       _train_deepsurv,
     "mtlr":           _train_mtlr,
     "pchazard":       _train_pchazard,
     "deephit_single": _train_deephit_single,
-    # TabPFN sequential (embeddings)
-    "embedding_cox":  _train_embedding_cox,
-    # TabPFN jointly-trained (surv_*)
-    # a = (df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir)
-    # _train_tabpfn_surv only needs the first 4; remainder forwarded via **kw
-    "surv_cox":       lambda *a, **kw: _train_tabpfn_surv("cox",      *a[:4], **kw),
-    "surv_deephit":   lambda *a, **kw: _train_tabpfn_surv("deephit",  *a[:4], **kw),
-    "surv_pchazard":  lambda *a, **kw: _train_tabpfn_surv("pchazard", *a[:4], **kw),
-    "surv_mtlr":      lambda *a, **kw: _train_tabpfn_surv("mtlr",     *a[:4], **kw),
+    "survtrace":      _train_survtrace,
+    # ── TabPFN frozen embedding × 4 heads ──────────────────────────────────
+    "tabpfn_embedding_cox":         _make_fm_embedding("tabpfn", "cox"),
+    "tabpfn_embedding_deephit":     _make_fm_embedding("tabpfn", "deephit"),
+    "tabpfn_embedding_pchazard":    _make_fm_embedding("tabpfn", "pchazard"),
+    "tabpfn_embedding_mtlr":        _make_fm_embedding("tabpfn", "mtlr"),
+    # ── TabPFN jointly-trained (tabpfn_*) ────────────────────────────────────
+    # positional: (df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir)
+    # _train_tabpfn_surv only uses the first 4; the rest forwarded via **kw
+    "tabpfn_cox":       lambda *a, **kw: _train_tabpfn_surv("cox",      *a[:4], **kw),
+    "tabpfn_deephit":   lambda *a, **kw: _train_tabpfn_surv("deephit",  *a[:4], **kw),
+    "tabpfn_pchazard":  lambda *a, **kw: _train_tabpfn_surv("pchazard", *a[:4], **kw),
+    "tabpfn_mtlr":      lambda *a, **kw: _train_tabpfn_surv("mtlr",     *a[:4], **kw),
+    # ── TabDPT frozen embedding × 4 heads ──────────────────────────────────
+    "tabdpt_embedding_cox":      _make_fm_embedding("tabdpt", "cox"),
+    "tabdpt_embedding_deephit":  _make_fm_embedding("tabdpt", "deephit"),
+    "tabdpt_embedding_pchazard": _make_fm_embedding("tabdpt", "pchazard"),
+    "tabdpt_embedding_mtlr":     _make_fm_embedding("tabdpt", "mtlr"),
+    # ── TabICL frozen embedding × 4 heads ──────────────────────────────────
+    "tabicl_embedding_cox":      _make_fm_embedding("tabicl", "cox"),
+    "tabicl_embedding_deephit":  _make_fm_embedding("tabicl", "deephit"),
+    "tabicl_embedding_pchazard": _make_fm_embedding("tabicl", "pchazard"),
+    "tabicl_embedding_mtlr":     _make_fm_embedding("tabicl", "mtlr"),
+    # ── Zero-shot ICL survival (no survival head; FM used directly) ────────
+    "tabpfn_zeroshot":  _make_zeroshot("tabpfn"),
+    "tabdpt_zeroshot":  _make_zeroshot("tabdpt"),
+    "tabicl_zeroshot":  _make_zeroshot("tabicl"),
+    # per-bin variant (slower but more accurate per bin)
+    "tabpfn_zeroshot_perbin":  _make_zeroshot("tabpfn", method="per_bin"),
+    "tabdpt_zeroshot_perbin":  _make_zeroshot("tabdpt", method="per_bin"),
+    "tabicl_zeroshot_perbin":  _make_zeroshot("tabicl", method="per_bin"),
 }
 
 
@@ -478,7 +611,7 @@ def run_benchmark(
     random_state:
         Seed for StratifiedKFold.
     aware_kwargs:
-        Extra args forwarded to jointly-trained TabPFN models (``surv_*``):
+        Extra args forwarded to jointly-trained TabPFN models (``tabpfn_*``):
         ``epochs``, ``batch_size``, ``lr``, ``alpha``, ``device``.
     """
     print(f"\n{'='*60}")
@@ -501,19 +634,19 @@ def run_benchmark(
 
         for model_name in model_names:
             print(f"    [{model_name}]", end=" ", flush=True)
-            try:
-                run_fold_model(
-                    dataset_name, model_name,
-                    df_train, df_test, dur_col, ev_col,
-                    fold, tune, n_trials, output_dir,
-                    **extra,
-                )
-            except Exception as exc:
-                warnings.warn(
-                    f"{dataset_name}/{model_name}/fold_{fold} failed: {exc}",
-                    stacklevel=2,
-                )
-                print("      → FAILED (see warning above)")
+            # try:
+            run_fold_model(
+                dataset_name, model_name,
+                df_train, df_test, dur_col, ev_col,
+                fold, tune, n_trials, output_dir,
+                **extra,
+            )
+            # except Exception as exc:
+            #     warnings.warn(
+            #         f"{dataset_name}/{model_name}/fold_{fold} failed: {exc}",
+            #         stacklevel=2,
+            #     )
+            #     print("      → FAILED (see warning above)")
 
 
 # ---------------------------------------------------------------------------
@@ -527,7 +660,7 @@ def main():
     )
     parser.add_argument(
         "--datasets", nargs="+",
-        default=["SUPPORT2", "METABRIC", "GBSG", "SIRBU_mortality"],
+        default=["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN"],
         choices=list(BENCHMARK_DATASETS.keys()),
         help="Datasets to benchmark.",
     )
@@ -541,7 +674,7 @@ def main():
     parser.add_argument("--output-dir", default="results",              help="Root output directory.")
     parser.add_argument("--seed",       type=int,   default=42,         help="Random seed.")
 
-    g = parser.add_argument_group("TabPFN jointly-trained model options (surv_*)")
+    g = parser.add_argument_group("TabPFN jointly-trained model options (tabpfn_*)")
     g.add_argument("--epochs",     type=int,   default=50,     help="Training epochs.")
     g.add_argument("--batch-size", type=int,   default=64,     help="Mini-batch size.")
     g.add_argument("--lr",         type=float, default=1e-3,   help="Learning rate.")

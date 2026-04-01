@@ -10,6 +10,7 @@ from pycox.evaluation import EvalSurv
 import optuna
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalFileBackend
+from survpfn.utils.config import load_model_config, apply_tuning_params
 
 
 def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir="results", study_id=None):
@@ -54,15 +55,15 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
             load_if_exists=True
         )
 
-        def objective(trial):
-            lr_trial = trial.suggest_float('lr', 1e-4, 1e-1, log=True)
-            dropout_trial = trial.suggest_float('dropout', 0.0, 0.5)
-            layers = trial.suggest_categorical('layers', [1, 2, 3])
-            nodes = trial.suggest_categorical('nodes', [16, 32, 64])
-            num_nodes_trial = [nodes] * layers
+        config = load_model_config("deepsurv")
+        params.update(config["default"])
 
-            net = tt.practical.MLPVanilla(in_features, num_nodes_trial, 1, batch_norm=True, dropout=dropout_trial, activation=nn.ReLU)
-            optimizer = tt.optim.AdamWR(lr=lr_trial)
+        def objective(trial):
+            p = apply_tuning_params(trial, config["tuning"])
+            num_nodes_trial = [p["nodes"]] * p["layers"]
+
+            net = tt.practical.MLPVanilla(in_features, num_nodes_trial, 1, batch_norm=True, dropout=p["dropout"], activation=nn.ReLU)
+            optimizer = tt.optim.AdamWR(lr=p["lr"])
             model = CoxPH(net, optimizer)
 
             try:

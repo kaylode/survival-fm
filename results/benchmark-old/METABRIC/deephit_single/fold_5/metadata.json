@@ -1,0 +1,19 @@
+{
+  "dataset": "METABRIC",
+  "model": "deephit_single",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1524,
+  "n_test": 380,
+  "n_features": 9,
+  "n_events_train": 883,
+  "n_events_test": 220,
+  "event_rate_train": 0.5794,
+  "event_rate_test": 0.5789,
+  "fit_time_s": 38.747,
+  "eval_time_s": 0.03,
+  "hpo_included_in_fit_time": true,
+  "n_params": 29914,
+  "timestamp": "2026-03-30T11:27:09.039620"
+}

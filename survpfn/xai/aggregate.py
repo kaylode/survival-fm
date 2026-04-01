@@ -111,7 +111,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--output-dir", default="results",
+        "--output-dir", default="results/benchmark",
         help="Root directory produced by scripts/benchmark.py.",
     )
     parser.add_argument(

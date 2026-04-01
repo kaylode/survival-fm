@@ -1,0 +1,10 @@
+{
+  "best_params": {
+    "learning_rate": 0.04440670259973872,
+    "n_estimators": 144,
+    "max_depth": 5
+  },
+  "best_value": 0.7623318385650224,
+  "n_completed_trials": 20,
+  "best_trial_number": 18
+}

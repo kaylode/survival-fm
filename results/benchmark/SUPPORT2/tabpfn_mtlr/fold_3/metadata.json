@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "tabpfn_mtlr",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7098,
+  "n_test": 1775,
+  "n_features": 14,
+  "n_events_train": 4829,
+  "n_events_test": 1207,
+  "event_rate_train": 0.6803,
+  "event_rate_test": 0.68,
+  "fit_time_s": 126.1271,
+  "eval_time_s": 0.0687,
+  "hpo_included_in_fit_time": true,
+  "n_params": 80704,
+  "timestamp": "2026-03-31T21:09:38.312704"
+}

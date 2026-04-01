@@ -11,14 +11,14 @@ Scaling is the caller's responsibility and must happen inside the CV fold loop
 Supported datasets
 ------------------
 Public (via pycox):
-    SUPPORT2, METABRIC, GBSG
+    SUPPORT2  — 8,873 ICU patients
+    METABRIC  — 1,904 breast-cancer patients
+    GBSG      — 2,232 breast-cancer patients
 
-Private Sirbu tasks (requires local Excel files in "Dataset Sirbu/"):
-    SIRBU_mortality — total mortality
-    SIRBU_cv        — cardiovascular mortality (competing risks, binarized)
-    SIRBU_mi        — myocardial infarction (competing risks, binarized)
-    SIRBU_stroke    — stroke (competing risks, binarized)
-    SIRBU           — alias for SIRBU_mortality
+Public (via scikit-survival):
+    WHAS500   —   500 cardiovascular (Worcester Heart Attack Study)
+    VETERANS  —   137 lung-cancer veterans
+    FLCHAIN   — 7,874 haematology (serum free light chain study)
 """
 
 from __future__ import annotations
@@ -102,6 +102,58 @@ def load_gbsg() -> tuple[pd.DataFrame, str, str]:
     except ImportError as e:
         raise ImportError("pycox required: uv add pycox") from e
     return _pycox_to_df(gbsg)
+
+
+def _sksurv_to_df(
+    X: pd.DataFrame,
+    y,
+    duration_field: str,
+    event_field: str,
+) -> tuple[pd.DataFrame, str, str]:
+    """Convert scikit-survival (X, y) pair to a flat DataFrame.
+
+    Parameters
+    ----------
+    X              : feature DataFrame (from sksurv loader)
+    y              : structured numpy array with event / duration fields
+    duration_field : name of the duration field in y
+    event_field    : name of the event field in y
+    """
+    df = _encode_df(X.copy())
+    df["duration"] = y[duration_field].astype(float)
+    df["event"]    = y[event_field].astype(float)
+    df = df.dropna().reset_index(drop=True)
+    return df, "duration", "event"
+
+
+def load_whas500() -> tuple[pd.DataFrame, str, str]:
+    """WHAS500 — 500 cardiovascular patients (Worcester Heart Attack Study)."""
+    try:
+        from sksurv.datasets import load_whas500
+    except ImportError as e:
+        raise ImportError("scikit-survival required: uv add scikit-survival") from e
+    X, y = load_whas500()
+    return _sksurv_to_df(X, y, duration_field="lenfol", event_field="fstat")
+
+
+def load_veterans() -> tuple[pd.DataFrame, str, str]:
+    """Veterans' Lung Cancer — 137 male veterans with advanced lung cancer."""
+    try:
+        from sksurv.datasets import load_veterans_lung_cancer
+    except ImportError as e:
+        raise ImportError("scikit-survival required: uv add scikit-survival") from e
+    X, y = load_veterans_lung_cancer()
+    return _sksurv_to_df(X, y, duration_field="Survival_in_days", event_field="Status")
+
+
+def load_flchain() -> tuple[pd.DataFrame, str, str]:
+    """FLCHAIN — 7,874 patients (serum free light chain study, haematology)."""
+    try:
+        from sksurv.datasets import load_flchain
+    except ImportError as e:
+        raise ImportError("scikit-survival required: uv add scikit-survival") from e
+    X, y = load_flchain()
+    return _sksurv_to_df(X, y, duration_field="futime", event_field="death")
 
 
 # ---------------------------------------------------------------------------
@@ -226,14 +278,12 @@ def load_mimic_dataset(data_dir, skip_tables=None):
 # ---------------------------------------------------------------------------
 
 BENCHMARK_DATASETS: dict[str, Callable[[], tuple[pd.DataFrame, str, str]]] = {
-    # Public
-    "SUPPORT2":        load_support,
-    "METABRIC":        load_metabric,
-    "GBSG":            load_gbsg,
-    # Sirbu tasks
-    "SIRBU":           load_sirbu_mortality,   # backward-compat alias
-    "SIRBU_mortality": load_sirbu_mortality,
-    "SIRBU_cv":        load_sirbu_cv,
-    "SIRBU_mi":        load_sirbu_mi,
-    "SIRBU_stroke":    load_sirbu_stroke,
+    # Public — pycox
+    "SUPPORT2":  load_support,
+    "METABRIC":  load_metabric,
+    "GBSG":      load_gbsg,
+    # Public — scikit-survival
+    "WHAS500":   load_whas500,
+    "VETERANS":  load_veterans,
+    "FLCHAIN":   load_flchain,
 }

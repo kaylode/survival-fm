@@ -1,0 +1,19 @@
+{
+  "dataset": "GBSG",
+  "model": "tabicl_zeroshot",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1786,
+  "n_test": 446,
+  "n_features": 7,
+  "n_events_train": 1014,
+  "n_events_test": 253,
+  "event_rate_train": 0.5677,
+  "event_rate_test": 0.5673,
+  "fit_time_s": 1.5104,
+  "eval_time_s": 0.0149,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-01T11:28:24.716570"
+}

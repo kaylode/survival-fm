@@ -1,0 +1,19 @@
+{
+  "dataset": "FLCHAIN",
+  "model": "tabdpt_zeroshot_perbin",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 5219,
+  "n_test": 1305,
+  "n_features": 43,
+  "n_events_train": 1570,
+  "n_events_test": 392,
+  "event_rate_train": 0.3008,
+  "event_rate_test": 0.3004,
+  "fit_time_s": 26.852,
+  "eval_time_s": 0.0308,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-01T11:49:30.415699"
+}

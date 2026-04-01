@@ -11,36 +11,34 @@ dependencies = [
     "numpy>=1.24",
     "pandas>=2.0",
     "openpyxl>=3.1",           # reading .xlsx files
-
     # --- survival analysis -----------------------------------------------
     "lifelines>=0.27",          # CoxPH, KM, log-rank
     "pycox>=0.3.0",             # DeepSurv, DeepHit (discrete-time)
     "scikit-survival>=0.22",    # RSF, GBSA, sksurv metrics
     "torchsurv>=0.1.4",         # torchsurv Cox loss (custom_model.py)
-
     # --- deep learning ---------------------------------------------------
     "torch>=2.0",
     "torchtuples>=0.2.2",       # pycox helper (MLPVanilla, AdamWR)
-
     # --- ML utilities ----------------------------------------------------
     "scikit-learn>=1.3",
     "scipy>=1.10",              # Wilcoxon test in metrics.py
-
     # --- hyperparameter optimisation -------------------------------------
     "optuna>=3.0",
-
     # --- visualisation ---------------------------------------------------
     "matplotlib>=3.7",
     "seaborn>=0.12",
-
     # --- TabPFN embedding model ------------------------------------------
     "tabpfn>=6.4.1",
     "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
     "omegaconf>=2.3.0",         # config for aware_cox / TabPFNCoxModel
-
     # --- notebook support ------------------------------------------------
     "jupyter>=1.0",
     "ipykernel>=6.0",
+    "faiss-cpu>=1.13.2",
+    "plotly>=6.6.0",
+    "tabulate>=0.10.0",
+    "loguru>=0.7.3",
+    "easydict>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -54,7 +52,9 @@ dev = [
 
 [project.scripts]
 # Run the full evaluation pipeline via CLI
-survpfn-train = "scripts.train:main"
+survpfn-train = "survpfn.scripts.train:main"
+survpfn-aggregate = "survpfn.xai.aggregate:main"
+survpfn-analyze = "survpfn.xai.analysis:main"
 
 [build-system]
 requires = ["hatchling"]

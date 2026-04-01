@@ -1,0 +1,13 @@
+{
+  "best_params": {
+    "lr": 0.0024945028665160013,
+    "dropout": 0.19640894804139872,
+    "layers": 3,
+    "nodes": 64,
+    "alpha": 0.4311793103800864,
+    "sigma": 0.36907747988738016
+  },
+  "best_value": 0.919453862700062,
+  "n_completed_trials": 40,
+  "best_trial_number": 36
+}
