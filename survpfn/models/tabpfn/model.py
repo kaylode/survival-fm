@@ -1,46 +1,24 @@
 """
-survpfn.models.tabpfn.cox — TabPFN-aware and embedding-based survival models.
-
-Merged from: aware_cox.py + embedding_cox.py
 
 Classes / functions
 -------------------
 * TabPFNSurvModel     — PyTorch nn.Module with TabPFN backbone + survival head
                         (jointly-trained variant; supports cox/deephit/pchazard/mtlr)
 * TabPFNSurvPH        — High-level wrapper with fit / predict_survival
-* MLPVanilla          — Re-exported from survpfn.models.heads (backward compat)
-* EmbeddingCoxPH      — Re-exported from survpfn.models.heads (backward compat)
-* train_tabpfn_embedding_cox — Thin wrapper over train_fm_embedding_surv (head_type="cox")
-* train_embedding_surv — Full wrapper supporting all four head types
 """
 
 import os
+import pathlib
+from survpfn.models.tabpfn.backbone.utils import load_model_workflow
+from sklearn.model_selection import train_test_split
+from pycox.models import CoxPH
+from pycox.evaluation import EvalSurv
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.amp import autocast
-import numpy as np
-import torchtuples as tt
-from pycox.models import CoxPH
-from pycox.evaluation import EvalSurv
 from typing import Union, List, Optional
-import pathlib
-import pandas as pd
-from sklearn.model_selection import train_test_split
-
-from survpfn.models.tabpfn.backbone.utils import load_model_workflow
-
-# Re-export shared head utilities so existing imports continue to work.
-from survpfn.models.heads import (  # noqa: F401
-    MLPVanilla,
-    EmbeddingCoxPH,
-    EmbeddingSurvHead,
-    train_fm_embedding_surv,
-)
-
-
-# ---------------------------------------------------------------------------
-# TabPFN Survival model
-# ---------------------------------------------------------------------------
+import torchtuples as tt
 
 # ---------------------------------------------------------------------------
 # TabPFN Survival Model (Backbone + Survival Head)
@@ -326,77 +304,3 @@ class TabPFNSurvPH:
                 if hasattr(self.model, 'interpolate'):
                     return self.model.interpolate(10).predict_surv_df(x_pt)
                 return self.model.predict_surv_df(x_pt)
-
-# ---------------------------------------------------------------------------
-# Embedding-based survival heads — thin wrappers over survpfn.models.heads
-# ---------------------------------------------------------------------------
-# MLPVanilla, EmbeddingCoxPH, and EmbeddingSurvHead are imported at the top
-# of this file from survpfn.models.heads and re-exported for backward compat.
-
-
-def train_embedding_surv(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    duration_col: str,
-    event_col: str,
-    head_type: str = "cox",
-    tune: bool = False,
-    n_trials: int = 10,
-    save_dir: str = "results",
-    study_id: Optional[str] = None,
-) -> tuple:
-    """Frozen TabPFN embedding + any survival head.
-
-    Parameters
-    ----------
-    head_type : one of "cox", "deephit", "pchazard", "mtlr"
-
-    Returns
-    -------
-    (model, risk_scores, surv_probs, surv_times)
-    """
-    from survpfn.models.tabpfn.embedding import get_tabpfn_embeddings
-
-    def _embedding_fn(X_train: np.ndarray, y_bin: np.ndarray,
-                      X_test: np.ndarray) -> tuple:
-        # TabPFN's extractor also accepts test labels (used as a dummy class
-        # for the in-context classifier); pass zeros for the test set.
-        y_test_zeros = np.zeros(len(X_test), dtype=np.float32)
-        return get_tabpfn_embeddings(
-            pd.DataFrame(X_train),
-            pd.Series(y_bin.astype(int)),
-            pd.DataFrame(X_test),
-            pd.Series(y_test_zeros.astype(int)),
-        )
-
-    return train_fm_embedding_surv(
-        df_train, df_test, duration_col, event_col,
-        embedding_fn=_embedding_fn,
-        head_type=head_type,
-        tune=tune,
-        n_trials=n_trials,
-        save_dir=save_dir,
-        study_id=study_id,
-        fm_name="tabpfn",
-    )
-
-
-def train_tabpfn_embedding_cox(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    duration_col: str,
-    event_col: str,
-    tune: bool = False,
-    n_trials: int = 10,
-    save_dir: str = "results",
-    study_id: Optional[str] = None,
-) -> tuple:
-    """Backward-compatible alias for train_embedding_surv(head_type='cox')."""
-    return train_embedding_surv(
-        df_train, df_test, duration_col, event_col,
-        head_type="cox",
-        tune=tune,
-        n_trials=n_trials,
-        save_dir=save_dir,
-        study_id=study_id,
-    )

@@ -205,21 +205,21 @@ class EmbeddingSurvHead:
             from pycox.preprocessing.label_transforms import LabTransDiscreteTime
             self.labtrans = LabTransDiscreteTime(self.num_durations, scheme='quantiles')
             y_train = self.labtrans.fit_transform(durations, events)
-            n_out = len(self.labtrans.cuts)
+            n_out = self.labtrans.out_features
         elif self.head_type == "pchazard":
             try:
                 self.labtrans = PCHazard.label_transform(self.num_durations, scheme='quantiles')
             except TypeError:
                 self.labtrans = PCHazard.label_transform(self.num_durations)
             y_train = self.labtrans.fit_transform(durations, events)
-            n_out = len(self.labtrans.cuts)
+            n_out = self.labtrans.out_features
         elif self.head_type == "mtlr":
             try:
                 self.labtrans = MTLR.label_transform(self.num_durations, scheme='quantiles')
             except TypeError:
                 self.labtrans = MTLR.label_transform(self.num_durations)
             y_train = self.labtrans.fit_transform(durations, events)
-            n_out = len(self.labtrans.cuts)
+            n_out = self.labtrans.out_features
 
         # Update num_durations to match actual bins (critical for discrete heads)
         if self.head_type != "cox":
@@ -293,36 +293,6 @@ class EmbeddingSurvHead:
             censor_surv="km",
         )
         return ev.concordance_td(method)
-
-
-# ---------------------------------------------------------------------------
-# Backward-compatible alias
-# ---------------------------------------------------------------------------
-
-def EmbeddingCoxPH(
-    embedding_dim: int,
-    num_nodes: list = None,
-    out_features: int = 1,      # ignored — kept for API compat
-    batch_norm: bool = True,
-    dropout: float = 0.1,
-    learning_rate: float = 1e-3,
-) -> EmbeddingSurvHead:
-    """Backward-compatible constructor.
-
-    Returns an ``EmbeddingSurvHead`` with ``head_type='cox'``.
-    The ``out_features`` parameter is accepted but ignored
-    (Cox always produces a scalar risk score).
-    """
-    if num_nodes is None:
-        num_nodes = [64, 64]
-    return EmbeddingSurvHead(
-        embedding_dim=embedding_dim,
-        head_type="cox",
-        num_nodes=num_nodes,
-        dropout=dropout,
-        lr=learning_rate,
-        batch_norm=batch_norm,
-    )
 
 
 # ---------------------------------------------------------------------------
