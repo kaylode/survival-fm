@@ -54,8 +54,10 @@ MODEL_ORDER = [
     "km", "cox",
     "rsf", "gbsa",
     "deepsurv", "mtlr", "pchazard", "deephit_single",
-    "tabpfn_embedding_cox",
     "tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr",
+    "tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
+    "tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
+    "tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
 ]
 
 MODEL_LABELS = {
@@ -67,19 +69,34 @@ MODEL_LABELS = {
     "mtlr":           "MTLR",
     "pchazard":       "PC-Hazard",
     "deephit_single": "DeepHit",
-    "tabpfn_embedding_cox":  "TabPFN-Cox (frozen)",
-    "tabpfn_cox":       "TabPFN-Cox",
-    "tabpfn_deephit":   "TabPFN-DeepHit",
-    "tabpfn_pchazard":  "TabPFN-PCHaz",
-    "tabpfn_mtlr":      "TabPFN-MTLR",
+    "tabpfn_embedding_cox":  "TabPFN-Emb-Cox",
+    "tabpfn_embedding_deephit":  "TabPFN-Emb-DeepHit",
+    "tabpfn_embedding_pchazard":  "TabPFN-Emb-PCHaz",
+    "tabpfn_embedding_mtlr":  "TabPFN-Emb-MTLR",
+    "tabpfn_cox":       "TabPFN-Joint-Cox",
+    "tabpfn_deephit":   "TabPFN-Joint-DeepHit",
+    "tabpfn_pchazard":  "TabPFN-Joint-PCHaz",
+    "tabpfn_mtlr":      "TabPFN-Joint-MTLR",
+
+    "tabdpt_embedding_cox":  "TabDPT-Emb-Cox",
+    "tabdpt_embedding_deephit":  "TabDPT-Emb-DeepHit",
+    "tabdpt_embedding_pchazard":  "TabDPT-Emb-PCHaz",
+    "tabdpt_embedding_mtlr":  "TabDPT-Emb-MTLR",
+
+    "tabicl_embedding_cox":  "TabICL-Emb-Cox",
+    "tabicl_embedding_deephit":  "TabICL-Emb-DeepHit",
+    "tabicl_embedding_pchazard":  "TabICL-Emb-PCHaz",
+    "tabicl_embedding_mtlr":  "TabICL-Emb-MTLR",
 }
 
 MODEL_GROUPS = {
     "Baseline": ["km", "cox"],
     "Tree":     ["rsf", "gbsa"],
     "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single"],
-    "TabPFN-A": ["tabpfn_embedding_cox"],
-    "TabPFN-C": ["tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr"],
+    "TabPFN-Joint": ["tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr"],
+    "TabPFN-Emb": ["tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr"],
+    "TabDPT-Emb": ["tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr"],
+    "TabICL-Emb": ["tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
@@ -87,8 +104,10 @@ GROUP_COLORS = {
     "Baseline": "#4e79a7",
     "Tree":     "#f28e2b",
     "Deep":     "#59a14f",
-    "TabPFN-A": "#e15759",
-    "TabPFN-C": "#9467bd",
+    "TabPFN-Emb": "#e15759",
+    "TabPFN-Joint": "#9467bd",
+    "TabDPT-Emb": "#76b6b2",
+    "TabICL-Emb": "#af7aa1",
 }
 
 DATASET_ORDER = [
@@ -274,10 +293,10 @@ def fig01_heatmap_cindex(df: pd.DataFrame, out_dir: Path) -> None:
                 txt_col = "white" if val < 0.57 or val > 0.78 else "black"
                 ax.text(j, i, f"{val:.3f}", ha="center", va="center", fontsize=7, color=txt_col)
 
-    # Group dividers (Baseline=2, Tree=2, Deep=4, TabPFN-A=1, TabPFN-C=4)
+    # Group dividers (Baseline=2, Tree=2, Deep=4, TabPFN-Emb=1, TabPFN-Joint=4)
     group_separator_lines(ax, [2, 2, 4, 1, 4], "h")
     # Add group labels on the left
-    group_rows = {"Baseline": 0.5, "Tree": 2.5, "Deep": 5, "TabPFN-A": 8, "TabPFN-C": 10}
+    group_rows = {"Baseline": 0.5, "Tree": 2.5, "Deep": 5, "TabPFN-Emb": 8, "TabPFN-Joint": 10, "TabDPT-Emb": 11, "TabICL-Emb": 12}
     for g, y in group_rows.items():
         if any(m in df["Model"].unique() for m in MODEL_GROUPS.get(g, [])):
             ax.text(-0.8, y, g, ha="right", va="center", fontsize=7.5,
@@ -295,7 +314,7 @@ def fig01_heatmap_cindex(df: pd.DataFrame, out_dir: Path) -> None:
 def fig02_cindex_comparison(df: pd.DataFrame, out_dir: Path) -> None:
     datasets = [d for d in DATASET_ORDER if d in df["Dataset"].unique()]
     models   = [m for m in MODEL_ORDER   if m in df["Model"].unique()]
-    n_cols = min(4, len(datasets))
+    n_cols = min(3, len(datasets))
     n_rows = (len(datasets) + n_cols - 1) // n_cols
 
     summary = (df.groupby(["Dataset", "Model"], observed=True)["C-index"]
@@ -328,7 +347,7 @@ def fig02_cindex_comparison(df: pd.DataFrame, out_dir: Path) -> None:
 
     legend_handles = [mpatches.Patch(color=c, label=g) for g, c in GROUP_COLORS.items()]
     fig.legend(handles=legend_handles, loc="lower center", ncol=len(MODEL_GROUPS),
-               bbox_to_anchor=(0.5, -0.01), frameon=True, title="Model Group", fontsize=9)
+               bbox_to_anchor=(0.5, -0.05), frameon=True, title="Model Group", fontsize=9)
     fig.suptitle("C-index Comparison (mean ± std, 5-fold CV)", fontweight="bold", y=1.01)
     fig.tight_layout()
     save_fig(fig, out_dir, "fig02_cindex_comparison")
@@ -589,10 +608,11 @@ def fig07_model_family_boxplot(df: pd.DataFrame, out_dir: Path) -> None:
 
 def fig08_tabpfn_ablation(df: pd.DataFrame, out_dir: Path) -> None:
     pairs = [
-        ("cox",           "tabpfn_embedding_cox", "Cox PH",   "TabPFN-Cox (frozen)"),
-        ("cox",           "tabpfn_cox",           "Cox PH",   "TabPFN-Cox"),
-        ("mtlr",          "tabpfn_mtlr",          "MTLR",     "TabPFN-MTLR"),
-        ("deephit_single","tabpfn_deephit",       "DeepHit",  "TabPFN-DeepHit"),
+        ("cox",           "tabpfn_embedding_cox", "Cox PH",   "TabPFN-Emb-Cox"),
+        ("cox",           "tabpfn_cox",           "Cox PH",   "TabPFN-Joint-Cox"),
+        ("mtlr",          "tabpfn_mtlr",          "MTLR",     "TabPFN-Joint-MTLR"),
+        ("deephit_single","tabpfn_deephit",       "DeepHit",  "TabPFN-Joint-DeepHit"),
+        ("pchazard",      "tabpfn_pchazard",      "PC-Haz",   "TabPFN-Joint-PCHaz"),
     ]
     valid_pairs = [(a, b, la, lb) for a, b, la, lb in pairs
                    if a in df["Model"].unique() and b in df["Model"].unique()]
@@ -619,8 +639,8 @@ def fig08_tabpfn_ablation(df: pd.DataFrame, out_dir: Path) -> None:
 
         ax.bar(x - w/2, b_m, w, yerr=b_s, label=base_l,
                color=get_model_color(base_m), capsize=3, edgecolor="white")
-        tabpfn_col = (GROUP_COLORS["TabPFN-C"] if tabpfn_m.startswith("tabpfn_")
-                      else GROUP_COLORS["TabPFN-A"])
+        tabpfn_col = (GROUP_COLORS["TabPFN-Joint"] if tabpfn_m.startswith("tabpfn_")
+                      else GROUP_COLORS["TabPFN-Emb"])
         ax.bar(x + w/2, t_m, w, yerr=t_s, label=tabpfn_l,
                color=tabpfn_col, capsize=3, edgecolor="white")
 
@@ -962,6 +982,8 @@ def main() -> None:
     parser.add_argument("--output-dir",  default="results/xai/figures", type=Path)
     parser.add_argument("--top-k",       default=15, type=int,
                         help="Max features in importance plots.")
+    parser.add_argument("--figures",     nargs="+", default=["all"],
+                        help="Specific figures to run (e.g. 01 02 10). Use 'all' for everything.")
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -979,20 +1001,41 @@ def main() -> None:
     bp_df = load_best_params(results_dir)
     print(f"  {len(bp_df)} best-params records")
 
-    print(f"\nGenerating figures → {out_dir}")
-    fig01_heatmap_cindex(df, out_dir)
-    fig02_cindex_comparison(df, out_dir)
-    fig03_ibs_comparison(df, out_dir)
-    fig04_multimetric_overview(df, out_dir)
-    fig05_auc_curves(df, out_dir)
-    fig06_efficiency_frontier(df, out_dir)
-    fig07_model_family_boxplot(df, out_dir)
-    fig08_tabpfn_ablation(df, out_dir)
-    fig09_sirbu_multitask(df, out_dir)
-    fig10_feature_importance(fi_records, out_dir, top_k=args.top_k)
-    fig11_hpo_convergence(bp_df, out_dir)
-    fig12_ranking(df, out_dir)
-    fig13_dcal_heatmap(df, out_dir)
+    # Map figure IDs to functions
+    fig_map = {
+        "01": lambda: fig01_heatmap_cindex(df, out_dir),
+        "02": lambda: fig02_cindex_comparison(df, out_dir),
+        "03": lambda: fig03_ibs_comparison(df, out_dir),
+        "04": lambda: fig04_multimetric_overview(df, out_dir),
+        "05": lambda: fig05_auc_curves(df, out_dir),
+        "06": lambda: fig06_efficiency_frontier(df, out_dir),
+        "07": lambda: fig07_model_family_boxplot(df, out_dir),
+        "08": lambda: fig08_tabpfn_ablation(df, out_dir),
+        "09": lambda: fig09_sirbu_multitask(df, out_dir),
+        "10": lambda: fig10_feature_importance(fi_records, out_dir, top_k=args.top_k),
+        "11": lambda: fig11_hpo_convergence(bp_df, out_dir),
+        "12": lambda: fig12_ranking(df, out_dir),
+        "13": lambda: fig13_dcal_heatmap(df, out_dir),
+    }
+
+    if "all" in args.figures:
+        to_run = sorted(fig_map.keys())
+    else:
+        to_run = []
+        for f in args.figures:
+            fid = f.lower().replace("fig", "").zfill(2)
+            if fid in fig_map:
+                to_run.append(fid)
+            else:
+                print(f"  [skip] Figure '{f}' (ID: {fid}) not recognized.")
+
+    if not to_run:
+        print("No figures selected. Exiting.")
+        return
+
+    print(f"\nGenerating {len(to_run)} figures → {out_dir}")
+    for fid in sorted(to_run):
+        fig_map[fid]()
 
     print_summary(df)
 

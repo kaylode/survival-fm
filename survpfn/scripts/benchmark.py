@@ -304,14 +304,15 @@ def _train_fm_embedding(
     head : "cox" | "deephit" | "pchazard" | "mtlr"
     """
     if fm == "tabpfn":
-        from survpfn.models.tabpfn.cox import train_embedding_surv
-        return train_embedding_surv(
+        from survpfn.models.tabpfn import train_tabpfn_embedding_surv
+        return train_tabpfn_embedding_surv(
             df_train, df_test, dur_col, ev_col,
             head_type=head,
             tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
+            num_durations=kw.get("num_durations", 10),
         )
     if fm == "tabdpt":
-        from survpfn.models.tabdpt.cox import train_tabdpt_embedding_surv
+        from survpfn.models.tabdpt import train_tabdpt_embedding_surv
         return train_tabdpt_embedding_surv(
             df_train, df_test, dur_col, ev_col,
             head_type=head,
@@ -320,14 +321,16 @@ def _train_fm_embedding(
             context_size=kw.get("tabdpt_context_size", None),
             use_retrieval=kw.get("tabdpt_use_retrieval", True),
             device=kw.get("device", None),
+            num_durations=kw.get("num_durations", 10),
         )
     if fm == "tabicl":
-        from survpfn.models.tabicl.cox import train_tabicl_embedding_surv
+        from survpfn.models.tabicl import train_tabicl_embedding_surv
         return train_tabicl_embedding_surv(
             df_train, df_test, dur_col, ev_col,
             head_type=head,
             tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
             device=kw.get("device", None),
+            num_durations=kw.get("num_durations", 10),
         )
     raise ValueError(f"Unknown FM backbone: {fm!r}")
 
@@ -341,7 +344,7 @@ def _train_tabpfn_surv(
     **kwargs,
 ):
     """Shared implementation for jointly-trained TabPFN survival heads."""
-    from survpfn.models.tabpfn.cox import TabPFNSurvPH
+    from survpfn.models.tabpfn import TabPFNSurvPH
     model = TabPFNSurvPH(
         head_type=head_type,
         learning_rate=kwargs.get("lr", 1e-3),

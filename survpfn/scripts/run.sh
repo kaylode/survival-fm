@@ -40,7 +40,7 @@ OUTPUT_DIR="results/benchmark"
 LOG_DIR="logs"
 
 # FM / deep-model GPU args
-EPOCHS=50
+EPOCHS=100
 LR="1e-3"
 DEVICE="cuda:0"
 
