@@ -5,6 +5,6 @@
     "nodes": "64-64"
   },
   "best_value": 0.9026999490575649,
-  "n_completed_trials": 20,
+  "n_completed_trials": 40,
   "best_trial_number": 18
 }
