@@ -55,6 +55,8 @@ MODEL_ORDER = [
     "rsf", "gbsa",
     "deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace",
     "tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr",
+    "tabicl_cox", "tabicl_deephit", "tabicl_pchazard", "tabicl_mtlr",
+    "tabdpt_cox", "tabdpt_deephit", "tabdpt_pchazard", "tabdpt_mtlr",
     "tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
     "tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
     "tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
@@ -74,15 +76,27 @@ MODEL_LABELS = {
     "deephit_single": "DeepHit",
     "survtrace":      "SurvTrace",
 
-    "tabpfn_embedding_cox":  "TabPFN-Emb-Cox",
-    "tabpfn_embedding_deephit":  "TabPFN-Emb-DeepHit",
-    "tabpfn_embedding_pchazard":  "TabPFN-Emb-PCHaz",
-    "tabpfn_embedding_mtlr":  "TabPFN-Emb-MTLR",
+
     "tabpfn_cox":       "TabPFN-Joint-Cox",
     "tabpfn_deephit":   "TabPFN-Joint-DeepHit",
     "tabpfn_pchazard":  "TabPFN-Joint-PCHaz",
     "tabpfn_mtlr":      "TabPFN-Joint-MTLR",
 
+    "tabicl_cox":       "TabICL-Joint-Cox",
+    "tabicl_deephit":   "TabICL-Joint-DeepHit",
+    "tabicl_pchazard":  "TabICL-Joint-PCHaz",
+    "tabicl_mtlr":      "TabICL-Joint-MTLR",
+
+    "tabdpt_cox":       "TabDPT-Joint-Cox",
+    "tabdpt_deephit":   "TabDPT-Joint-DeepHit",
+    "tabdpt_pchazard":  "TabDPT-Joint-PCHaz",
+    "tabdpt_mtlr":      "TabDPT-Joint-MTLR",
+
+    "tabpfn_embedding_cox":  "TabPFN-Emb-Cox",
+    "tabpfn_embedding_deephit":  "TabPFN-Emb-DeepHit",
+    "tabpfn_embedding_pchazard":  "TabPFN-Emb-PCHaz",
+    "tabpfn_embedding_mtlr":  "TabPFN-Emb-MTLR",
+    
     "tabdpt_embedding_cox":  "TabDPT-Emb-Cox",
     "tabdpt_embedding_deephit":  "TabDPT-Emb-DeepHit",
     "tabdpt_embedding_pchazard":  "TabDPT-Emb-PCHaz",
@@ -106,6 +120,8 @@ MODEL_GROUPS = {
     "Tree":     ["rsf", "gbsa"],
     "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace"],
     "TabPFN-Joint": ["tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr"],
+    "TabICL-Joint": ["tabicl_cox", "tabicl_deephit", "tabicl_pchazard", "tabicl_mtlr"],
+    "TabDPT-Joint": ["tabdpt_cox", "tabdpt_deephit", "tabdpt_pchazard", "tabdpt_mtlr"],
     "TabPFN-Emb": ["tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr"],
     "TabDPT-Emb": ["tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr"],
     "TabICL-Emb": ["tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr"],
@@ -119,8 +135,10 @@ GROUP_COLORS = {
     "Baseline": "#4e79a7",
     "Tree":     "#f28e2b",
     "Deep":     "#59a14f",
-    "TabPFN-Emb": "#e15759",
     "TabPFN-Joint": "#9467bd",
+    "TabICL-Joint": "#76b6b2",
+    "TabDPT-Joint": "#af7aa1",
+    "TabPFN-Emb": "#e15759",
     "TabDPT-Emb": "#76b6b2",
     "TabICL-Emb": "#af7aa1",
     "TabPFN-ZS": "#ff9da7",
@@ -353,7 +371,7 @@ def fig02_cindex_comparison(df: pd.DataFrame, out_dir: Path) -> None:
         ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8, alpha=0.4)
         ax.set_xticks(range(len(sub)))
         ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index],
-                           rotation=45, ha="right", fontsize=8)
+                           rotation=90, ha="right", fontsize=8)
         ax.set_ylabel("C-index" if idx % n_cols == 0 else "")
         ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
         ymax = min(1.0, sub["mean"].max() + 0.08)
@@ -399,7 +417,7 @@ def fig03_ibs_comparison(df: pd.DataFrame, out_dir: Path) -> None:
                        linestyle="--", linewidth=1, alpha=0.6)
         ax.set_xticks(range(len(sub)))
         ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index],
-                           rotation=45, ha="right", fontsize=8)
+                           rotation=90, ha="right", fontsize=8)
         ax.set_ylabel("IBS (↓ better)" if idx % n_cols == 0 else "")
         ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
         ax.grid(axis="y", alpha=0.3)
@@ -445,7 +463,7 @@ def fig04_multimetric_overview(df: pd.DataFrame, out_dir: Path) -> None:
             patch.set_alpha(0.8)
         ax.set_xticks(range(1, len(models) + 1))
         ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in models],
-                           rotation=45, ha="right", fontsize=8)
+                           rotation=90, ha="right", fontsize=8)
         ax.set_ylabel(label)
         ax.set_ylim(*ylim)
         ax.grid(axis="y", alpha=0.3)

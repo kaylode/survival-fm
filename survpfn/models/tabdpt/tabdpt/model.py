@@ -5,6 +5,10 @@ from omegaconf import DictConfig
 from .transformer_layer import TransformerEncoderLayer
 from .models_utils import clip_outliers, normalize_data
 
+from importlib.resources import files
+from pathlib import Path
+TABDPT_CHECKPOINT_PATH: Path = files("survpfn.models.models_diff") / "tabdpt1_1.pth"
+
 class TabDPTModel(nn.Module):
     def __init__(
         self,
@@ -74,7 +78,7 @@ class TabDPTModel(nn.Module):
 
         y_src = y[:eval_pos]
 
-        if len(y_src.shape) == 2:
+        while len(y_src.shape) < len(x.shape):
             y_src = y_src.unsqueeze(-1)
 
         # preproces features by normalizing and clipping outliers

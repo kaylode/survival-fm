@@ -51,7 +51,7 @@ def apply_tuning_params(trial, tuning_config: dict[str, Any]) -> dict[str, Any]:
         if type_ == "float":
             params[name] = trial.suggest_float(name, cfg["low"], cfg["high"], log=cfg.get("log", False))
         elif type_ == "int":
-            params[name] = trial.suggest_int(name, cfg["low"], cfg["high"], log=cfg.get("log", False))
+            params[name] = trial.suggest_int(name, cfg["low"], cfg["high"], step=cfg.get("step", 1), log=cfg.get("log", False))
         elif type_ == "categorical":
             params[name] = trial.suggest_categorical(name, cfg["choices"])
     return params

@@ -1,0 +1,32 @@
+{
+  "tuning": {
+    "lr": {
+      "type": "float",
+      "low": 1e-4,
+      "high": 1e-2,
+      "log": true
+    },
+    "context_size": {
+      "type": "int",
+      "low": 128,
+      "high": 1024,
+      "step": 128
+    },
+    "backbone_dim": {
+      "type": "categorical",
+      "choices": [
+        32,
+        64,
+        128,
+        256
+      ]
+    }
+  },
+  "default": {
+    "lr": 1e-3,
+    "context_size": 100,
+    "backbone_dim": 64,
+    "epochs": 50,
+    "batch_size": 64
+  }
+}

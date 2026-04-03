@@ -170,6 +170,14 @@ _OPTUNA_STUDY: dict[str, tuple[str, str]] = {
     "tabicl_embedding_deephit":  ("optuna_tabicl_deephit.log",    "tabicl_deephit"),
     "tabicl_embedding_pchazard": ("optuna_tabicl_pchazard.log",   "tabicl_pchazard"),
     "tabicl_embedding_mtlr":     ("optuna_tabicl_mtlr.log",       "tabicl_mtlr"),
+    # TabICL jointly-trained heads
+    "tabicl_cox":      ("optuna_tabicl_joint_cox.log",      "tabicl_joint_cox"),
+    "tabicl_deephit":  ("optuna_tabicl_joint_deephit.log",  "tabicl_joint_deephit"),
+    "tabicl_pchazard": ("optuna_tabicl_joint_pchazard.log", "tabicl_joint_pchazard"),
+    "tabicl_mtlr":     ("optuna_tabicl_joint_mtlr.log",     "tabicl_joint_mtlr"),
+    # SODEN + BetaSurv
+    "soden":     ("optuna_soden.log",     "soden_tuning"),
+    "beta_surv": ("optuna_beta_surv.log", "beta_surv_tuning"),
 }
 
 
@@ -392,9 +400,132 @@ def _train_tabpfn_surv(
     return model, risk, surv_df.values.T, surv_df.index.values
 
 
+def _train_tabdpt_surv(
+    head_type: str,
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    dur_col: str,
+    ev_col: str,
+    **kwargs,
+):
+    """Shared implementation for jointly-trained TabDPT survival heads."""
+    from survpfn.models.tabdpt import TabDPTSurvPH
+    model = TabDPTSurvPH(
+        head_type=head_type,
+        learning_rate=kwargs.get("lr", 1e-3),
+        device=kwargs.get("device", "cuda:0"),
+        checkpoint_path=kwargs.get("tabdpt_checkpoint", None),
+        context_size=int(kwargs.get("tabdpt_context_size", 128)),
+    )
+    model.fit(
+        x=df_train.drop(columns=[dur_col, ev_col]).values,
+        durations=df_train[dur_col].values,
+        events=df_train[ev_col].values,
+        epochs=kwargs.get("epochs", 50),
+        batch_size=kwargs.get("batch_size", 64),
+        verbose=False,
+    )
+    surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
+
+    times = surv_df.index.values
+    surv_array = surv_df.values   # (n_times, n_subjects)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    if _trapz is None:
+        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
+    auc = _trapz(surv_array.T, times)
+    risk = -auc
+    return model, risk, surv_df.values.T, surv_df.index.values
+
+
 # ---------------------------------------------------------------------------
 # Model registry
 # ---------------------------------------------------------------------------
+
+def _train_soden(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    dur_col: str,
+    ev_col: str,
+    tune: bool,
+    n_trials: int,
+    out_dir: str,
+    **kwargs,
+):
+    """SODEN neural-ODE continuous-time survival baseline."""
+    from survpfn.models.soden import train_soden
+    return train_soden(
+        df_train, df_test, dur_col, ev_col,
+        hidden_size=kwargs.get("hidden_size", 32),
+        n_layers=kwargs.get("n_layers", 2),
+        lr=kwargs.get("lr", 1e-2),
+        batch_size=kwargs.get("batch_size", 128),
+        epochs=kwargs.get("epochs", 100),
+        device=kwargs.get("device", "cpu"),
+        tune=tune,
+        n_trials=n_trials,
+        save_dir=out_dir,
+    )
+
+
+def _train_tabicl_surv(
+    head_type: str,
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    dur_col: str,
+    ev_col: str,
+    **kwargs,
+):
+    """Shared implementation for jointly-trained TabICL survival heads."""
+    from survpfn.models.tabicl import TabICLSurvPH
+    model = TabICLSurvPH(
+        head_type=head_type,
+        learning_rate=kwargs.get("lr", 1e-3),
+        device=kwargs.get("device", "cuda:0"),
+        context_size=int(kwargs.get("tabicl_context_size", 256)),
+        freeze_tabicl=True,   # frozen embedding by default (Approach A)
+    )
+    model.fit(
+        x=df_train.drop(columns=[dur_col, ev_col]).values,
+        durations=df_train[dur_col].values,
+        events=df_train[ev_col].values,
+        epochs=kwargs.get("epochs", 50),
+        batch_size=kwargs.get("batch_size", 64),
+        verbose=False,
+    )
+    surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
+
+    times = surv_df.index.values
+    surv_array = surv_df.values   # (n_times, n_subjects)
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    if _trapz is None:
+        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
+    auc = _trapz(surv_array.T, times)
+    risk = -auc
+    return model, risk, surv_df.values.T, surv_df.index.values
+
+
+def _train_beta_surv(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    dur_col: str,
+    ev_col: str,
+    tune: bool,
+    n_trials: int,
+    out_dir: str,
+    **kwargs,
+):
+    """BetaSurv: trainable backbone MLP + frozen TabPFN + zero-shot survival ICL."""
+    from survpfn.models.beta_surv import train_beta_surv
+    return train_beta_surv(
+        df_train, df_test, dur_col, ev_col,
+        lr=kwargs.get("lr", 1e-3),
+        epochs=kwargs.get("epochs", 50),
+        device=kwargs.get("device", "cuda:0"),
+        tune=tune,
+        n_trials=n_trials,
+        save_dir=out_dir,
+    )
+
 
 def _make_fm_embedding(fm: str, head: str) -> Callable:
     """Build a benchmark-compatible callable for (fm, head) pair."""
@@ -454,11 +585,25 @@ ALL_MODELS: dict[str, Callable] = {
     "tabdpt_embedding_deephit":  _make_fm_embedding("tabdpt", "deephit"),
     "tabdpt_embedding_pchazard": _make_fm_embedding("tabdpt", "pchazard"),
     "tabdpt_embedding_mtlr":     _make_fm_embedding("tabdpt", "mtlr"),
+    # ── TabDPT jointly-trained (tabdpt_*) ──────────────────────────────────
+    "tabdpt_cox":      lambda *a, **kw: _train_tabdpt_surv("cox",      *a[:4], **kw),
+    "tabdpt_deephit":  lambda *a, **kw: _train_tabdpt_surv("deephit",  *a[:4], **kw),
+    "tabdpt_pchazard": lambda *a, **kw: _train_tabdpt_surv("pchazard", *a[:4], **kw),
+    "tabdpt_mtlr":     lambda *a, **kw: _train_tabdpt_surv("mtlr",     *a[:4], **kw),
     # ── TabICL frozen embedding × 4 heads ──────────────────────────────────
     "tabicl_embedding_cox":      _make_fm_embedding("tabicl", "cox"),
     "tabicl_embedding_deephit":  _make_fm_embedding("tabicl", "deephit"),
     "tabicl_embedding_pchazard": _make_fm_embedding("tabicl", "pchazard"),
     "tabicl_embedding_mtlr":     _make_fm_embedding("tabicl", "mtlr"),
+    # ── TabICL jointly-trained (tabicl_*) — Approach A (frozen) / C (joint) ─
+    "tabicl_cox":      lambda *a, **kw: _train_tabicl_surv("cox",      *a[:4], **kw),
+    "tabicl_deephit":  lambda *a, **kw: _train_tabicl_surv("deephit",  *a[:4], **kw),
+    "tabicl_pchazard": lambda *a, **kw: _train_tabicl_surv("pchazard", *a[:4], **kw),
+    "tabicl_mtlr":     lambda *a, **kw: _train_tabicl_surv("mtlr",     *a[:4], **kw),
+    # ── SODEN (neural-ODE continuous-time baseline) ────────────────────────
+    "soden":      _train_soden,
+    # ── BetaSurv (trainable backbone + frozen TabPFN + zero-shot survival) ─
+    "beta_surv":  _train_beta_surv,
     # ── Zero-shot ICL survival (no survival head; FM used directly) ────────
     "tabpfn_zeroshot":  _make_zeroshot("tabpfn"),
     "tabdpt_zeroshot":  _make_zeroshot("tabdpt"),

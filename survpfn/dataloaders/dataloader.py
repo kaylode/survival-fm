@@ -277,6 +277,28 @@ def load_mimic_dataset(data_dir, skip_tables=None):
 # Dataset registry
 # ---------------------------------------------------------------------------
 
+def _make_survset_loader(ds_name: str) -> Callable[[], tuple]:
+    """Return a zero-argument loader for one SurvSet dataset.
+
+    The dataset name is passed as ``SS_<ds_name>`` in the benchmark CLI
+    (e.g. ``SS_gbsg2``, ``SS_pbc``).  This helper creates a closure so that
+    the SurvSet package is only imported when the dataset is actually loaded.
+    """
+    def _loader():
+        from survpfn.dataloaders.survset import load_survset_dataset
+        return load_survset_dataset(ds_name)
+    _loader.__name__ = f"load_survset_{ds_name}"
+    return _loader
+
+
+# Curated 25-dataset SurvSet subset (prefix SS_ to avoid name collisions)
+_SURVSET_BENCHMARK = [
+    "ova", "lung", "breast", "colon", "gbsg2", "pbc", "hepatocellular",
+    "melanoma", "prostate", "rotterdam", "bladder2", "leader", "nafld1",
+    "nwtco", "retinopathy", "stanford2", "tongue", "udca", "veteran",
+    "whas1", "whas2", "mgus2", "cgd", "cost", "surv2",
+]
+
 BENCHMARK_DATASETS: dict[str, Callable[[], tuple[pd.DataFrame, str, str]]] = {
     # Public — pycox
     "SUPPORT2":  load_support,
@@ -286,4 +308,6 @@ BENCHMARK_DATASETS: dict[str, Callable[[], tuple[pd.DataFrame, str, str]]] = {
     "WHAS500":   load_whas500,
     "VETERANS":  load_veterans,
     "FLCHAIN":   load_flchain,
+    # SurvSet — 25-dataset curated benchmark (SS_ prefix)
+    **{f"SS_{ds}": _make_survset_loader(ds) for ds in _SURVSET_BENCHMARK},
 }

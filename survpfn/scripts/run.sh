@@ -18,13 +18,16 @@
 # Model groups
 # ─────────────────────────────────────────────────────────────────────────────
 #   classical      →  cox  km  rsf  gbsa
-#   deep           →  deepsurv  mtlr  pchazard  deephit_single
+#   deep           →  deepsurv  mtlr  pchazard  deephit_single  soden
 #   tabpfn         →  tabpfn_cox  tabpfn_deephit  tabpfn_pchazard  tabpfn_mtlr
 #   tabpfn_embedding → tabpfn_embedding_cox  tabpfn_embedding_deephit
 #                      tabpfn_embedding_pchazard  tabpfn_embedding_mtlr
-#   tabdpt         →  tabdpt_embedding_{cox,deephit,pchazard,mtlr}
-#   tabicl         →  tabicl_embedding_{cox,deephit,pchazard,mtlr}
+#   tabdpt         →  tabdpt_embedding_{cox,deephit,pchazard,mtlr}  (frozen)
+#   tabdpt_joint   →  tabdpt_{cox,deephit,pchazard,mtlr}            (jointly-trained)
+#   tabicl         →  tabicl_embedding_{cox,deephit,pchazard,mtlr}  (frozen)
+#   tabicl_joint   →  tabicl_{cox,deephit,pchazard,mtlr}            (jointly-trained)
 #   fm_embedding   →  tabpfn_embedding + tabdpt + tabicl  (12 models total)
+#   beta           →  beta_surv  (trainable backbone + frozen TabPFN)
 #   all            →  everything above
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -50,28 +53,36 @@ TABDPT_CONTEXT_SIZE="${TABDPT_CONTEXT_SIZE:-128}"
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
 PUBLIC_DATASETS="SUPPORT2 METABRIC GBSG WHAS500 VETERANS FLCHAIN"
-ALL_DATASETS="$PUBLIC_DATASETS"
+# SurvSet 25-dataset curated benchmark (SS_ prefix)
+SURVSET_DATASETS="SS_ova SS_lung SS_breast SS_colon SS_gbsg2 SS_pbc SS_hepatocellular SS_melanoma SS_prostate SS_rotterdam SS_bladder2 SS_leader SS_nafld1 SS_nwtco SS_retinopathy SS_stanford2 SS_tongue SS_udca SS_veteran SS_whas1 SS_whas2 SS_mgus2 SS_cgd SS_cost SS_surv2"
+# Small SurvSet subset (6 smallest, for fast sanity checks)
+SURVSET_SMALL="SS_tongue SS_veteran SS_udca SS_stanford2 SS_retinopathy SS_hepatocellular"
+ALL_DATASETS="$PUBLIC_DATASETS" # $SURVSET_DATASETS"
 
 # ── Model groups ──────────────────────────────────────────────────────────────
 CLASSICAL_MODELS="cox km rsf gbsa"
-DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace"
+# DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace soden"
+DEEP_MODELS="soden"
+BETA_MODELS="beta_surv"
 
 TABPFN_JOINT="tabpfn_cox tabpfn_deephit tabpfn_pchazard tabpfn_mtlr"
 TABPFN_EMBEDDING="tabpfn_embedding_cox tabpfn_embedding_deephit tabpfn_embedding_pchazard tabpfn_embedding_mtlr"
 TABDPT_MODELS="tabdpt_embedding_cox tabdpt_embedding_deephit tabdpt_embedding_pchazard tabdpt_embedding_mtlr"
+TABDPT_JOINT="tabdpt_cox tabdpt_deephit tabdpt_pchazard tabdpt_mtlr"
 TABICL_MODELS="tabicl_embedding_cox tabicl_embedding_deephit tabicl_embedding_pchazard tabicl_embedding_mtlr"
+TABICL_JOINT="tabicl_cox tabicl_deephit tabicl_pchazard tabicl_mtlr"
 FM_EMBEDDING="$TABPFN_EMBEDDING $TABDPT_MODELS $TABICL_MODELS"
 ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot"
 ZEROSHOT_PERBIN="tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
 
-ALL_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $TABPFN_JOINT $FM_EMBEDDING $ZEROSHOT_MODELS"
+ALL_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $TABPFN_JOINT $TABDPT_JOINT $TABICL_JOINT $FM_EMBEDDING $ZEROSHOT_MODELS $BETA_MODELS"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 usage() {
     echo "Usage: $0 [group] [\"dataset1 dataset2 ...\"] [--parallel]"
     echo ""
     echo "Groups:    all (default) | classical | deep | tabpfn | tabpfn_embedding"
-    echo "           tabdpt | tabicl | fm_embedding | zeroshot | zeroshot_perbin"
+    echo "           tabdpt | tabdpt_joint | tabicl | tabicl_joint | fm_embedding | zeroshot | zeroshot_perbin | beta"
     echo "Datasets:  $PUBLIC_DATASETS"
     echo "Flags:     --parallel   run each dataset as a background job"
     exit 0
@@ -83,7 +94,7 @@ timestamp() { date +"%Y%m%d_%H%M%S"; }
 _extra_args() {
     local models="$1"
     local args=()
-    if echo "$models" | grep -qE "tabpfn_|tabdpt_|tabicl_|survtrace"; then
+    if echo "$models" | grep -qE "tabpfn_|tabdpt_|tabicl|survtrace|soden|beta"; then
         args+=("--epochs" "$EPOCHS" "--lr" "$LR" "--device" "$DEVICE")
     fi
     if echo "$models" | grep -qE "tabdpt_" && [[ -n "$TABDPT_CHECKPOINT" ]]; then
@@ -161,7 +172,14 @@ done
 [[ "$GROUP" == "--help" || "$GROUP" == "-h" ]] && usage
 [[ "$GROUP" == "--parallel" ]] && GROUP="all"
 
-DATASETS="${DATASET_OVERRIDE:-$ALL_DATASETS}"
+# Expand dataset group keywords in DATASET_OVERRIDE
+case "${DATASET_OVERRIDE:-}" in
+    survset)       DATASETS="$SURVSET_DATASETS" ;;
+    survset_small) DATASETS="$SURVSET_SMALL" ;;
+    public)        DATASETS="$PUBLIC_DATASETS" ;;
+    "")            DATASETS="$ALL_DATASETS" ;;
+    *)             DATASETS="$DATASET_OVERRIDE" ;;
+esac
 
 case "$GROUP" in
     all)              MODELS="$ALL_MODELS" ;;
@@ -170,10 +188,13 @@ case "$GROUP" in
     tabpfn)           MODELS="$TABPFN_JOINT" ;;
     tabpfn_embedding) MODELS="$TABPFN_EMBEDDING" ;;
     tabdpt)           MODELS="$TABDPT_MODELS" ;;
+    tabdpt_joint)     MODELS="$TABDPT_JOINT" ;;
     tabicl)           MODELS="$TABICL_MODELS" ;;
+    tabicl_joint)     MODELS="$TABICL_JOINT" ;;
     fm_embedding)     MODELS="$FM_EMBEDDING" ;;
     zeroshot)         MODELS="$ZEROSHOT_MODELS" ;;
     zeroshot_perbin)  MODELS="$ZEROSHOT_PERBIN" ;;
+    beta)             MODELS="$BETA_MODELS" ;;
     *) echo "Unknown group: $GROUP"; usage ;;
 esac
 
