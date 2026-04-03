@@ -39,6 +39,10 @@ dependencies = [
     "tabulate>=0.10.0",
     "loguru>=0.7.3",
     "easydict>=1.13",
+    # --- SurvSet benchmark datasets --------------------------------------
+    "SurvSet>=0.1.0",
+    # --- Neural ODE (SODEN model) ----------------------------------------
+    "torchdiffeq>=0.2.3",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +59,8 @@ dev = [
 survpfn-train = "survpfn.scripts.train:main"
 survpfn-aggregate = "survpfn.xai.aggregate:main"
 survpfn-analyze = "survpfn.xai.analysis:main"
+survpfn-significance = "survpfn.scripts.significance:main"
+survpfn-latex-table = "survpfn.scripts.latex_table:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -70,3 +76,8 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501"]
+
+[tool.setuptools.package-data]
+survpfn = [
+    "models/models_diff/*"
+]

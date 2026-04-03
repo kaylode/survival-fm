@@ -1,0 +1,10 @@
+{
+  "best_params": {
+    "lr": 0.00010825748845288256,
+    "context_size": 256,
+    "backbone_dim": 32
+  },
+  "best_value": -0.26874000951035765,
+  "n_completed_trials": 20,
+  "best_trial_number": 19
+}

@@ -1,0 +1,19 @@
+{
+  "dataset": "WHAS500",
+  "model": "tabicl_cox",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 400,
+  "n_test": 100,
+  "n_features": 22,
+  "n_events_train": 172,
+  "n_events_test": 43,
+  "event_rate_train": 0.43,
+  "event_rate_test": 0.43,
+  "fit_time_s": 15.4393,
+  "eval_time_s": 0.0055,
+  "hpo_included_in_fit_time": true,
+  "n_params": 165120,
+  "timestamp": "2026-04-02T16:45:38.794340"
+}

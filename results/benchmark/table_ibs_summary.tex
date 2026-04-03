@@ -1,0 +1,32 @@
+\begin{table}[t]
+\centering
+\caption{Summary Integrated Brier Score results (mean~$\pm$~std, 5-fold CV). \textbf{Bold} = best, \underline{underline} = second-best.}
+\label{tab:survpfn:summary:ibs}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{SUP2} $\downarrow$ & \textbf{METAB} $\downarrow$ & \textbf{GBSG} $\downarrow$ & \textbf{WHAS} $\downarrow$ & \textbf{VET} $\downarrow$ & \textbf{FLC} $\downarrow$ \\
+\midrule
+\multicolumn{7}{l}{\textit{\footnotesize Baselines}} \\
+Cox PH & \ensuremath{0.209_{\textcolor{gray}{\pm 0.003}}} & \ensuremath{\underline{0.168}_{\textcolor{gray}{\pm 0.008}}} & \ensuremath{0.185_{\textcolor{gray}{\pm 0.005}}} & \ensuremath{\underline{0.185}_{\textcolor{gray}{\pm 0.038}}} & \ensuremath{\underline{0.111}_{\textcolor{gray}{\pm 0.026}}} & \ensuremath{\underline{0.050}_{\textcolor{gray}{\pm 0.001}}} \\
+RSF & \ensuremath{\textbf{0.191}_{\textcolor{gray}{\pm 0.004}}} & \ensuremath{\textbf{0.166}_{\textcolor{gray}{\pm 0.012}}} & \ensuremath{\textbf{0.180}_{\textcolor{gray}{\pm 0.008}}} & \ensuremath{\textbf{0.180}_{\textcolor{gray}{\pm 0.011}}} & \ensuremath{0.115_{\textcolor{gray}{\pm 0.033}}} & \ensuremath{0.053_{\textcolor{gray}{\pm 0.001}}} \\
+DeepHit & \ensuremath{0.220_{\textcolor{gray}{\pm 0.023}}} & \ensuremath{0.173_{\textcolor{gray}{\pm 0.008}}} & \ensuremath{0.200_{\textcolor{gray}{\pm 0.017}}} & \ensuremath{0.249_{\textcolor{gray}{\pm 0.036}}} & \ensuremath{0.139_{\textcolor{gray}{\pm 0.044}}} & \ensuremath{0.061_{\textcolor{gray}{\pm 0.010}}} \\
+\midrule
+\multicolumn{7}{l}{\textit{\footnotesize FM Frozen}} \\
+TabPFN+DeepHit & \ensuremath{0.518_{\textcolor{gray}{\pm 0.113}}} & \ensuremath{0.464_{\textcolor{gray}{\pm 0.048}}} & \ensuremath{0.311_{\textcolor{gray}{\pm 0.022}}} & \ensuremath{0.392_{\textcolor{gray}{\pm 0.016}}} & \ensuremath{0.378_{\textcolor{gray}{\pm 0.143}}} & \ensuremath{0.184_{\textcolor{gray}{\pm 0.094}}} \\
+TabDPT+DeepHit & \ensuremath{0.226_{\textcolor{gray}{\pm 0.007}}} & \ensuremath{0.190_{\textcolor{gray}{\pm 0.019}}} & \ensuremath{0.214_{\textcolor{gray}{\pm 0.016}}} & \ensuremath{0.236_{\textcolor{gray}{\pm 0.032}}} & \ensuremath{0.118_{\textcolor{gray}{\pm 0.022}}} & \ensuremath{0.133_{\textcolor{gray}{\pm 0.033}}} \\
+TabICL+DeepHit & \ensuremath{0.256_{\textcolor{gray}{\pm 0.018}}} & \ensuremath{0.195_{\textcolor{gray}{\pm 0.028}}} & \ensuremath{0.227_{\textcolor{gray}{\pm 0.026}}} & \ensuremath{0.256_{\textcolor{gray}{\pm 0.054}}} & \ensuremath{0.163_{\textcolor{gray}{\pm 0.050}}} & \ensuremath{0.070_{\textcolor{gray}{\pm 0.020}}} \\
+\midrule
+\multicolumn{7}{l}{\textit{\footnotesize FM Joint}} \\
+TabPFN-Joint+DeepHit & \ensuremath{0.264_{\textcolor{gray}{\pm 0.008}}} & \ensuremath{0.310_{\textcolor{gray}{\pm 0.006}}} & \ensuremath{0.361_{\textcolor{gray}{\pm 0.004}}} & \ensuremath{0.451_{\textcolor{gray}{\pm 0.028}}} & \ensuremath{0.287_{\textcolor{gray}{\pm 0.054}}} & \ensuremath{0.656_{\textcolor{gray}{\pm 0.015}}} \\
+TabICL-Joint+DeepHit & \ensuremath{0.264_{\textcolor{gray}{\pm 0.009}}} & \ensuremath{0.318_{\textcolor{gray}{\pm 0.007}}} & \ensuremath{0.364_{\textcolor{gray}{\pm 0.007}}} & \ensuremath{0.442_{\textcolor{gray}{\pm 0.027}}} & \ensuremath{0.299_{\textcolor{gray}{\pm 0.082}}} & \ensuremath{0.658_{\textcolor{gray}{\pm 0.013}}} \\
+\midrule
+\multicolumn{7}{l}{\textit{\footnotesize Zero-Shot / Other}} \\
+TabPFN ZS & \ensuremath{\underline{0.198}_{\textcolor{gray}{\pm 0.005}}} & \ensuremath{0.182_{\textcolor{gray}{\pm 0.015}}} & \ensuremath{0.197_{\textcolor{gray}{\pm 0.017}}} & \ensuremath{0.208_{\textcolor{gray}{\pm 0.022}}} & \ensuremath{0.121_{\textcolor{gray}{\pm 0.031}}} & \ensuremath{\textbf{0.048}_{\textcolor{gray}{\pm 0.002}}} \\
+TabDPT ZS & \ensuremath{0.204_{\textcolor{gray}{\pm 0.004}}} & \ensuremath{0.170_{\textcolor{gray}{\pm 0.010}}} & \ensuremath{\underline{0.183}_{\textcolor{gray}{\pm 0.007}}} & \ensuremath{0.193_{\textcolor{gray}{\pm 0.005}}} & \ensuremath{\textbf{0.110}_{\textcolor{gray}{\pm 0.031}}} & \ensuremath{0.073_{\textcolor{gray}{\pm 0.006}}} \\
+TabICL ZS & \ensuremath{0.200_{\textcolor{gray}{\pm 0.003}}} & \ensuremath{0.184_{\textcolor{gray}{\pm 0.010}}} & \ensuremath{0.190_{\textcolor{gray}{\pm 0.010}}} & \ensuremath{0.224_{\textcolor{gray}{\pm 0.027}}} & \ensuremath{0.116_{\textcolor{gray}{\pm 0.030}}} & \ensuremath{0.050_{\textcolor{gray}{\pm 0.002}}} \\
+BetaSurv & \ensuremath{0.643} & — & — & — & — & — \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
