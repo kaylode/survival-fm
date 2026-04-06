@@ -211,8 +211,10 @@ def run_fold_model(
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
             c = metrics.get("C-index", float("nan"))
+            ibs = metrics.get("IBS", float("nan"))
+            auc = metrics.get("AUC_mean", float("nan"))
             if not np.isnan(c):
-                print(f"      {C_BLUE}→ SKIPPING (C-index={c:.4f}){C_RESET}")
+                print(f"      {C_BLUE}→ SKIPPING (C={c:.4f} IBS={ibs:.4f} AUC={auc:.4f}){C_RESET}")
                 return metrics
             else:
                 print(f"      {C_YELLOW}→ Metric is NaN, retraining{C_RESET}")
@@ -301,9 +303,11 @@ def run_fold_model(
         json.dump(meta, f, indent=2)
 
     c = metrics.get("C-index", float("nan"))
+    ibs = metrics.get("IBS", float("nan"))
+    auc = metrics.get("AUC_mean", float("nan"))
     t_total = fit_time_s + eval_time_s
     if not np.isnan(c):
-        print(f"      {C_GREEN}→ C-index={c:.4f}{C_RESET}  fit={fit_time_s:.1f}s")
+        print(f"      {C_GREEN}→ C={c:.4f} IBS={ibs:.4f} AUC={auc:.4f}{C_RESET}  fit={fit_time_s:.1f}s")
     else:
         print(f"      {C_YELLOW}→ FAILED  ({t_total:.1f}s){C_RESET}")
     return metrics
