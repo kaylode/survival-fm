@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_PROSTATE",
+  "model": "rsf",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 374,
+  "n_test": 93,
+  "n_features": 31,
+  "n_events_train": 263,
+  "n_events_test": 65,
+  "event_rate_train": 0.7032,
+  "event_rate_test": 0.6989,
+  "fit_time_s": 4.3169,
+  "eval_time_s": 0.0052,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:16:31.570258"
+}

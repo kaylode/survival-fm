@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_GBSG2",
+  "model": "rsf",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 548,
+  "n_test": 138,
+  "n_features": 12,
+  "n_events_train": 239,
+  "n_events_test": 60,
+  "event_rate_train": 0.4361,
+  "event_rate_test": 0.4348,
+  "fit_time_s": 7.3511,
+  "eval_time_s": 0.0083,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T21:54:34.697641"
+}

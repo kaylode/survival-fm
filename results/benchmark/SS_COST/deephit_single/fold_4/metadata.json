@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_COST",
+  "model": "deephit_single",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 415,
+  "n_test": 103,
+  "n_features": 23,
+  "n_events_train": 323,
+  "n_events_test": 81,
+  "event_rate_train": 0.7783,
+  "event_rate_test": 0.7864,
+  "fit_time_s": 10.5997,
+  "eval_time_s": 0.0076,
+  "hpo_included_in_fit_time": true,
+  "n_params": 2282,
+  "timestamp": "2026-04-06T10:35:49.707488"
+}

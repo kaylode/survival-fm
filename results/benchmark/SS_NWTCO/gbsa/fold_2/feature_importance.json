@@ -1,0 +1,19 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_age": 0.2838993887287573,
+    "num_stage": 0.12034811064561104,
+    "fac_stage_1": 0.045481479964350584,
+    "fac_stage_2": 0.0,
+    "fac_stage_3": 0.0,
+    "fac_stage_4": 0.007435467554604643,
+    "fac_study_3": 0.0,
+    "fac_study_4": 0.0,
+    "fac_in_subcohort_False": 0.0,
+    "fac_in_subcohort_True": 0.0,
+    "fac_instit_1": 0.0,
+    "fac_instit_2": 0.0,
+    "fac_histol_1": 0.2605827752674315,
+    "fac_histol_2": 0.2822527778392449
+  }
+}

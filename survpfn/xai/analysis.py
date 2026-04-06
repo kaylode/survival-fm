@@ -19,7 +19,8 @@ fig09_sirbu_multitask        Performance across the 4 Sirbu outcomes
 fig10_feature_importance_*   Cox hazard ratios + tree importances per dataset
 fig11_hpo_convergence        Optuna best-value vs n_trials
 fig11b_hpo_convergence_speed Optuna convergence speed (best trial / n_trials)
-fig12_ranking                Average rank heatmap + sorted bar chart
+fig12a_mean_rank             Average model rank across all datasets (bar chart)
+fig12b_rank_heatmap          Model rank per dataset (heatmap)
 fig13_dcal_heatmap           D-calibration heatmap
 
 Usage
@@ -400,7 +401,7 @@ def fig03_ibs_comparison(df: pd.DataFrame, out_dir: Path) -> None:
         return
     datasets = [d for d in DATASET_ORDER if d in df_ibs["Dataset"].unique()]
     models   = [m for m in MODEL_ORDER   if m in df_ibs["Model"].unique()]
-    n_cols = min(4, len(datasets))
+    n_cols = min(3, len(datasets))
     n_rows = (len(datasets) + n_cols - 1) // n_cols
     summary = (df_ibs.groupby(["Dataset", "Model"], observed=True)["IBS"]
                      .agg(["mean", "std"]).reset_index())
@@ -881,52 +882,67 @@ def fig12_ranking(df: pd.DataFrame, out_dir: Path) -> None:
     models   = [m for m in MODEL_ORDER if m in df["Model"].unique()]
     datasets = [d for d in DATASET_ORDER if d in df["Dataset"].unique()]
 
-    mean_c = (df.groupby(["Model", "Dataset"], observed=True)["C-index"]
-                .mean().unstack("Dataset")
-                .reindex(index=models, columns=datasets))
-    ranks  = mean_c.rank(ascending=False)                   # 1 = best
-    mean_ranks = ranks.mean(axis=1).dropna().sort_values()  # lower = better
+    configs = [
+        ("C-index", False, "fig12a_mean_rank", "fig12b_rank_heatmap", 
+         "Average Model Rank Across All Datasets\n(ranked by C-index within each dataset)",
+         "Model Rank per Dataset"),
+        ("IBS", True, "fig12c_mean_rank_ibs", "fig12d_rank_heatmap_ibs",
+         "Average Model Rank Across All Datasets\n(ranked by IBS within each dataset, lowest=1)",
+         "Model Rank per Dataset (IBS)")
+    ]
 
-    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    for metric, asc, fname_mean, fname_heat, title_mean, title_heat in configs:
+        if metric not in df.columns or df[metric].isna().all():
+            continue
 
-    # Left: sorted bar chart of mean rank
-    ax = axes[0]
-    mr_models = list(mean_ranks.index)
-    colors = [get_model_color(m) for m in mr_models]
-    bars = ax.barh(range(len(mr_models)), mean_ranks.values, color=colors, edgecolor="white")
-    ax.set_yticks(range(len(mr_models)))
-    ax.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models])
-    ax.set_xlabel("Mean Rank (↓ better)")
-    ax.set_title("Average Model Rank Across All Datasets\n(ranked by C-index within each dataset)",
-                 fontweight="bold")
-    ax.axvline(len(models) / 2, color="gray", linestyle="--", alpha=0.5)
-    ax.grid(axis="x", alpha=0.3)
-    for i, (m, r) in enumerate(mean_ranks.items()):
-        ax.text(r + 0.05, i, f"{r:.1f}", va="center", fontsize=8.5)
+        mean_val = (df.groupby(["Model", "Dataset"], observed=True)[metric]
+                    .mean().unstack("Dataset")
+                    .reindex(index=models, columns=datasets))
+        ranks  = mean_val.rank(ascending=asc)                   # 1 = best
+        mean_ranks = ranks.mean(axis=1) .dropna().sort_values() # lower = better
 
-    # Right: per-dataset rank heatmap
-    ax = axes[1]
-    rank_pivot = ranks.reindex(index=[m for m in MODEL_ORDER if m in ranks.index],
-                               columns=[d for d in DATASET_ORDER if d in ranks.columns])
-    ylabels = [MODEL_LABELS.get(m, m) for m in rank_pivot.index]
-    xlabels = [DATASET_LABELS.get(d, d) for d in rank_pivot.columns]
-    im = ax.imshow(rank_pivot.values.astype(float), cmap="RdYlGn_r",
-                   vmin=1, vmax=len(models), aspect="auto")
-    plt.colorbar(im, ax=ax, label="Rank (1 = best)", shrink=0.75)
-    ax.set_xticks(range(len(xlabels))); ax.set_xticklabels(xlabels, rotation=35, ha="right")
-    ax.set_yticks(range(len(ylabels))); ax.set_yticklabels(ylabels)
-    for i in range(len(rank_pivot.index)):
-        for j in range(len(rank_pivot.columns)):
-            val = rank_pivot.iloc[i, j]
-            if not np.isnan(val):
-                ax.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=8)
-    ax.set_title("Model Rank per Dataset", fontweight="bold")
+        # --- Mean Rank Bar Chart ---
+        fig_a, ax_a = plt.subplots(figsize=(10, 7))
+        mr_models = list(mean_ranks.index)
+        colors = [get_model_color(m) for m in mr_models]
+        ax_a.barh(range(len(mr_models)), mean_ranks.values, color=colors, edgecolor="white")
+        ax_a.set_yticks(range(len(mr_models)))
+        ax_a.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models])
+        ax_a.set_xlabel("Mean Rank (↓ better)")
+        ax_a.set_title(title_mean, fontweight="bold")
+        ax_a.axvline(len(models) / 2, color="gray", linestyle="--", alpha=0.5)
+        ax_a.grid(axis="x", alpha=0.3)
+        for i, (m, r) in enumerate(mean_ranks.items()):
+            ax_a.text(r + 0.05, i, f"{r:.1f}", va="center", fontsize=8.5)
 
-    legend_handles = [mpatches.Patch(color=c, label=g) for g, c in GROUP_COLORS.items()]
-    fig.legend(handles=legend_handles, loc="lower center", ncol=len(MODEL_GROUPS),
-               bbox_to_anchor=(0.5, -0.04), frameon=True, title="Model Group", fontsize=9)
-    fig.tight_layout(rect=[0, 0.06, 1, 1])
-    save_fig(fig, out_dir, "fig12_ranking")
+        legend_handles = [mpatches.Patch(color=c, label=g) for g, c in GROUP_COLORS.items()]
+        fig_a.legend(handles=legend_handles, loc="lower center", ncol=4,
+                     bbox_to_anchor=(0.5, -0.05), frameon=True, title="Model Group", fontsize=9)
+        fig_a.tight_layout(rect=[0, 0.05, 1, 1])
+        save_fig(fig_a, out_dir, fname_mean)
+
+        # --- Per-dataset Rank Heatmap ---
+        fig_b, ax_b = plt.subplots(figsize=(11, 8))
+        rank_pivot = ranks.reindex(index=[m for m in MODEL_ORDER if m in ranks.index],
+                                   columns=[d for d in DATASET_ORDER if d in ranks.columns])
+        ylabels = [MODEL_LABELS.get(m, m) for m in rank_pivot.index]
+        xlabels = [DATASET_LABELS.get(d, d) for d in rank_pivot.columns]
+        im = ax_b.imshow(rank_pivot.values.astype(float), cmap="RdYlGn_r",
+                        vmin=1, vmax=len(models), aspect="auto")
+        plt.colorbar(im, ax=ax_b, label="Rank (1 = best)", shrink=0.75)
+        ax_b.set_xticks(range(len(xlabels))); ax_b.set_xticklabels(xlabels, rotation=35, ha="right")
+        ax_b.set_yticks(range(len(ylabels))); ax_b.set_yticklabels(ylabels)
+        for i in range(len(rank_pivot.index)):
+            for j in range(len(rank_pivot.columns)):
+                val = rank_pivot.iloc[i, j]
+                if not np.isnan(val):
+                    ax_b.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=8)
+        ax_b.set_title(title_heat, fontweight="bold")
+
+        fig_b.legend(handles=legend_handles, loc="lower center", ncol=4,
+                     bbox_to_anchor=(0.5, -0.05), frameon=True, title="Model Group", fontsize=9)
+        fig_b.tight_layout(rect=[0, 0.05, 1, 1])
+        save_fig(fig_b, out_dir, fname_heat)
 
 
 # ---------------------------------------------------------------------------

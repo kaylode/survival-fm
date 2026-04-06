@@ -1,6 +1,6 @@
 # SurvPFN
 
-**In-Context Survival Analysis via Tabular Foundation Models with Retrieval Augmentation**
+**In-Context Survival Analysis via Tabular Foundation Models**
 
 [![Paper](https://img.shields.io/badge/paper-under%20review-yellow)](.)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -11,27 +11,31 @@
 
 ## Abstract
 
-Survival analysis on clinical tabular data remains challenging: classical Cox proportional hazards and even modern deep survival models depend on handcrafted features and strong parametric assumptions that rarely hold in practice. SurvPFN proposes using TabPFN — a Bayesian in-context learning model trained as a prior-fitted network — as a powerful embedding backbone, decoupled from the choice of survival head. We further equip SurvPFN with retrieval augmentation to scale in-context learning to large clinical cohorts (N > 1000) by selecting the most informative patient contexts. We evaluate on two private cardiovascular datasets (Sirbu, URRAH) and three public benchmarks (SUPPORT2, METABRIC, GBSG).
+Survival analysis on clinical tabular data remains challenging: classical Cox proportional hazards and even modern deep survival models depend on handcrafted features and strong parametric assumptions that rarely hold in practice. SurvPFN proposes using **Tabular Foundation Models (TabPFN, TabDPT, TabICL)** — Bayesian in-context learning models trained as prior-fitted networks — as powerful embedding backbones, decoupled from the choice of survival head. We further equip SurvPFN with:
+1. **Retrieval Augmentation**: Scale in-context learning to large clinical cohorts (N > 1000) by selecting the most informative patient contexts.
+2. **Competing Risks Support**: Dedicated pathways for medical scenarios with multiple competing event types.
+3. **Modular Adapters**: Linear adapters to align foundation model representations with survival tasks.
+
+We evaluate on several private cardiovascular datasets (Sirbu, URRAH), the **SurvSet Benchmark** (31+ healthcare datasets), and standard public benchmarks (SUPPORT2, METABRIC, GBSG).
 
 ---
 
 ## Key Ideas
 
 ```
-Approach A — Primary (TabPFN-Cox / TabPFN-Surv)
-  Raw features → TabPFN Encoder → Embedding → Survival Head → S(t|x)
-  Heads available: Cox, DeepHit, MTLR, PC-Hazard
+Approach A — Foundation Embedding Backbone (SR & CR)
+  Raw features → FM Encoder (TabPFN/TabDPT/TabICL) → [Adapter] → Embedding → Survival Head → S(t|x) or CIF(t|x)
+  Heads available: Cox, DeepHit, MTLR, PC-Hazard, SurvTrace, DeepHit-CR, etc.
 
-Approach B — Secondary (TabPFN-Retrieval)
-  Raw features → Retrieval (top-K similar patients) → TabPFN Encoder → Embedding → Cox → S(t|x)
+Approach B — Retrieval-Augmented ICL
+  Raw features → Retrieval (top-K similar patients) → FM Encoder → Embedding → Survival Head → S(t|x)
 
-Approach C — Future (End-to-End Fine-Tuning)
-  Raw features → TabPFN Encoder ──┐
-                    (fine-tuned)  ├─ Joint survival loss → S(t|x)
+Approach C — Joint End-to-End Fine-Tuning
+  Raw features → FM Encoder ──┐
+                    (fine-tuned)  ├─ Joint survival loss → S(t|x) / CIF(t|x)
   Survival Head ─────────────────┘
 ```
 
-The survival head is modular: any head (Cox, DeepHit, MTLR, PC-Hazard) can be plugged in on top of the TabPFN embedding, enabling a clean embedding × head ablation grid.
 
 ---
 
@@ -53,120 +57,98 @@ uv sync
 
 ## Datasets
 
-| Dataset | N | Features | Outcomes | Access |
-|---------|--:|---------|----------|--------|
-| Sirbu — Total Mortality (`SIRBU_mortality`) | 8,065 | 78 | All-cause mortality | Restricted |
-| Sirbu — CV Mortality (`SIRBU_cv`) | 8,065 | 78 | Cardiovascular mortality | Restricted |
-| Sirbu — MI (`SIRBU_mi`) | 8,065 | 78 | Myocardial infarction | Restricted |
-| Sirbu — Stroke (`SIRBU_stroke`) | 8,065 | 78 | Stroke | Restricted |
-| SUPPORT2 | ~9,000 | 14 | In-hospital mortality | Public (pycox) |
-| METABRIC | ~1,900 | 9 | Breast cancer survival | Public (pycox) |
-| GBSG | ~2,800 | 7 | Breast cancer recurrence | Public (pycox) |
+| Source | Dataset | N | Features | Outcomes | Access |
+|--------|---------|--:|---------|----------|--------|
+| **Sirbu** | `SIRBU_mortality` | 8,065 | 78 | All-cause mortality | Restricted |
+| | `SIRBU_cv` | 8,065 | 78 | Cardiovascular mortality | Restricted |
+| | `SIRBU_mi` | 8,065 | 78 | Myocardial infarction | Restricted |
+| | `SIRBU_stroke` | 8,065 | 78 | Stroke | Restricted |
+| **PyCox** | `SUPPORT2` | ~9,000 | 14 | In-hospital mortality | Public |
+| | `METABRIC` | ~1,900 | 9 | Breast cancer survival | Public |
+| | `GBSG` | ~2,800 | 7 | Breast cancer recurrence | Public |
+| **SurvSet** | `SURVSET_BENCHMARK` | 31+ | Var. | Diverse healthcare | Public |
 
-Public datasets are downloaded automatically via `pycox` on first use. Private datasets require institutional data access agreements and Excel source files in `Dataset Sirbu/`.
+Public datasets are downloaded automatically. Private datasets require Excel source files in `Dataset Sirbu/`.
+
 
 ---
 
 ## Models
 
-| Key | Model | Type | File |
-|-----|-------|------|------|
-| `km` | Kaplan-Meier | Classical baseline | `models/classical.py` |
-| `cox` | Cox PH | Classical | `models/classical.py` |
-| `rsf` | Random Survival Forest | Tree | `models/tree.py` |
-| `gbsa` | Gradient Boosting Survival | Tree | `models/tree.py` |
-| `deepsurv` | DeepSurv | Deep | `models/deep_surv.py` |
-| `mtlr` | MTLR | Deep | `models/deep_hit.py` |
-| `pchazard` | PC-Hazard | Deep | `models/deep_hit.py` |
-| `deephit_single` | DeepHit (single risk) | Deep | `models/deep_hit.py` |
-| `embedding_cox` | **TabPFN-Cox** | Foundation — Approach A | `models/tabpfn/cox.py` |
-| `surv_cox` | **TabPFN-Surv (Cox head)** | Foundation — Approach C | `models/tabpfn/cox.py` |
-| `surv_deephit` | **TabPFN-Surv (DeepHit head)** | Foundation — Approach C | `models/tabpfn/cox.py` |
-| `surv_pchazard` | **TabPFN-Surv (PC-Hazard head)** | Foundation — Approach C | `models/tabpfn/cox.py` |
-| `surv_mtlr` | **TabPFN-Surv (MTLR head)** | Foundation — Approach C | `models/tabpfn/cox.py` |
+### Foundation Model Adapters
+| Category | Strategy | Models |
+|----------|----------|--------|
+| **Embedding** | Frozen backbone + head | `tabpfn_embedding_*`, `tabdpt_embedding_*`, `tabicl_embedding_*` |
+| **Joint** | Fine-tuned backbone + head | `tabpfn_joint_*`, `tabdpt_joint_*`, `tabicl_joint_*` |
+| **Zero-Shot** | Direct ICL (no head) | `tabpfn_zeroshot`, `tabdpt_zeroshot`, `tabicl_zeroshot` |
 
-All tunable models (rsf, gbsa, deepsurv, mtlr, pchazard, deephit_single, embedding_cox) use **Optuna** for hyperparameter search with journal-based storage, enabling warm restarts across runs.
+*Available heads: `cox`, `deephit`, `pchazard`, `mtlr`. Append `_adapter` for learnable linear projection.*
+
+### Classical & Deep Learning (Single Risk)
+| Family | Models |
+|--------|--------|
+| **Classical** | `km` (Kaplan-Meier), `cox` (Cox PH) |
+| **Tree-based** | `rsf` (Random Survival Forest), `gbsa` (Gradient Boosting) |
+| **Neural** | `deepsurv`, `deephit_single`, `mtlr`, `pchazard`, `survtrace`, `soden`, `beta_surv` |
+
+### Competing Risks (CR)
+| Family | Models |
+|--------|--------|
+| **Classical** | `cox_cr` (Fine-Gray / Cause-specific) |
+| **Neural** | `deephit_cr` |
+| **Foundation** | `tabpfn_embedding_deephit_cr`, `tabpfn_joint_deephit_cr`, `tabpfn_zeroshot_cr_*` |
 
 ---
 
 ## Evaluation Metrics
 
-| Metric | Description |
-|--------|-------------|
-| Harrell's C-index | Discrimination: probability of correct pair ordering |
-| Integrated Brier Score (IBS) | Joint calibration + discrimination over time |
-| Time-dependent AUROC | AUC at each evaluation time point |
-| D-calibration (Haider 2020) | Distributional calibration of predicted survival curves |
+| Metric | Task | Description |
+|--------|------|-------------|
+| **C-Index** | SR & CR | Harrell's / Antolini's concordance index |
+| **IBS** | SR & CR | Integrated Brier Score (calibration + discrimination) |
+| **AUROC(t)** | SR & CR | Time-dependent Area Under the ROC Curve |
+| **D-Cal** | SR | Haider's Distributional Calibration |
+
 
 ---
 
 ## Running Experiments
 
-### Quick start — one dataset, all models
-
+### Quick Start — Single Risk (SR)
 ```bash
+# Individual model run (e.g., GBSG dataset with RSF)
+uv run survpfn/scripts/benchmark.py --datasets GBSG --models rsf --tune --trials 20
+
+# Bulk run (all datasets and SR models)
+bash survpfn/scripts/run_sr.sh all
+```
+
+### Quick Start — Competing Risks (CR)
+```bash
+# Foundation model CR run (SIRBU Myocardial Infarction task)
 uv run survpfn/scripts/benchmark.py \
-    --datasets GBSG \
-    --models all \
-    --tune --trials 20 \
-    --folds 5
+    --datasets SIRBU_mi \
+    --models tabpfn_embedding_deephit_cr \
+    --device cuda:0
+
+# Bulk run (all datasets and CR models)
+bash survpfn/scripts/run_cr.sh all
 ```
 
-### Bulk run — all datasets and model groups (recommended)
+### Analysis & Reporting
+After experiments complete, aggregate results and generate publication-ready tables:
 
 ```bash
-# Classical + tree models (CPU-friendly)
-bash survpfn/scripts/run.sh classical
+# 1. Aggregate results from /results folder
+uv run survpfn/scripts/aggregate.py --results-dir results
 
-# Deep survival models
-bash survpfn/scripts/run.sh deep
+# 2. Generate LaTeX tables (C-index, IBS)
+uv run survpfn/scripts/latex_table.py --input results/aggregated.csv
 
-# TabPFN jointly-trained models (GPU recommended)
-bash survpfn/scripts/run.sh tabpfn
-
-# Everything at once
-bash survpfn/scripts/run.sh all
+# 3. Statistical Significance (Wilcoxon signed-rank tests)
+uv run survpfn/scripts/significance.py --input results/aggregated.csv
 ```
 
-Logs are written to `logs/run_<group>_<timestamp>.log`.
-
-### Sirbu multi-task (4 outcomes)
-
-```bash
-uv run survpfn/scripts/benchmark.py \
-    --datasets SIRBU_mortality SIRBU_cv SIRBU_mi SIRBU_stroke \
-    --models all \
-    --tune --trials 20 \
-    --folds 5
-```
-
-### TabPFN jointly-trained models (GPU options)
-
-```bash
-uv run survpfn/scripts/benchmark.py \
-    --datasets SUPPORT2 METABRIC GBSG SIRBU_mortality \
-    --models surv_cox surv_deephit surv_pchazard surv_mtlr \
-    --epochs 50 --lr 1e-3 --device cuda:0 \
-    --folds 5
-```
-
-### Aggregate results into a single CSV
-
-```bash
-uv run survpfn/scripts/aggregate.py \
-    --results-dir results \
-    --output-dir results
-# Writes: results/aggregated.csv  results/summary.csv
-```
-
-### Generate comparison figures
-
-```bash
-uv run survpfn/xai/plot_comparison.py \
-    --aggregated results/aggregated.csv \
-    --results-dir results \
-    --output-dir xai/figures
-```
 
 ---
 
@@ -195,39 +177,27 @@ No aggregation happens during training. Run `aggregate.py` after all experiments
 ## Project Structure
 
 ```
-survpfn/                            # Python package
-├── dataloaders/
-│   ├── dataloader.py               # Public loaders (SUPPORT2, METABRIC, GBSG)
-│   │                               # + Sirbu multi-task loaders
-│   └── preprocessing.py            # Sirbu-specific cleaning, imputation, task prep
-├── metrics/
-│   ├── metrics.py                  # C-index, IBS, time-dep AUC, D-calibration
-│   └── plotting.py                 # Survival curve plotting utilities
-├── models/
-│   ├── classical.py                # Cox PH (lifelines)
-│   ├── tree.py                     # RSF, GBSA (scikit-survival + Optuna)
-│   ├── deep_surv.py                # DeepSurv (pycox + Optuna)
-│   ├── deep_hit.py                 # DeepHit, MTLR, PC-Hazard (pycox + Optuna)
-│   ├── custom.py                   # TorchSurv custom model
-│   └── tabpfn/
-│       ├── cox.py                  # TabPFN-Cox (Approach A) + TabPFN-Surv (Approach C)
-│       ├── embedding.py            # TabPFN embedding extraction
-│       ├── retrieval.py            # Retrieval augmentation (Approach B)
-│       └── backbone/               # TabPFN transformer backbone utilities
-├── scripts/
-│   ├── benchmark.py                # Unified CV runner — all datasets & models
-│   ├── aggregate.py                # Aggregate result folders → CSV + summary
-│   └── run.sh                      # Bulk experiment launcher (all datasets/models)
-├── utils/
-│   └── io.py                       # I/O helpers
-└── xai/
-    └── plot_comparison.py          # Model comparison figures from aggregated CSV
 
-notebooks/                          # Exploratory analysis
-results/                            # Per-run output (see Results Structure above)
-docs/                               # Research plan, literature survey, code review
-Dataset Sirbu/                      # Private Sirbu source Excel files (restricted)
+survpfn/                            # Python package
+├── dataloaders/                    # Dataset loaders (SurvSet, Sirbu, PyCox)
+├── metrics/                        # Evaluation metrics
+│   ├── single.py                   # Single-risk (C-index, IBS, AUROC)
+│   ├── competing.py                # Competing-risks (CIF-based metrics)
+│   └── calibration.py              # D-Calibration (Haider 2020)
+├── models/
+│   ├── sr_models/                  # Single-risk: Cox, RSF, DeepSurv, Soden...
+│   ├── cr_models/                  # Competing-risks: CR-Cox, DeepHit-CR
+│   ├── tabpfn/                     # TabPFN adapters (Embedding, Joint, Zero-Shot)
+│   ├── tabdpt/                     # TabDPT adapters (Embedding, Joint, Zero-Shot)
+│   └── tabicl/                     # TabICL adapters (Embedding, Joint, Zero-Shot)
+├── scripts/
+│   ├── benchmark.py                # Unified CV runner (entry point)
+│   ├── run_sr.sh / run_cr.sh       # Bulk experiment launchers
+│   ├── latex_table.py              # Generate publication results
+│   └── significance.py             # Statistical tests (Wilcoxon)
+└── xai/                            # Explainability & plotting
 ```
+
 
 ---
 

@@ -1,0 +1,33 @@
+{
+  "type": "cox_coefficients",
+  "coef": {
+    "fac_TumorStage_0": -0.23518954401117667,
+    "fac_TumorStage_1": 0.23518954401117667,
+    "fac_NodalStatus_0": -0.18637207708343814,
+    "fac_NodalStatus_1": 0.18637207708343814,
+    "fac_Histology_0": -0.3139675183366292,
+    "fac_Histology_1": 0.3139675183366292,
+    "fac_CathepsinD_0": -0.12720323606708564,
+    "fac_CathepsinD_1": 0.12720323606708564
+  },
+  "exp_coef": {
+    "fac_TumorStage_0": 0.790421015859273,
+    "fac_TumorStage_1": 1.2651485473382713,
+    "fac_NodalStatus_0": 0.8299647266692299,
+    "fac_NodalStatus_1": 1.2048704816807656,
+    "fac_Histology_0": 0.7305427570179578,
+    "fac_Histology_1": 1.368845273453883,
+    "fac_CathepsinD_0": 0.8805546939374639,
+    "fac_CathepsinD_1": 1.1356477989214138
+  },
+  "p": {
+    "fac_TumorStage_0": 0.3950018146633376,
+    "fac_TumorStage_1": 0.3950018146633376,
+    "fac_NodalStatus_0": 0.48650347499868385,
+    "fac_NodalStatus_1": 0.48650347499868385,
+    "fac_Histology_0": 0.2939074754240488,
+    "fac_Histology_1": 0.2939074754240488,
+    "fac_CathepsinD_0": 0.6365473649414362,
+    "fac_CathepsinD_1": 0.6365473649414362
+  }
+}

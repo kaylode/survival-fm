@@ -13,7 +13,7 @@ import torchtuples as tt
 from typing import Union, List, Optional
 import pandas as pd
 
-from survpfn.models.heads import (
+from survpfn.models.shared.heads import (
     train_fm_embedding_surv,
 )
 
@@ -29,6 +29,9 @@ def train_tabpfn_embedding_surv(
     save_dir: str = "results",
     study_id: Optional[str] = None,
     num_durations: int = 100,
+    task_type: str = "sr",
+    cr_loss_type: str = "deephit",
+    **kwargs
 ) -> tuple:
     """Frozen TabPFN embedding + any survival head.
 
@@ -64,4 +67,7 @@ def train_tabpfn_embedding_surv(
         study_id=study_id,
         fm_name="tabpfn",
         num_durations=num_durations,
+        task_type=task_type,
+        cr_loss_type=cr_loss_type,
+        **kwargs
     )

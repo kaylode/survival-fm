@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_CGD",
+  "model": "cox",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 103,
+  "n_test": 25,
+  "n_features": 30,
+  "n_events_train": 35,
+  "n_events_test": 9,
+  "event_rate_train": 0.3398,
+  "event_rate_test": 0.36,
+  "fit_time_s": 0.0785,
+  "eval_time_s": 0.0034,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-06T08:55:13.254726"
+}

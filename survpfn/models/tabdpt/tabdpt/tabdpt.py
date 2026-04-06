@@ -49,10 +49,11 @@ class TabDPTEstimator(BaseEstimator):
         self.tensor_eval = tensor_eval
         if model is None:
             if path:
-                checkpoint = torch.load(path, weights_only=False)
+                checkpoint = torch.load(path, map_location=self.device, weights_only=False)
                 self.model = TabDPTModel.load(
                     model_state=checkpoint["model"], config=checkpoint["cfg"]
                 )
+                self.model.to(self.device)
                 self.model.eval()
             else:
                 raise ValueError("Either model or path must be provided")
@@ -83,7 +84,10 @@ class TabDPTEstimator(BaseEstimator):
         self.X_train = X
         self.y_train = y
 
-        self.autocast = torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        self.autocast = torch.autocast(
+            device_type="cuda" if "cuda" in str(self.device) else "cpu",
+            dtype=torch.bfloat16 if "cuda" in str(self.device) else torch.float16
+        )
 
     def _prepare_prediction(self, X: np.ndarray) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """preprocess the input data for prediction.

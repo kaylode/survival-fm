@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_HEART",
+  "model": "rsf",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 56,
+  "n_test": 13,
+  "n_features": 6,
+  "n_events_train": 36,
+  "n_events_test": 9,
+  "event_rate_train": 0.6429,
+  "event_rate_test": 0.6923,
+  "fit_time_s": 4.4699,
+  "eval_time_s": 0.004,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:41:01.413527"
+}

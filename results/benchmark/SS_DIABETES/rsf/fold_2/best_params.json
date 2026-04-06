@@ -1,0 +1,10 @@
+{
+  "best_params": {
+    "n_estimators": 110,
+    "min_samples_split": 17,
+    "min_samples_leaf": 19
+  },
+  "best_value": 0.5692508710801394,
+  "n_completed_trials": 20,
+  "best_trial_number": 1
+}

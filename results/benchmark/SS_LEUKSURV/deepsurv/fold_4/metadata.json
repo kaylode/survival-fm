@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_LEUKSURV",
+  "model": "deepsurv",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 835,
+  "n_test": 208,
+  "n_features": 31,
+  "n_events_train": 703,
+  "n_events_test": 176,
+  "event_rate_train": 0.8419,
+  "event_rate_test": 0.8462,
+  "fit_time_s": 10.7954,
+  "eval_time_s": 0.0106,
+  "hpo_included_in_fit_time": true,
+  "n_params": 2241,
+  "timestamp": "2026-04-06T10:51:56.223798"
+}

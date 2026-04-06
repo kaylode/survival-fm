@@ -6,7 +6,7 @@ The pipeline is:
   2. Fit a survival head (with optional Optuna tuning) on the embeddings.
   3. Predict survival on the test embeddings.
 
-All survival-head logic lives in survpfn.models.heads; this module is a
+All survival-head logic lives in survpfn.models.shared.heads; this module is a
 thin configuration wrapper that resolves TabICL-specific settings and
 delegates to train_fm_embedding_surv.
 
@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from survpfn.models.tabicl.embedding import get_tabicl_embeddings
-from survpfn.models.heads import train_fm_embedding_surv
+from survpfn.models.shared.heads import train_fm_embedding_surv
 
 
 def train_tabicl_embedding_surv(
@@ -45,6 +45,9 @@ def train_tabicl_embedding_surv(
     study_id: Optional[str] = None,
     device: Optional[str] = None,
     model_path: Optional[str] = None,
+    task_type: str = "sr",
+    cr_loss_type: str = "deephit",
+    **kwargs
 ) -> tuple:
     """Frozen TabICL embedding + any survival head.
 
@@ -77,4 +80,7 @@ def train_tabicl_embedding_surv(
         save_dir=save_dir,
         study_id=study_id,
         fm_name="tabicl",
+        task_type=task_type,
+        cr_loss_type=cr_loss_type,
+        **kwargs
     )

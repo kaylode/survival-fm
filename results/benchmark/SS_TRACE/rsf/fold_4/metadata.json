@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_TRACE",
+  "model": "rsf",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1503,
+  "n_test": 375,
+  "n_features": 10,
+  "n_events_train": 767,
+  "n_events_test": 191,
+  "event_rate_train": 0.5103,
+  "event_rate_test": 0.5093,
+  "fit_time_s": 22.7097,
+  "eval_time_s": 0.0157,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-06T00:12:48.417621"
+}

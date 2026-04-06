@@ -1,12 +1,12 @@
 {
   "best_params": {
-    "learning_rate": 0.002085429021726618,
-    "hidden_size": 32,
-    "num_hidden_layers": 4,
-    "num_attention_heads": 2,
-    "intermediate_size": 64
+    "learning_rate": 0.0023686959948045084,
+    "hidden_size": 16,
+    "num_hidden_layers": 3,
+    "num_attention_heads": 4,
+    "intermediate_size": 128
   },
-  "best_value": 0.6339285714285714,
+  "best_value": 0.6160714285714286,
   "n_completed_trials": 20,
-  "best_trial_number": 2
+  "best_trial_number": 16
 }

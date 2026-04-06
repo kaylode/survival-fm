@@ -105,11 +105,8 @@ class TabICLEmbeddingExtractor:
         import numpy as np
         X_dummy = np.random.randn(10, 4).astype(np.float32)
         y_dummy = np.array([0, 1] * 5)
-        try:
-            self._clf.fit(X_dummy, y_dummy)
-            self._clf.predict_proba(X_dummy[:2])
-        except Exception:
-            pass
+        self._clf.fit(X_dummy, y_dummy)
+        self._clf.predict_proba(X_dummy[:2])
 
     @torch.no_grad()
     def _embed_batch(
@@ -138,13 +135,16 @@ class TabICLEmbeddingExtractor:
         x_t = torch.from_numpy(X_all).float().unsqueeze(0).to(self.device)   # (1, T, H)
         y_t = torch.from_numpy(y_ctx).long().unsqueeze(0).to(self.device)    # (1, ctx_size)
 
-        # Ensure model is in eval mode
+        # Ensure model is in eval mode and on the correct device
         self._tabicl_model.eval()
+        self._tabicl_model.to(self.device)
 
         # Forward pass
+        device_type = "cuda" if "cuda" in str(self.device) else "cpu"
         with torch.autocast(
-            device_type="cuda" if "cuda" in self.device else "cpu",
-            dtype=torch.float16, enabled="cuda" in self.device
+            device_type=device_type,
+            dtype=torch.float16 if device_type == "cuda" else torch.bfloat16,
+            enabled=True
         ):
             _, embs = self._tabicl_model(x_t, y_train=y_t, return_embeddings=True)
 

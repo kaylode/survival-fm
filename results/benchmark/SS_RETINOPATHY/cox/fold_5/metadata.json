@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_RETINOPATHY",
+  "model": "cox",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 316,
+  "n_test": 78,
+  "n_features": 16,
+  "n_events_train": 124,
+  "n_events_test": 31,
+  "event_rate_train": 0.3924,
+  "event_rate_test": 0.3974,
+  "fit_time_s": 0.0765,
+  "eval_time_s": 0.005,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:40:19.394972"
+}

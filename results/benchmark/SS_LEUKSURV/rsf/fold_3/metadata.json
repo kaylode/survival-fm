@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_LEUKSURV",
+  "model": "rsf",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 834,
+  "n_test": 209,
+  "n_features": 31,
+  "n_events_train": 703,
+  "n_events_test": 176,
+  "event_rate_train": 0.8429,
+  "event_rate_test": 0.8421,
+  "fit_time_s": 8.8277,
+  "eval_time_s": 0.0092,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T23:05:46.199610"
+}

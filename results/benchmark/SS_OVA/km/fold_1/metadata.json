@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_OVA",
+  "model": "km",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 286,
+  "n_test": 72,
+  "n_features": 14,
+  "n_events_train": 212,
+  "n_events_test": 54,
+  "event_rate_train": 0.7413,
+  "event_rate_test": 0.75,
+  "fit_time_s": 0.0007,
+  "eval_time_s": 0.005,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T21:43:56.687928"
+}

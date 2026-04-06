@@ -196,10 +196,9 @@ def get_tabdpt_embeddings(
     X_train: np.ndarray,
     y_train: np.ndarray,
     X_test: np.ndarray,
-    checkpoint_path: Optional[str] = None,
     context_size: int = 128,
-    use_retrieval: bool = True,
     device: str = "cpu",
+    use_retrieval: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract frozen TabDPT embeddings for train and test sets.
 
@@ -216,20 +215,12 @@ def get_tabdpt_embeddings(
     train_emb : (n_train, ninp)
     test_emb  : (n_test,  ninp)
     """
-    if checkpoint_path is None:
-        checkpoint_path = os.environ.get("TABDPT_CHECKPOINT", "")
-    if not checkpoint_path:
-        default_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models/models_diff/tabdpt1_1.pth")
-        if os.path.exists(default_path):
-            checkpoint_path = default_path
-        else:
-            # Absolute path fallback from user
-            fallback_abs = "/home/mpham/workspace/source/ehrfm/survpfn/survpfn/models/models_diff/tabdpt1_1.pth"
-            if os.path.exists(fallback_abs):
-                checkpoint_path = fallback_abs
-
-    if not checkpoint_path:
-        raise ValueError(
+    from survpfn.models.tabdpt.tabdpt.model import TABDPT_CHECKPOINT_PATH
+    checkpoint_path = TABDPT_CHECKPOINT_PATH
+    if os.path.exists(checkpoint_path):
+        pass
+    else:
+        raise FileNotFoundError(
             "No TabDPT checkpoint found.  Pass checkpoint_path= or set "
             "the TABDPT_CHECKPOINT environment variable."
         )

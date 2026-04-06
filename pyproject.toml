@@ -43,6 +43,7 @@ dependencies = [
     "SurvSet>=0.1.0",
     # --- Neural ODE (SODEN model) ----------------------------------------
     "torchdiffeq>=0.2.3",
+    "pytest>=9.0.2",
 ]
 
 [project.optional-dependencies]
@@ -56,7 +57,7 @@ dev = [
 
 [project.scripts]
 # Run the full evaluation pipeline via CLI
-survpfn-train = "survpfn.scripts.train:main"
+survpfn-benchmark = "survpfn.scripts.benchmark:main"
 survpfn-aggregate = "survpfn.xai.aggregate:main"
 survpfn-analyze = "survpfn.xai.analysis:main"
 survpfn-significance = "survpfn.scripts.significance:main"
@@ -81,3 +82,10 @@ ignore = ["E501"]
 survpfn = [
     "models/models_diff/*"
 ]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:SurvSet.*",
+    "ignore::DeprecationWarning:numpy.*",
+]
+

@@ -2,6 +2,9 @@
 import json
 import os
 from typing import Any
+import random
+import numpy as np
+import torch
 
 def load_model_config(model_name: str) -> dict[str, Any]:
     """Load model-specific HPO and default configurations from JSON.
@@ -55,3 +58,15 @@ def apply_tuning_params(trial, tuning_config: dict[str, Any]) -> dict[str, Any]:
         elif type_ == "categorical":
             params[name] = trial.suggest_categorical(name, cfg["choices"])
     return params
+
+def seed_everything(seed: int = 1702):
+    """
+    https://gist.github.com/ihoromi4/b681a9088f348942b01711f251e5f964
+    """
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False

@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_NWTCO",
+  "model": "cox",
+  "fold": 2,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3222,
+  "n_test": 806,
+  "n_features": 14,
+  "n_events_train": 457,
+  "n_events_test": 114,
+  "event_rate_train": 0.1418,
+  "event_rate_test": 0.1414,
+  "fit_time_s": 0.1998,
+  "eval_time_s": 0.0203,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:24:18.671957"
+}

@@ -1,0 +1,28 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_age": 0.5558829746580819,
+    "num_strokeScore": 0.2410762650201026,
+    "num_cholest": 0.05733662302332203,
+    "fac_sex_female": 0.020605326665091014,
+    "fac_sex_male": 0.015858522898496763,
+    "fac_hypTen_no": 0.002500871117078782,
+    "fac_hypTen_yes": 0.0016907641975553848,
+    "fac_ihd_no": 0.0003008192669356335,
+    "fac_ihd_yes": 0.0,
+    "fac_prevStroke_no": 0.004514489094761449,
+    "fac_prevStroke_yes": 0.005811025292371651,
+    "fac_othDisease_no": 0.009483360599379688,
+    "fac_othDisease_yes": 0.008138292034839322,
+    "fac_alcohol_no": 0.005749816111447304,
+    "fac_alcohol_yes": 0.004724274833193841,
+    "fac_diabetes_no": 0.013282501628545688,
+    "fac_diabetes_yes": 0.010410502796589645,
+    "fac_smoke_no": 0.002851316317231543,
+    "fac_smoke_yes": 0.002806297194511703,
+    "fac_atrialFib_no": 0.00873848344973817,
+    "fac_atrialFib_yes": 0.00762700721674258,
+    "fac_hemor_no": 0.008681054007741924,
+    "fac_hemor_yes": 0.011929412576241244
+  }
+}

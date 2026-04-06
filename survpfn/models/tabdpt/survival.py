@@ -6,7 +6,7 @@ The pipeline is:
   2. Fit a survival head (with optional Optuna tuning) on the embeddings.
   3. Predict survival on the test embeddings.
 
-All survival-head logic lives in survpfn.models.heads; this module is a
+All survival-head logic lives in survpfn.models.shared.heads; this module is a
 thin configuration wrapper that resolves TabDPT-specific settings and
 delegates to train_fm_embedding_surv.
 
@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from survpfn.models.tabdpt.embedding import get_tabdpt_embeddings
-from survpfn.models.heads import train_fm_embedding_surv
+from survpfn.models.shared.heads import train_fm_embedding_surv
 
 
 def train_tabdpt_embedding_surv(
@@ -43,10 +43,11 @@ def train_tabdpt_embedding_surv(
     n_trials: int = 20,
     save_dir: str = "results",
     study_id: Optional[str] = None,
-    checkpoint_path: Optional[str] = None,
     context_size: Optional[int] = None,
-    use_retrieval: bool = True,
     device: Optional[str] = None,
+    task_type: str = "sr",
+    cr_loss_type: str = "deephit",
+    **kwargs
 ) -> tuple:
     """Frozen TabDPT embedding + any survival head.
 
@@ -59,11 +60,10 @@ def train_tabdpt_embedding_surv(
     -------
     (model, risk_scores, surv_probs, surv_times)
     """
-    ckpt = checkpoint_path or os.environ.get("TABDPT_CHECKPOINT", "")
     ctx  = context_size    or int(os.environ.get("TABDPT_CONTEXT_SIZE", "128"))
     dev  = device          or os.environ.get("TABDPT_DEVICE", "cpu")
 
-    emb_kwargs = dict(checkpoint_path=ckpt, context_size=ctx, use_retrieval=use_retrieval, device=dev)
+    emb_kwargs = dict(context_size=ctx, use_retrieval=True, device=dev)
 
     return train_fm_embedding_surv(
         df_train, df_test, duration_col, event_col,
@@ -76,4 +76,7 @@ def train_tabdpt_embedding_surv(
         save_dir=save_dir,
         study_id=study_id,
         fm_name="tabdpt",
+        task_type=task_type,
+        cr_loss_type=cr_loss_type,
+        **kwargs
     )

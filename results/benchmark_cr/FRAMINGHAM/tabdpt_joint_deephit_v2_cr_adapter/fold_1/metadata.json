@@ -1,0 +1,19 @@
+{
+  "dataset": "FRAMINGHAM",
+  "model": "tabdpt_joint_deephit_v2_cr_adapter",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3418,
+  "n_test": 855,
+  "n_features": 18,
+  "n_events_train": 1426,
+  "n_events_test": 357,
+  "event_rate_train": 0.4172,
+  "event_rate_test": 0.4175,
+  "fit_time_s": 1690.1393,
+  "eval_time_s": 0.0527,
+  "hpo_included_in_fit_time": true,
+  "n_params": 211444,
+  "timestamp": "2026-04-06T11:04:04.987323"
+}

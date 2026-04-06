@@ -38,6 +38,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchtuples as tt
+import pandas as pd
 
 
 _DEFAULT_CONTEXT_SIZE = 256   # TabICL handles larger contexts than TabDPT
@@ -67,9 +68,15 @@ class TabICLSurvModel(nn.Module):
         head_num_nodes: List[int] = [256, 128],
         dropout: float = 0.2,
         freeze_tabicl: bool = True,
+        task_type: str = "sr",
+        num_events: int = 1,
+        use_adapter: bool = False,
+        input_dim: Optional[int] = None,
     ):
         super().__init__()
         self.tabicl = tabicl_model
+        self.task_type = task_type
+        self.num_events = num_events
 
         # Freeze backbone if requested
         for param in self.tabicl.parameters():
@@ -80,16 +87,38 @@ class TabICLSurvModel(nn.Module):
             tabicl_model.embed_dim * tabicl_model.row_num_cls
         )  # default: 128 * 4 = 512
 
-        # Survival head MLP: icl_dim → hidden_nodes → n_out
-        nodes = [self.icl_dim] + list(head_num_nodes)
-        layers: list[nn.Module] = []
-        for i in range(len(nodes) - 1):
-            layers.append(nn.Linear(nodes[i], nodes[i + 1]))
-            layers.append(nn.BatchNorm1d(nodes[i + 1]))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(p=dropout))
-        layers.append(nn.Linear(nodes[-1], n_out, bias=False))
-        self.survival_head = nn.Sequential(*layers)
+        # --- (1) Input Adapter (used BEFORE TabICL) ---
+        if use_adapter:
+            if input_dim is None:
+                raise ValueError("input_dim must be provided if use_adapter is True")
+            self.input_adapter = nn.Sequential(
+                nn.Linear(input_dim, tabicl_model.n_features),
+                nn.ReLU(),
+                nn.Linear(tabicl_model.n_features, tabicl_model.n_features)
+            )
+        else:
+            self.input_adapter = None
+
+        if task_type == "cr":
+            hidden_dim = head_num_nodes[0] if len(head_num_nodes) > 0 else 128
+            # Cause-specific heads (2-layer, no BatchNorm)
+            self.cs_heads = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(self.icl_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, n_out // num_events)
+                ) for _ in range(num_events)
+            ])
+            self.survival_head = None
+        else:
+            # Survival head MLP: 2-layer, no BatchNorm
+            hidden_dim = head_num_nodes[0] if len(head_num_nodes) > 0 else 256
+            self.survival_head = nn.Sequential(
+                nn.Linear(self.icl_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(p=dropout),
+                nn.Linear(hidden_dim, n_out, bias=False)
+            )
 
         # Stored context — set once after training for pycox inference calls
         self._ctx_x: Optional[torch.Tensor] = None   # (K, n_features)
@@ -149,7 +178,7 @@ class TabICLSurvModel(nn.Module):
         Returns:
             (B,) for Cox; (B, num_durations) for discrete heads.
         """
-        device = next(self.survival_head.parameters()).device
+        device = next(self.parameters()).device
 
         if x_context is None:
             x_context = self._ctx_x
@@ -160,10 +189,14 @@ class TabICLSurvModel(nn.Module):
                 "Call set_context() before prediction, or supply context explicitly."
             )
 
-        # Ensure all inputs are on the correct device
-        x_query = x_query.to(device)
-        x_context = x_context.to(device)
-        y_context = y_context.to(device)
+        # Ensure model itself and all its components are on the correct device
+        self.to(device)
+
+        # Apply Input Adapter if enabled
+        if self.input_adapter is not None:
+             x_query = self.input_adapter(x_query)
+             if x_context is not None:
+                  x_context = self.input_adapter(x_context)
 
         K = x_context.shape[0]
         B = x_query.shape[0]
@@ -186,12 +219,17 @@ class TabICLSurvModel(nn.Module):
             )
 
         # Query row embeddings: (B, icl_dim)
-        # Ensure they are on the correct device (backbone may return CPU)
         query_embs = emb[0, K:, :].to(device)
 
-        out = self.survival_head(query_embs)   # (B, n_out)
-        if out.size(-1) == 1:
-            out = out.squeeze(-1)              # (B,) for Cox
+        if self.task_type == "cr":
+            query_flat = query_embs
+            cs_outs = [head(query_flat) for head in self.cs_heads]
+            out = torch.stack(cs_outs, dim=1)
+            out = torch.softmax(out.view(B, -1), dim=1).view(B, self.num_events, -1)
+        else:
+            out = self.survival_head(query_embs)   # (B, n_out)
+            if out.size(-1) == 1:
+                out = out.squeeze(-1)              # (B,) for Cox
         return out
 
 
@@ -225,11 +263,20 @@ class TabICLSurvPH:
         n_out: Optional[int] = None,
         model_path: Optional[str] = None,
         checkpoint_version: str = "tabicl-classifier-v1.1-0506.ckpt",
+        task_type: str = "sr",
+        num_events: int = 1,
+        use_adapter: bool = False,
+        input_dim: Optional[int] = None,
+        cr_loss_type: str = "deephit",
+        **kwargs
     ):
+        self.task_type = task_type
+        self.num_events = num_events
         self.head_type     = head_type.lower()
         self.device        = device
         self.context_size  = context_size
         self.num_durations = num_durations
+        self.cr_loss_type = cr_loss_type
 
         # ── Load TabICL backbone ─────────────────────────────────────────
         from survpfn.models.tabicl.tabicl.sklearn.classifier import TabICLClassifier
@@ -260,7 +307,12 @@ class TabICLSurvPH:
 
         # ── Build survival net ────────────────────────────────────────────
         if n_out is None:
-            n_out = 1 if self.head_type == "cox" else num_durations
+            if self.head_type == "cox":
+                n_out = 1
+            elif self.task_type == "cr":
+                n_out = num_durations * num_events
+            else:
+                n_out = num_durations
 
         self.net = TabICLSurvModel(
             tabicl_model=tabicl_model,
@@ -268,6 +320,10 @@ class TabICLSurvPH:
             head_num_nodes=head_num_nodes,
             dropout=dropout,
             freeze_tabicl=freeze_tabicl,
+            task_type=task_type,
+            num_events=num_events,
+            use_adapter=use_adapter,
+            input_dim=input_dim,
         ).to(device)
 
         # ── pycox model + optimizer ───────────────────────────────────────
@@ -304,9 +360,11 @@ class TabICLSurvPH:
                 self.net, tt.optim.Adam(lr=learning_rate),
                 duration_index=self.labtrans.cuts,
             )
-
+        elif self.head_type == "deephit_cr":
+            self.labtrans = None
+            self.model = None # Using custom training loop for CR
         else:
-            raise ValueError(f"Unknown head_type: {head_type!r}")
+            raise ValueError(f"Unknown head_type: {self.head_type}")
 
     # ------------------------------------------------------------------
     # fit
@@ -339,6 +397,11 @@ class TabICLSurvPH:
             NLLMTLRLoss,
         )
         from pycox.models.data import pair_rank_mat
+        from survpfn.models.shared.heads import (
+            compute_deephit_cr_loss,
+            compute_deephit_cr_loss_v2,
+            compute_cox_cr_loss
+        )
 
         if self.head_type == "cox":
             criterion_surv = CoxPHLoss()
@@ -349,14 +412,22 @@ class TabICLSurvPH:
         else:   # mtlr
             criterion_surv = NLLMTLRLoss()
 
-        optimizer = self.model.optimizer
+        optimizer = self.model.optimizer if self.model else torch.optim.Adam(self.net.parameters(), lr=0.001)
         N = len(x)
 
         # ── Tensors ─────────────────────────────────────────────────────
         x_pt = torch.from_numpy(x.copy()).float().to(self.device)
 
         # Label transforms for discrete heads
-        if self.labtrans is not None:
+        if self.task_type == "cr":
+            from survpfn.models.shared.heads import discretize_competing_times
+            self._bin_times, t_disc = discretize_competing_times(durations, events, self.num_durations)
+            self.num_durations = len(self._bin_times)
+            dur_pt = torch.from_numpy(t_disc).to(self.device, torch.long)
+            dur_pt_cont = torch.from_numpy(durations.copy()).to(self.device, torch.float32)
+            ev_pt = torch.from_numpy(events.copy()).to(self.device, torch.long)
+            frac_pt = None
+        elif self.labtrans is not None:
             targets = self.labtrans.fit_transform(durations, events)
             dur_pt  = torch.from_numpy(targets[0]).to(self.device)
             ev_pt   = torch.from_numpy(targets[1]).to(self.device)
@@ -377,6 +448,7 @@ class TabICLSurvPH:
             self.net.train()   # survival head → train; TabICL stays eval (via override)
 
             indices   = torch.randperm(N, device=self.device)
+            dur_pt_cont = dur_pt_cont if 'dur_pt_cont' in locals() else dur_pt
             epoch_loss = 0.0
             n_batches  = 0
 
@@ -385,6 +457,7 @@ class TabICLSurvPH:
                 bx   = x_pt[batch_idx]
                 bdur = dur_pt[batch_idx]
                 bev  = ev_pt[batch_idx]
+                bdur_cont = dur_pt_cont[batch_idx]
                 bfrac = frac_pt[batch_idx] if frac_pt is not None else None
 
                 # ── Random context: K samples not in current batch ────────
@@ -403,7 +476,18 @@ class TabICLSurvPH:
                 head_out = self.net(bx, x_context=x_ctx, y_context=y_ctx)
 
                 # ── Loss ──────────────────────────────────────────────────
-                if self.head_type == "cox":
+                if self.task_type == "cr":
+                    if self.cr_loss_type == "deephit":
+                        loss = compute_deephit_cr_loss(head_out, bdur_cont, bev, bdur, 
+                                                       self.num_events, self.num_durations, self.device)
+                    elif self.cr_loss_type == "deephit_v2":
+                        loss = compute_deephit_cr_loss_v2(head_out, bdur_cont, bev, bdur, 
+                                                          self.num_events, self.num_durations, self.device)
+                    elif self.cr_loss_type == "cox":
+                        loss = compute_cox_cr_loss(head_out, bdur_cont, bev, self.num_events, self.device)
+                    else:
+                        raise ValueError(f"Unknown cr_loss_type: {self.cr_loss_type}")
+                elif self.head_type == "cox":
                     loss = criterion_surv(head_out, bdur, bev)
                 elif self.head_type == "deephit":
                     _bdur = bdur.cpu().numpy()
@@ -456,7 +540,16 @@ class TabICLSurvPH:
         self.net.eval()
         x_pt = torch.from_numpy(x).float().to(self.device)
         with torch.no_grad():
-            if self.head_type == "cox":
+            if self.task_type == "cr":
+                out = self.net(x_pt) # (batch, num_events, num_bins)
+                # Convert to CIFs
+                cifs = []
+                for k in range(self.num_events):
+                    cif_k = torch.cumsum(out[:, k, :], dim=1).cpu().numpy()
+                    df = pd.DataFrame(cif_k.T, index=self._bin_times)
+                    cifs.append(df)
+                return cifs
+            elif self.head_type == "cox":
                 return self.model.predict_surv_df(x_pt)
             if hasattr(self.model, "interpolate"):
                 return self.model.interpolate(10).predict_surv_df(x_pt)

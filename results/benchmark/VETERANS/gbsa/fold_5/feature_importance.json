@@ -1,16 +1,16 @@
 {
   "type": "impurity",
   "features": {
-    "Age_in_years": 0.22567203755361875,
-    "Karnofsky_score": 0.33726277547675393,
-    "Months_from_Diagnosis": 0.21149759035375984,
-    "Celltype_adeno": 0.032478585373486295,
-    "Celltype_large": 0.03139295255784441,
-    "Celltype_smallcell": 0.03341229446816885,
-    "Celltype_squamous": 0.04632181062653624,
-    "Prior_therapy_no": 0.0268593696261643,
-    "Prior_therapy_yes": 0.027630903496010606,
-    "Treatment_standard": 0.011984123129870329,
-    "Treatment_test": 0.015487557337786558
+    "Age_in_years": 0.07851968772866516,
+    "Karnofsky_score": 0.521919745708574,
+    "Months_from_Diagnosis": 0.07136059119016543,
+    "Celltype_adeno": 0.11935416070620605,
+    "Celltype_large": 0.011133793345415215,
+    "Celltype_smallcell": 0.08417308608483863,
+    "Celltype_squamous": 0.1008369225446618,
+    "Prior_therapy_no": 0.008639106443570355,
+    "Prior_therapy_yes": 0.004062906247903207,
+    "Treatment_standard": 0.0,
+    "Treatment_test": 0.0
   }
 }

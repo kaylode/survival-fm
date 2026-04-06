@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_BREAST",
+  "model": "cox",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 80,
+  "n_test": 20,
+  "n_features": 8,
+  "n_events_train": 21,
+  "n_events_test": 5,
+  "event_rate_train": 0.2625,
+  "event_rate_test": 0.25,
+  "fit_time_s": 0.0661,
+  "eval_time_s": 0.0029,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T21:54:20.423198"
+}

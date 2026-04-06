@@ -1,0 +1,29 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_karnof": 0.21385048927717298,
+    "num_cd4": 0.7183585733619949,
+    "num_priorzdv": 0.022425972554550744,
+    "num_age": 0.0453649648062813,
+    "fac_tx_0": 0.0,
+    "fac_tx_1": 0.0,
+    "fac_txgrp_1": 0.0,
+    "fac_txgrp_2": 0.0,
+    "fac_txgrp_3": 0.0,
+    "fac_txgrp_4": 0.0,
+    "fac_strat2_0": 0.0,
+    "fac_strat2_1": 0.0,
+    "fac_sex_0": 0.0,
+    "fac_sex_1": 0.0,
+    "fac_raceth_1": 0.0,
+    "fac_raceth_2": 0.0,
+    "fac_raceth_3": 0.0,
+    "fac_raceth_4": 0.0,
+    "fac_raceth_5": 0.0,
+    "fac_ivdrug_1": 0.0,
+    "fac_ivdrug_2": 0.0,
+    "fac_ivdrug_3": 0.0,
+    "fac_hemophil_0": 0.0,
+    "fac_hemophil_1": 0.0
+  }
+}

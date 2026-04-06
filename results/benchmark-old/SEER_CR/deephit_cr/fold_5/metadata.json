@@ -1,0 +1,19 @@
+{
+  "dataset": "SEER_CR",
+  "model": "deephit_cr",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3220,
+  "n_test": 804,
+  "n_features": 23,
+  "n_events_train": 493,
+  "n_events_test": 123,
+  "event_rate_train": 0.1531,
+  "event_rate_test": 0.153,
+  "fit_time_s": 5.3857,
+  "eval_time_s": 0.0232,
+  "hpo_included_in_fit_time": true,
+  "n_params": 13012,
+  "timestamp": "2026-04-04T19:02:56.418240"
+}

@@ -1,0 +1,19 @@
+{
+  "dataset": "VETERANS",
+  "model": "tabdpt_joint_mtlr",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 109,
+  "n_test": 28,
+  "n_features": 11,
+  "n_events_train": 102,
+  "n_events_test": 26,
+  "event_rate_train": 0.9358,
+  "event_rate_test": 0.9286,
+  "fit_time_s": 13.0064,
+  "eval_time_s": 0.0044,
+  "hpo_included_in_fit_time": true,
+  "n_params": 99712,
+  "timestamp": "2026-04-06T02:16:15.218231"
+}

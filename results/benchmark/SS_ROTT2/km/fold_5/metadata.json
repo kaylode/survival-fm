@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_ROTT2",
+  "model": "km",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 2386,
+  "n_test": 596,
+  "n_features": 18,
+  "n_events_train": 1018,
+  "n_events_test": 254,
+  "event_rate_train": 0.4267,
+  "event_rate_test": 0.4262,
+  "fit_time_s": 0.0018,
+  "eval_time_s": 0.0184,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:11:19.780149"
+}

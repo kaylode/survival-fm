@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "tabpfn_embedding_pchazard_adapter",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7098,
+  "n_test": 1775,
+  "n_features": 14,
+  "n_events_train": 4828,
+  "n_events_test": 1208,
+  "event_rate_train": 0.6802,
+  "event_rate_test": 0.6806,
+  "fit_time_s": 8.8676,
+  "eval_time_s": 0.0549,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T17:46:58.386402"
+}

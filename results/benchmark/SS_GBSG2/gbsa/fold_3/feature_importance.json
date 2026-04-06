@@ -1,0 +1,17 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_age": 0.13257674889044507,
+    "num_tsize": 0.047270375761088536,
+    "num_pnodes": 0.5095293926502502,
+    "num_progrec": 0.27226745014896764,
+    "num_estrec": 0.004472234845557008,
+    "fac_horTh_no": 0.0016260720419809895,
+    "fac_horTh_yes": 0.0017018916891815086,
+    "fac_menostat_Post": 0.0,
+    "fac_menostat_Pre": 0.0,
+    "fac_tgrade_I": 0.023147399708772873,
+    "fac_tgrade_II": 0.0,
+    "fac_tgrade_III": 0.007408434263756136
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_karno": 0.3334732367246099,
+    "num_diagtime": 0.17022457477565486,
+    "num_age": 0.2532790219058035,
+    "fac_trt_1": 0.022427938159032084,
+    "fac_trt_2": 0.025641872984809876,
+    "fac_celltype_squamous": 0.03642707125190913,
+    "fac_celltype_smallcell": 0.0529765046780579,
+    "fac_celltype_adeno": 0.049327846511262444,
+    "fac_celltype_large": 0.018879212969190082,
+    "fac_prior_0": 0.01852801742169842,
+    "fac_prior_10": 0.018814702617971742
+  }
+}

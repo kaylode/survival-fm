@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_CGD",
+  "model": "rsf",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 102,
+  "n_test": 26,
+  "n_features": 30,
+  "n_events_train": 35,
+  "n_events_test": 9,
+  "event_rate_train": 0.3431,
+  "event_rate_test": 0.3462,
+  "fit_time_s": 3.9125,
+  "eval_time_s": 0.0038,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T23:02:49.110623"
+}

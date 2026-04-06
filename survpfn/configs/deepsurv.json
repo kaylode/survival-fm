@@ -3,7 +3,7 @@
     "lr": {
       "type": "float",
       "low": 1e-4,
-      "high": 1e-1,
+      "high": 5e-2,
       "log": true
     },
     "dropout": {
@@ -26,6 +26,12 @@
         32,
         64
       ]
+    },
+    "epochs": {
+      "type": "int",
+      "low": 10,
+      "high": 100,
+      "step": 10
     }
   },
   "default": {
@@ -36,6 +42,6 @@
     ],
     "dropout": 0.1,
     "batch_size": 128,
-    "epochs": 300
+    "epochs": 30
   }
 }

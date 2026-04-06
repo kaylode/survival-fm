@@ -1,0 +1,19 @@
+{
+  "dataset": "SS_MGUS",
+  "model": "km",
+  "fold": 2,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 37,
+  "n_test": 9,
+  "n_features": 14,
+  "n_events_train": 36,
+  "n_events_test": 9,
+  "event_rate_train": 0.973,
+  "event_rate_test": 1.0,
+  "fit_time_s": 0.0007,
+  "eval_time_s": 0.0032,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-05T22:42:52.291585"
+}

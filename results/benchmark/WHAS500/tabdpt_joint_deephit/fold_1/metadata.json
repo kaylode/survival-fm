@@ -1,0 +1,19 @@
+{
+  "dataset": "WHAS500",
+  "model": "tabdpt_joint_deephit",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 400,
+  "n_test": 100,
+  "n_features": 22,
+  "n_events_train": 172,
+  "n_events_test": 43,
+  "event_rate_train": 0.43,
+  "event_rate_test": 0.43,
+  "fit_time_s": 47.5568,
+  "eval_time_s": 0.0061,
+  "hpo_included_in_fit_time": true,
+  "n_params": 99712,
+  "timestamp": "2026-04-06T02:00:38.832002"
+}

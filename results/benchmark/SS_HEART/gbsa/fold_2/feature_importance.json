@@ -1,0 +1,11 @@
+{
+  "type": "impurity",
+  "features": {
+    "num_age": 0.39249680064385045,
+    "num_year": 0.5577803947172371,
+    "fac_surgery_0": 0.026893936959932814,
+    "fac_surgery_1": 0.022828867678979802,
+    "fac_transplant_0": 0.0,
+    "fac_transplant_1": 0.0
+  }
+}

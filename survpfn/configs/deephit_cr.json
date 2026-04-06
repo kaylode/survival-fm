@@ -1,0 +1,14 @@
+{
+  "default": {
+    "num_nodes": [128, 64],
+    "dropout": 0.1,
+    "lr": 1e-3,
+    "epochs": 100,
+    "batch_size": 256
+  },
+  "tuning": {
+    "lr": ["log_float", 1e-5, 1e-2],
+    "dropout": ["float", 0.0, 0.5],
+    "num_nodes": ["categorical", [[128, 64], [64, 64], [256, 128]]]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "type": "cox_coefficients",
+  "coef": {
+    "num_karno": -0.6166759642812304,
+    "num_diagtime": 0.004439603548557561,
+    "num_age": -0.0944305006839549,
+    "fac_trt_1": -0.0739377475927575,
+    "fac_trt_2": 0.07393774759275748,
+    "fac_celltype_squamous": -0.16048818358755815,
+    "fac_celltype_smallcell": 0.07137921558014518,
+    "fac_celltype_adeno": 0.19560079219365165,
+    "fac_celltype_large": -0.11015630039128388,
+    "fac_prior_0": -0.03132420438127916,
+    "fac_prior_10": 0.03132420438127916
+  },
+  "exp_coef": {
+    "num_karno": 0.5397355593470865,
+    "num_diagtime": 1.0044494731887497,
+    "num_age": 0.9098909692286608,
+    "fac_trt_1": 0.9287295076892738,
+    "fac_trt_2": 1.0767397737669075,
+    "fac_celltype_squamous": 0.8517278878805004,
+    "fac_celltype_smallcell": 1.0739884217983988,
+    "fac_celltype_adeno": 1.2160413552212201,
+    "fac_celltype_large": 0.8956941270126157,
+    "fac_prior_0": 0.9691613157922383,
+    "fac_prior_10": 1.0318199702209045
+  },
+  "p": {
+    "num_karno": 8.15608978616772e-08,
+    "num_diagtime": 0.9646627464820884,
+    "num_age": 0.3618514247335102,
+    "fac_trt_1": 0.7377501425536273,
+    "fac_trt_2": 0.7377501425536273,
+    "fac_celltype_squamous": 0.3505032195310519,
+    "fac_celltype_smallcell": 0.6990305712513771,
+    "fac_celltype_adeno": 0.23170652394907024,
+    "fac_celltype_large": 0.48858448922322817,
+    "fac_prior_0": 0.8871146269985689,
+    "fac_prior_10": 0.8871146269985689
+  }
+}

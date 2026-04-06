@@ -1,0 +1,13 @@
+{
+  "type": "impurity",
+  "features": {
+    "fac_TumorStage_0": 0.2271943020958184,
+    "fac_TumorStage_1": 0.2390269332221882,
+    "fac_NodalStatus_0": 0.1739043579728559,
+    "fac_NodalStatus_1": 0.2099047912556041,
+    "fac_Histology_0": 0.05705033554424291,
+    "fac_Histology_1": 0.06474772553028199,
+    "fac_CathepsinD_0": 0.014644648858738238,
+    "fac_CathepsinD_1": 0.013526905520270246
+  }
+}
