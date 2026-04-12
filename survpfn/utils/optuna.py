@@ -8,8 +8,7 @@ import optuna
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalFileBackend
 from sklearn.preprocessing import StandardScaler
-
-
+from sklearn.impute import SimpleImputer
 
 
 # ---------------------------------------------------------------------------
@@ -23,15 +22,26 @@ def _scale_fold(
     duration_col: str,
     event_col: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split, scale features (fit on train only), binarize strictly."""
+    """Split, median-impute (if NaNs present), then scale features.
+
+    Both imputer and scaler are fit on the train split only to prevent
+    data leakage from test into train statistics.
+    """
     feat_cols = [c for c in df.columns if c not in {duration_col, event_col}]
 
     df_train = df.iloc[train_idx].reset_index(drop=True).copy()
-    df_test = df.iloc[test_idx].reset_index(drop=True).copy()
+    df_test  = df.iloc[test_idx].reset_index(drop=True).copy()
 
+    # ── Median imputation (only triggers when NaNs exist) ──
+    if df_train[feat_cols].isnull().any().any():
+        imputer = SimpleImputer(strategy="median")
+        df_train[feat_cols] = imputer.fit_transform(df_train[feat_cols])
+        df_test[feat_cols]  = imputer.transform(df_test[feat_cols])
+
+    # ── Standard scaling ──
     scaler = StandardScaler()
     df_train[feat_cols] = scaler.fit_transform(df_train[feat_cols])
-    df_test[feat_cols] = scaler.transform(df_test[feat_cols])
+    df_test[feat_cols]  = scaler.transform(df_test[feat_cols])
 
     return df_train, df_test
 

@@ -119,7 +119,7 @@ def main():
         help="Output CSV path. Defaults to <output-dir>/aggregated.csv.",
     )
     parser.add_argument(
-        "--summary-metric", default="C-index",
+        "--summary-metric", default="C_td",
         help="Metric to include in the printed summary table.",
     )
     args = parser.parse_args()
