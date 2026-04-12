@@ -137,8 +137,12 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
             study.optimize(objective, n_trials=n_remaining)
         params.update(study.best_params)
 
-    # For large datasets cap row-subsampling fraction (GBSA uses `subsample`, not `max_samples`)
-    final_params = {**params}
+    # GBSA uses `subsample` (a fraction 0–1) for stochastic boosting; it does NOT
+    # accept `max_samples` (an RSF-only bagging kwarg).  Strip any RSF-only keys
+    # that may have crept in via a shared config or future edits (BUG-H5).
+    _GBSA_INVALID_KEYS = {"max_samples", "n_jobs", "max_features", "oob_score",
+                          "warm_start", "bootstrap"}
+    final_params = {k: v for k, v in params.items() if k not in _GBSA_INVALID_KEYS}
     if len(X_train) > _MAX_SAMPLES_FIT and "subsample" not in final_params:
         final_params["subsample"] = _MAX_SAMPLES_FIT / len(X_train)
 

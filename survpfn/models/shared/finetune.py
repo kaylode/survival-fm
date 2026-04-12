@@ -20,9 +20,9 @@ from pycox.models.data import pair_rank_mat
 
 from survpfn.models.shared.preprocessing import (
     FMDataPrep,
-    prepare_targets,
     SurvivalTimeBinEncoder,
-    expand_survival_data
+    expand_survival_data,
+    FMTargetPrep
 )
 from survpfn.models.shared.loss import (
     compute_deephit_cr_loss,
@@ -301,7 +301,10 @@ class BaseSurvExpandedFinetune:
                         cls_logits = self.net(bx, x_context=x_ctx, y_context=y_ctx, return_backbone_logits=False)
                         loss = criterion(cls_logits, by) 
                         
-                        if torch.isnan(loss): continue
+                        if torch.isnan(loss): 
+                            print(f"NaN loss at epoch {epoch} during training", flush=True)
+                            continue
+
                         loss.backward()
                         
                         if all(torch.isfinite(p.grad).all() for p in self.net.parameters() if p.grad is not None):
@@ -327,11 +330,17 @@ class BaseSurvExpandedFinetune:
                                 vx_ctx = self.net._to_padded(vx_ctx_raw) if hasattr(self.net, "_to_padded") else vx_ctx_raw
                                 vlogits = self.net(vbx, x_context=vx_ctx, y_context=vy_ctx_raw)
                                 val_loss += criterion(vlogits, vby).item()
+
+                                if torch.isnan(val_loss):
+                                    print(f"  NaN loss at epoch {epoch}", flush=True)
+                                    continue
                                 n_val_batches += 1
                         avg_val_loss = val_loss / max(1, n_val_batches)
                         stop_loss = avg_val_loss
                     else:
                         stop_loss = avg_loss
+
+                    
 
                     if verbose:
                         msg = f"  [{self.backbone_name}/Expanded] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}"
@@ -492,14 +501,13 @@ class BaseJointSurvFinetune:
         self.net.to(self.device) 
 
         # ── 2. Target preparation ──
-        tgt, _ = prepare_targets(
-            durations, events,
+        self._target_prep = FMTargetPrep(
             task_type=self.task_type,
             head_type=self.head_type,
-            labtrans=self.labtrans,
             num_durations=self.num_durations,
-            device=self.device,
+            labtrans=self.labtrans
         )
+        tgt, _ = self._target_prep.fit_transform(durations, events, device=self.device)
         dur_pt, dur_pt_cont, ev_pt = tgt.dur_disc, tgt.dur_cont, tgt.events
         frac_pt = tgt.interval_frac
         if tgt.bin_times is not None:
@@ -523,10 +531,7 @@ class BaseJointSurvFinetune:
         if val_data is not None:
              vx, vd, ve = val_data
              vx_pt_val = self._prep.transform(vx, device=self.device)
-             vtgt, _ = prepare_targets(
-                 vd, ve, task_type=self.task_type, head_type=self.head_type,
-                 labtrans=self.labtrans, num_durations=self.num_durations, device=self.device,
-             )
+             vtgt = self._target_prep.transform(vd, ve, device=self.device)
              vdur_pt_val, vdur_pt_cont_val, vev_pt_val = vtgt.dur_disc, vtgt.dur_cont, vtgt.events
              vfrac_pt_val = vtgt.interval_frac
              vy_bin_pt_val = torch.from_numpy((ve > 0).astype(np.float32)).to(self.device).long() if self.backbone_name == "tabicl" else \
@@ -603,7 +608,8 @@ class BaseJointSurvFinetune:
                         total_loss = loss #+ self.alpha * criterion_cls(cls_logits, by_bin.long())
                         
                         if torch.isnan(total_loss):
-                            break
+                            print(f"NaN loss at epoch {epoch}", flush=True)
+                            continue
                         
                         total_loss.backward()
                         
@@ -670,7 +676,7 @@ class BaseJointSurvFinetune:
                     
                     if torch.isnan(total_loss):
                         print("  NaN loss detected!", flush=True)
-                        break
+                        continue
 
                 if best_state: self.net.load_state_dict(best_state)
                 success = True

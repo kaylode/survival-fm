@@ -250,14 +250,107 @@ class FMDataPrep:
 # Label / target preprocessing
 # ---------------------------------------------------------------------------
 
-@dataclass
-class TargetTensors:
-    """Container for all target tensors needed by the training loop."""
-    dur_disc: torch.Tensor          # discretised / labtrans-transformed duration (for loss)
-    dur_cont: torch.Tensor          # original continuous duration (for CR ranking loss)
-    events: torch.Tensor            # event indicator (float for Cox, long for discrete)
-    interval_frac: Optional[torch.Tensor]  # only for PCHazard
-    bin_times: Optional[np.ndarray]       # CR bin edges (stored for CIF prediction)
+class FMTargetPrep:
+    """Unified target preprocessing for survival and competing risks models.
+    
+    Ensures that binning, label transforms, and discretization are fitted 
+    on training data and applied consistently to validation/test data.
+    """
+    def __init__(
+        self,
+        task_type: str,
+        head_type: str,
+        num_durations: int,
+        labtrans = None,
+    ) -> None:
+        self.task_type = task_type
+        self.head_type = head_type
+        self.num_durations = num_durations
+        self.labtrans = labtrans
+        self.bin_times: Optional[np.ndarray] = None
+        self._fitted = False
+
+    def fit_transform(
+        self,
+        durations: np.ndarray,
+        events: np.ndarray,
+        device: str = "cpu"
+    ) -> Tuple[TargetTensors, int]:
+        """Fit preprocessing on durations/events and return targets."""
+        self._fitted = True
+        return self._prepare(durations, events, device=device, fit=True)
+
+    def transform(
+        self,
+        durations: np.ndarray,
+        events: np.ndarray,
+        device: str = "cpu"
+    ) -> TargetTensors:
+        """Apply fitted preprocessing to new durations/events."""
+        if not self._fitted:
+            raise RuntimeError("FMTargetPrep must be fitted before calling transform().")
+        tgt, _ = self._prepare(durations, events, device=device, fit=False)
+        return tgt
+
+    def _prepare(
+        self,
+        durations: np.ndarray,
+        events: np.ndarray,
+        device: str,
+        fit: bool = False
+    ) -> Tuple[TargetTensors, int]:
+        """Internal helper for fit/transform."""
+        if self.task_type == "cr":
+            if fit:
+                self.bin_times, t_disc = discretize_competing_times(durations, events, self.num_durations)
+            else:
+                # Use fitted bins
+                t_disc = np.digitize(durations, self.bin_times, right=True)
+                t_disc = np.clip(t_disc, 0, len(self.bin_times) - 1)
+            
+            effective_n_dur = len(self.bin_times)
+            return TargetTensors(
+                dur_disc=torch.from_numpy(t_disc).to(device, torch.long),
+                dur_cont=torch.from_numpy(durations.copy()).to(device, torch.float32),
+                events=torch.from_numpy(events.copy()).to(device, torch.long),
+                interval_frac=None,
+                bin_times=self.bin_times,
+            ), effective_n_dur
+
+        elif self.labtrans is not None:
+            if fit:
+                # Add tiny jitter to break ties (only for fitting labtrans)
+                durations_jit = durations + np.random.uniform(0, 1e-7, size=durations.shape)
+                targets = self.labtrans.fit_transform(durations_jit, events)
+            else:
+                targets = self.labtrans.transform(durations, events)
+                
+            frac = (
+                torch.from_numpy(targets[2]).float().to(device)
+                if len(targets) > 2 else None
+            )
+            dur_disc = torch.from_numpy(targets[0]).to(device)
+            ev = torch.from_numpy(targets[1]).to(device)
+            
+            return TargetTensors(
+                dur_disc=dur_disc,
+                dur_cont=torch.from_numpy(durations.copy()).float().to(device),
+                events=ev,
+                interval_frac=frac,
+                bin_times=None,
+            ), self.labtrans.out_features
+
+        else:
+            # Cox: continuous targets (no fitting needed)
+            dur = torch.from_numpy(durations.copy()).float().to(device)
+            ev = torch.from_numpy(events.copy()).float().to(device)
+            return TargetTensors(
+                dur_disc=dur,
+                dur_cont=dur,
+                events=ev,
+                interval_frac=None,
+                bin_times=None,
+            ), self.num_durations
 
 
 def prepare_targets(
@@ -265,49 +358,11 @@ def prepare_targets(
     events: np.ndarray,
     *,
     task_type: str,
-    labtrans,           # pycox label transform object (or None for Cox/CR)
+    labtrans,
     num_durations: int,
     device: str,
     **kwargs
 ) -> Tuple[TargetTensors, int]:
-    """Convert raw (durations, events) arrays to training tensors."""
-    if task_type == "cr":
-        bin_times, t_disc = discretize_competing_times(durations, events, num_durations)
-        effective_n_dur = len(bin_times)
-        return TargetTensors(
-            dur_disc=torch.from_numpy(t_disc).to(device, torch.long),
-            dur_cont=torch.from_numpy(durations.copy()).to(device, torch.float32),
-            events=torch.from_numpy(events.copy()).to(device, torch.long),
-            interval_frac=None,
-            bin_times=bin_times,
-        ), effective_n_dur
-
-    elif labtrans is not None:
-        # Add tiny jitter to break ties (only for fitting labtrans)
-        durations_jit = durations + np.random.uniform(0, 1e-7, size=durations.shape)
-        targets = labtrans.fit_transform(durations_jit, events)
-        frac = (
-            torch.from_numpy(targets[2]).float().to(device)
-            if len(targets) > 2 else None
-        )
-        dur_disc = torch.from_numpy(targets[0]).to(device)
-        ev = torch.from_numpy(targets[1]).to(device)
-        return TargetTensors(
-            dur_disc=dur_disc,
-            dur_cont=torch.from_numpy(durations.copy()).float().to(device),
-            events=ev,
-            interval_frac=frac,
-            bin_times=None,
-        ), labtrans.out_features
-
-    else:
-        # Cox: continuous targets
-        dur = torch.from_numpy(durations.copy()).float().to(device)
-        ev = torch.from_numpy(events.copy()).float().to(device)
-        return TargetTensors(
-            dur_disc=dur,
-            dur_cont=dur,
-            events=ev,
-            interval_frac=None,
-            bin_times=None,
-        ), num_durations
+    """Legacy wrapper for backward compatibility. Note: This still fits every time."""
+    prep = FMTargetPrep(task_type, kwargs.get("head_type", "deephit"), num_durations, labtrans)
+    return prep.fit_transform(durations, events, device=device)

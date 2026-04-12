@@ -302,13 +302,21 @@ def evaluate_sr_survival_eval(
         metrics["C-index"] = c_index
 
         # 3. Integrated Brier Score
-        # Only draw figure if output_dir is provided to save memory
-        ibs_res = evaluator.integrated_brier_score(num_points=n_time_points, draw_figure=bool(output_dir))
+        # Draw figure only when we have a directory to save it to (BUG-M6).
+        # Always close any returned figure immediately after saving to prevent
+        # matplotlib figure accumulation across folds.
+        draw_ibs_fig = output_dir is not None
+        ibs_res = evaluator.integrated_brier_score(num_points=n_time_points, draw_figure=draw_ibs_fig)
         if isinstance(ibs_res, tuple):
-            ibs, (fig, ax) = ibs_res
+            ibs, fig_data = ibs_res
+            # fig_data may be (fig, ax) or just a Figure — handle both
+            fig_obj = fig_data[0] if isinstance(fig_data, (tuple, list)) else fig_data
             if output_dir:
-                fig.savefig(os.path.join(output_dir, "ibs_figure.pdf"))
-            plt.close(fig)
+                try:
+                    fig_obj.savefig(os.path.join(output_dir, "ibs_figure.pdf"))
+                except Exception as _e:
+                    warnings.warn(f"IBS figure save failed: {_e}")
+            plt.close(fig_obj)   # always close regardless of whether we saved
         else:
             ibs = ibs_res
         metrics["IBS"] = ibs

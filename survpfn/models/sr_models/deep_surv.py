@@ -145,9 +145,15 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
 
     # Build standard return values matching the unified API:
     # (model, risk_scores, surv_probs, surv_times)
-    # risk_scores: higher = worse prognosis, so use negative last-row survival
     surv_times = surv_df.index.values.astype(float)
     surv_probs = surv_df.values.T  # shape (n_test, n_times)
-    risk_scores = -surv_df.iloc[-1].values  # negative survival at last time point
+
+    # risk_scores: higher = worse prognosis.
+    # Use −AUC(S(t)) = negative integrated survival, consistent with all other
+    # models (MTLR, PCHazard, DeepHitSingle, SODEN).  The old -S(T_max) was
+    # sensitive to the arbitrary last time point in the grid (BUG-M1).
+    import numpy as _np
+    _trapz = getattr(_np, "trapezoid", getattr(_np, "trapz", None))
+    risk_scores = -_trapz(surv_probs, surv_times, axis=1)
 
     return model, risk_scores, surv_probs, surv_times

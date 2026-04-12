@@ -97,23 +97,15 @@ class ZeroShotSurvivalPredictor:
             import torch
             from survpfn.models.tabpfn.backbone_v2 import get_classifier
 
-            # return TabPFNClassifier(
-            #     n_estimators=1,
-            #     model_path="/home/mpham/workspace/source/ehrfm/survpfn/survpfn/models/models_diff/prior_diff_real_checkpoint_n_0_epoch_42.cpkt",
-            #     device="cuda" if (torch.cuda.is_available() and "cuda" in self.device) else "cpu",
-            # )
+            # Respect self.device — fall back to CPU when CUDA is unavailable or
+            # the caller requested CPU (BUG-H3: was hardcoded to "cuda").
+            _tabpfn_device = (
+                "cuda"
+                if ("cuda" in self.device and torch.cuda.is_available())
+                else "cpu"
+            )
+            return get_classifier(device=_tabpfn_device)
 
-            return get_classifier(device="cuda")
-
-            # return TabPFNClassifier(
-            #     device='cuda', 
-            #     # base_path=pathlib.Path(__file__).parent.parent.resolve(), 
-            #     # model_string='',
-            #     N_ensemble_configurations=1, no_preprocess_mode=False, multiclass_decoder='permutation',
-            #     feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-            #     subsample_features=False
-            # )
-        # Similar for tabdpt, tabicl
         if self.backbone == "tabdpt":
              from survpfn.models.tabdpt.tabdpt.tabdpt import TabDPTClassifier
              chk = self.checkpoint_path or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models/models_diff/tabdpt1_1.pth")

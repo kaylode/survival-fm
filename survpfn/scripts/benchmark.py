@@ -363,19 +363,19 @@ def run_benchmark(
 
     for fold_idx, (train_idx, test_idx) in enumerate(fold_iter):
         fold = fold_idx + 1
-        print(f"\n  --- Fold {fold}/{n_folds} ---")
+        n_folds_display = 1 if use_temporal_split else n_folds
+        print(f"\n  --- Fold {fold}/{n_folds_display} ---")
+
+        # Scale once per fold — shared across all models on this fold.
+        # Fitting _scale_fold inside the model loop would repeat the same
+        # StandardScaler fit N×models times with identical output (BUG-M5).
+        df_train_full, df_test = _scale_fold(df, train_idx, test_idx, dur_col, ev_col)
+        print(f"  Train: {df_train_full.shape[0]} samples | {df_train_full.shape[1] - 2} features "
+              f"| event rate={df_train_full[ev_col].gt(0).mean():.3f}", flush=True)
+        print(f"  Test:  {df_test.shape[0]} samples | {df_test.shape[1] - 2} features "
+              f"| event rate={df_test[ev_col].gt(0).mean():.3f}", flush=True)
 
         for model_name in model_names:
-            df_train_full, df_test = _scale_fold(
-                df, train_idx, test_idx, dur_col, ev_col
-            )
-
-            print("Fold " + str(fold), flush=True)
-            print(f"  Train: {df_train_full.shape[0]} samples | {df_train_full.shape[1] - 2} features "
-                  f"| event rate={df_train_full[ev_col].gt(0).mean():.3f}", flush=True)
-            print(f"  Test:  {df_test.shape[0]} samples | {df_test.shape[1] - 2} features "
-                  f"| event rate={df_test[ev_col].gt(0).mean():.3f}", flush=True)
-
             # Label-efficiency loop: subsample training set to each fraction
             fracs = label_fractions if label_fractions else [1.0]
             for frac in fracs:
