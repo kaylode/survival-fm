@@ -37,6 +37,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from survpfn.dataloaders.data_utils.utils import _encode_df
 
 
 # ---------------------------------------------------------------------------
@@ -90,16 +91,7 @@ SURVSET_SMALL: list[str] = [
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _encode_df(df: pd.DataFrame) -> pd.DataFrame:
-    """One-hot encode categorical columns (fac_*); leave numerics unchanged."""
-    cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-    if cat_cols:
-        dummies = pd.get_dummies(df[cat_cols], drop_first=False)
-        df = pd.concat([df.drop(columns=cat_cols), dummies], axis=1)
-    bool_cols = df.select_dtypes(include=["bool"]).columns.tolist()
-    if bool_cols:
-        df[bool_cols] = df[bool_cols].astype(float)
-    return df
+# Removed local _clean_numerics and _encode_df (now imported from utils)
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +151,7 @@ def load_survset_dataset(ds_name: str) -> tuple[pd.DataFrame, str, str]:
     # Rename SurvSet columns to our standard names
     df = df.rename(columns={"time": "time", "event": "event"})
 
-    # One-hot encode fac_* columns
+    # One-hot encode (also cleans extreme numerics via the shared helper)
     df = _encode_df(df)
 
     # Drop rows with NaN (SurvSet datasets are mostly clean already)

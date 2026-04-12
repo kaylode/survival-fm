@@ -148,10 +148,10 @@ def clean_and_impute(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 
 @lru_cache(maxsize=1)
-def _load_sirbu_base() -> pd.DataFrame:
-    """Load and clean the Sirbu dataset once, cache the result."""
+def _load_ormoni_tirodei_base() -> pd.DataFrame:
+    """Load and clean the OrmoniTirodei dataset once, cache the result."""
 
-    def load_and_merge_data(data_dir="Dataset Sirbu"):
+    def load_and_merge_data(data_dir="data/Dataset Sirbu"):
         data_dir = Path(data_dir)
 
         # Read Excel files
@@ -195,7 +195,7 @@ def _load_sirbu_base() -> pd.DataFrame:
 
         return df_main
 
-    df_raw = load_and_merge_data("Dataset Sirbu")
+    df_raw = load_and_merge_data("data/Dataset Sirbu")
 
 
     return clean_and_impute(df_raw)
@@ -311,23 +311,23 @@ def prepare_stroke_data(df_main):
     return df
 
 
-def load_sirbu_mortality() -> tuple[pd.DataFrame, str, str]:
-    """Sirbu — total mortality (binary event)."""
-    df = prepare_allcause(_load_sirbu_base())
+def load_ormoni_tirodei_mortality() -> tuple[pd.DataFrame, str, str]:
+    """OrmoniTirodei — total mortality (binary event)."""
+    df = prepare_allcause(_load_ormoni_tirodei_base())
     return df.dropna().reset_index(drop=True), "Follow Up Data", "Total mortality"
 
-def load_sirbu_cv() -> tuple[pd.DataFrame, str, str]:
-    """Sirbu — cardiovascular mortality (competing risks, events in {0,1,2})."""
-    df = prepare_cardiovascular_data(_load_sirbu_base())
+def load_ormoni_tirodei_cv() -> tuple[pd.DataFrame, str, str]:
+    """OrmoniTirodei — cardiovascular mortality (competing risks, events in {0,1,2})."""
+    df = prepare_cardiovascular_data(_load_ormoni_tirodei_base())
     return df.dropna().reset_index(drop=True), "Follow Up Data", "death"
 
 
-def load_sirbu_mi() -> tuple[pd.DataFrame, str, str]:
-    """Sirbu — myocardial infarction (competing risks, events in {0,1,2})."""
-    df = prepare_mi_data(_load_sirbu_base())
+def load_ormoni_tirodei_mi() -> tuple[pd.DataFrame, str, str]:
+    """OrmoniTirodei — myocardial infarction (competing risks, events in {0,1,2})."""
+    df = prepare_mi_data(_load_ormoni_tirodei_base())
     return df.dropna().reset_index(drop=True), "MI_date", "events"
 
-def load_sirbu_stroke() -> tuple[pd.DataFrame, str, str]:
-    """Sirbu — stroke (competing risks, events in {0,1,2})."""
-    df = prepare_stroke_data(_load_sirbu_base())
+def load_ormoni_tirodei_stroke() -> tuple[pd.DataFrame, str, str]:
+    """OrmoniTirodei — stroke (competing risks, events in {0,1,2})."""
+    df = prepare_stroke_data(_load_ormoni_tirodei_base())
     return df.dropna().reset_index(drop=True), "Ictus_date", "events"

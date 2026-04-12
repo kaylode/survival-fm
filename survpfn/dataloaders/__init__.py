@@ -11,10 +11,13 @@ from .single import (
 	load_seer_dataset,
 	load_urrah_dataset,
 	load_survset_dataset, SURVSET_BENCHMARK,
-    load_sirbu_cv,
-    load_sirbu_mi,
-    load_sirbu_stroke,
-    load_sirbu_mortality
+    load_ormoni_tirodei_cv,
+    load_ormoni_tirodei_mi,
+    load_ormoni_tirodei_stroke,
+    load_ormoni_tirodei_mortality,
+    temporal_split,
+    load_eicu_survival,
+    load_mimiciv_survival_B,
 )
 
 from .competing import (
@@ -38,10 +41,14 @@ BENCHMARK_DATASETS = {
     # SEER Breast Cancer (public CSV, ~4024 patients)
     "SEER":         load_seer_dataset,
     # SurvSet — 25-dataset curated benchmark (SS_ prefix)
-    "SIRBU_CV": load_sirbu_cv,
-    "SIRBU_MI": load_sirbu_mi,
-    "SIRBU_STROKE": load_sirbu_stroke,
-    "SIRBU_MORTALITY": load_sirbu_mortality,
+    "ORMONI_TIRODEI_CV": load_ormoni_tirodei_cv,
+    "ORMONI_TIRODEI_MI": load_ormoni_tirodei_mi,
+    "ORMONI_TIRODEI_STROKE": load_ormoni_tirodei_stroke,
+    "ORMONI_TIRODEI_MORTALITY": load_ormoni_tirodei_mortality,
+    "URRAH": load_urrah_dataset,
+    # Large-scale ICU survival datasets
+    "EICU_SURV":     load_eicu_survival,
+    "MIMIC_SURV_B":  load_mimiciv_survival_B,
     **{"SS_" + k.upper(): (lambda k=k: load_survset_dataset(k)) for k in SURVSET_BENCHMARK}
 }
 
