@@ -13,6 +13,8 @@ from sksurv.metrics import (
     cumulative_dynamic_auc
 )
 from scipy.stats import wilcoxon
+import matplotlib.pyplot as plt
+import os
 
 from .utils import _get_survival_array, _safe_time_grid
 
@@ -111,7 +113,7 @@ def evaluate_sr(
     metrics = {}
 
     # 1. Concordance Index
-    # Some models predict survival (higher is better), risk scores must be higher for worse outcomes.
+    # 1a. Harrell's C-index
     try:
         c_index, _, _, _, _ = concordance_index_censored(
             y_test_sksurv["event"], y_test_sksurv["time"], risk_scores
@@ -121,69 +123,76 @@ def evaluate_sr(
         warnings.warn(f"C-index computation failed: {e}", stacklevel=2)
         metrics["C-index"] = np.nan
 
+    # 1b. Time-dependent concordance index (Antolini)
     if surv_probs is not None and surv_times is not None:
-        grid = _safe_time_grid(y_train_sksurv, y_test_sksurv, n_points=n_time_points)
-        if len(grid) == 0:
-            return metrics
-
-        if time_horizons is None:
-            # Pick a few percentiles from the test set event times
-            mask = y_test_sksurv["event"]
-            if sum(mask) > 0:
-                time_horizons = np.percentile(y_test_sksurv["time"][mask], [25, 50, 75])
-            else:
-                time_horizons = grid[[len(grid) // 4, len(grid) // 2, 3 * len(grid) // 4]]
-
-        lo, hi = float(grid[0]), float(grid[-1])
-        valid_times = np.array([t for t in time_horizons if lo < t < hi])
-
-        if len(valid_times) > 0:
-            try:
-                # 2. Integrated Brier Score — use full grid for proper integration
-                # Extract valid test subjects for IPCW bounds
-                from .utils import _filter_ipcw_test
-                y_test_ibs, surv_probs_ibs = _filter_ipcw_test(y_train_sksurv, y_test_sksurv, surv_probs)
-                if len(y_test_ibs) > 0:
-                    surv_at_grid = np.zeros((surv_probs_ibs.shape[0], len(grid)))
-                    for i in range(surv_probs_ibs.shape[0]):
-                        surv_at_grid[i, :] = np.interp(grid, surv_times, surv_probs_ibs[i, :])
-
-                    ibs = integrated_brier_score(
-                        y_train_sksurv, y_test_ibs, surv_at_grid, grid
-                    )
-                    metrics["IBS"] = ibs
-                else:
-                    metrics["IBS"] = np.nan
-            except Exception as e:
-                warnings.warn(f"IBS computation failed: {e}", stacklevel=2)
-                metrics["IBS"] = np.nan
-                
-            try:
-                # 3. Time-dependent AUC
-                y_test_auc, risk_scores_auc = _filter_ipcw_test(y_train_sksurv, y_test_sksurv, risk_scores)
-                if len(y_test_auc) > 0:
-                    auc, mean_auc = cumulative_dynamic_auc(
-                        y_train_sksurv, y_test_auc, risk_scores_auc, valid_times
-                    )
-                    metrics["AUC_mean"] = mean_auc
-                    for t, a in zip(valid_times, auc):
-                        metrics[f"AUC_t={t:.1f}"] = a
-                else:
-                    metrics["AUC_mean"] = np.nan
-            except Exception as e:
-                # In case some metrics fail (e.g. no events before T)
-                warnings.warn(f"Time-dependent AUC computation failed: {e}", stacklevel=2)
-                metrics["AUC_mean"] = np.nan
-
-        # 4. D-calibration (reliability)
         try:
-            metrics["D-cal"] = d_calibration(
-                y_test_sksurv["event"], y_test_sksurv["time"],
-                surv_probs, surv_times, n_bins=10
-            )
+            from pycox.evaluation import EvalSurv
+            surv_df = pd.DataFrame(surv_probs.T, index=surv_times)
+            eval_pycox = EvalSurv(surv_df, y_test_sksurv["time"], y_test_sksurv["event"])
+            metrics["C_td"] = eval_pycox.concordance_td('antolini')
         except Exception as e:
-            warnings.warn(f"D-calibration computation failed: {e}", stacklevel=2)
-            metrics["D-cal"] = float("nan")
+            warnings.warn(f"Time-dependent C-index failed: {e}", stacklevel=2)
+            metrics["C_td"] = np.nan
+
+
+    # Filter test subjects for IPCW bounds
+    from .utils import _filter_ipcw_test
+    y_test_ipcw, _all_outs = _filter_ipcw_test(y_train_sksurv, y_test_sksurv, risk_scores, surv_probs)
+    y_test_filtered = y_test_ipcw
+    risk_scores_filtered = _all_outs[0]
+    surv_probs_filtered = _all_outs[1]
+
+    if len(y_test_filtered) == 0:
+        return metrics
+
+    # Only create grid and horizons after filtering
+    grid = _safe_time_grid(y_train_sksurv, y_test_filtered, n_points=n_time_points)
+    if len(grid) == 0:
+        return metrics
+
+    if time_horizons is None:
+        mask = y_test_filtered["event"]
+        if sum(mask) > 0:
+            time_horizons = np.percentile(y_test_filtered["time"][mask], [25, 50, 75])
+        else:
+            time_horizons = grid[[len(grid) // 4, len(grid) // 2, 3 * len(grid) // 4]]
+
+    lo, hi = float(grid[0]), float(grid[-1])
+    valid_times = np.array([t for t in time_horizons if lo < t < hi])
+
+    # 2. Integrated Brier Score
+    # try:
+    surv_at_grid = np.zeros((surv_probs_filtered.shape[0], len(grid)))
+    for i in range(surv_probs_filtered.shape[0]):
+        surv_at_grid[i, :] = np.interp(grid, surv_times, surv_probs_filtered[i, :])
+
+    ibs = integrated_brier_score(
+        y_train_sksurv, y_test_filtered, surv_at_grid, grid
+    )
+    metrics["IBS"] = ibs
+
+    if len(valid_times) > 0:
+        try:
+            # 3. Time-dependent AUC
+            auc, mean_auc = cumulative_dynamic_auc(
+                y_train_sksurv, y_test_filtered, risk_scores_filtered, valid_times
+            )
+            metrics["AUC_mean"] = mean_auc
+            for t, a in zip(valid_times, auc):
+                metrics[f"AUC_t={t:.1f}"] = a
+        except Exception as e:
+            warnings.warn(f"Time-dependent AUC computation failed: {e}", stacklevel=2)
+            metrics["AUC_mean"] = np.nan
+
+    # 4. D-calibration (reliability)
+    try:
+        metrics["D-cal"] = d_calibration(
+            y_test_sksurv["event"], y_test_sksurv["time"],
+            surv_probs, surv_times, n_bins=10
+        )
+    except Exception as e:
+        warnings.warn(f"D-calibration computation failed: {e}", stacklevel=2)
+        metrics["D-cal"] = float("nan")
 
     return metrics
 
@@ -223,3 +232,147 @@ def brier_score_per_time(
         bs = np.full(len(grid), np.nan)
 
     return grid, bs
+
+
+from SurvivalEVAL.Evaluator import SurvivalEvaluator
+from pycox.evaluation import EvalSurv
+
+def evaluate_sr_survival_eval(
+    y_train: pd.DataFrame,
+    y_test: pd.DataFrame,
+    duration_col: str,
+    event_col: str,
+    surv_probs: np.ndarray,
+    surv_times: np.ndarray,
+    n_time_points: int = 100,
+    output_dir: Optional[str] = None,
+    risk_scores = None,
+) -> dict:
+    """
+    Evaluate single risk survival metrics using the SurvivalEVAL package.
+    Provides Concordance, IBS, D-Calibration p-value, and MAE (Margin/Pseudo-obs).
+    """
+    T_train = y_train[duration_col].values.astype(float)
+    E_train = y_train[event_col].values.astype(int)
+    T_test  = y_test[duration_col].values.astype(float)
+    E_test  = y_test[event_col].values.astype(int)
+
+    # Initialise SurvivalEvaluator
+    try:
+        evaluator = SurvivalEvaluator(
+            pred_survs=surv_probs,
+            time_coordinates=surv_times,
+            event_times=T_test,
+            event_indicators=E_test,
+            train_event_times=T_train,
+            train_event_indicators=E_train
+        )
+        
+        # 1. Survival Curves Plotting
+        if output_dir:
+            try:
+                sample_indices = [0, min(10, len(T_test)-1), min(100, len(T_test)-1)]
+                fig, ax = evaluator.plot_survival_curves(sample_indices)
+                os.makedirs(output_dir, exist_ok=True)
+                fig.savefig(os.path.join(output_dir, "survival_curves.pdf"))
+                plt.close(fig)
+            except Exception as e:
+                warnings.warn(f"Survival curve plotting failed: {e}")
+
+        metrics = {}
+        # 2. Concordance (Harrell's C-index)
+        c_index, _, _ = evaluator.concordance()
+
+        # Time-dependent concordance index (Antolini)
+        try:
+            surv_df = pd.DataFrame(surv_probs.T, index=surv_times)
+            eval_pycox = EvalSurv(surv_df, T_test, E_test)
+            metrics["C_td"] = eval_pycox.concordance_td('antolini')
+        except Exception as e:
+            warnings.warn(f"Time-dependent concordance index failed: {e}")
+            metrics["C_td"] = np.nan
+
+        # If nan, compute with sksurv
+        if np.isnan(c_index):
+            y_train_sksurv = _get_survival_array(y_train, duration_col, event_col)
+            y_test_sksurv = _get_survival_array(y_test, duration_col, event_col)
+            c_index, _, _, _, _ = concordance_index_censored(
+                y_test_sksurv["event"], y_test_sksurv["time"], risk_scores
+        )
+        metrics["C-index"] = c_index
+
+        # 3. Integrated Brier Score
+        # Only draw figure if output_dir is provided to save memory
+        ibs_res = evaluator.integrated_brier_score(num_points=n_time_points, draw_figure=bool(output_dir))
+        if isinstance(ibs_res, tuple):
+            ibs, (fig, ax) = ibs_res
+            if output_dir:
+                fig.savefig(os.path.join(output_dir, "ibs_figure.pdf"))
+            plt.close(fig)
+        else:
+            ibs = ibs_res
+        metrics["IBS"] = ibs
+
+        # 4. AUC and Brier Score at Percentiles (q25, q50, q75)
+        try:
+            mask = E_test.astype(bool)
+            if mask.sum() > 0:
+                quantiles = [25, 50, 75]
+                time_horizons = np.percentile(T_test[mask], quantiles)
+                
+                aucs = []
+                briers = []
+                td_cis = []
+                
+                for q, t in zip(quantiles, time_horizons):
+                    # 1. SurvivalEVAL.auc(target_time)
+                    auc_val = evaluator.auc(target_time=t)
+                    metrics[f"D-AUC_q{q}"] = auc_val
+                    aucs.append(auc_val)
+
+                    # 2. SurvivalEVAL.brier_score(target_time)
+                    bs_val = evaluator.brier_score(target_time=t)
+                    metrics[f"BS_q{q}"] = bs_val
+                    briers.append(bs_val)
+                    
+                    # 3. Truncated C-index at horizon t
+                    # We treat events after t as censored at t
+                    T_trunc = np.minimum(T_test, t)
+                    E_trunc = E_test * (T_test <= t)
+                    # For sksurv C-index, we need a risk score. 
+                    # We approximate risk score at time t as 1 - S(t)
+                    risk_t = 1.0 - np.array([np.interp(t, surv_times, s) for s in surv_probs])
+                    try:
+                        ci_t, _, _, _, _ = concordance_index_censored(E_trunc.astype(bool), T_trunc, risk_t)
+                        metrics[f"TD-CI_q{q}"] = ci_t
+                        td_cis.append(ci_t)
+                    except:
+                        metrics[f"TD-CI_q{q}"] = np.nan
+                
+                metrics["AUC_mean"] = np.nanmean(aucs) if aucs else np.nan
+            else:
+                metrics["AUC_mean"] = np.nan
+        except Exception as e:
+            warnings.warn(f"Time-dependent metrics at quantiles failed: {e}")
+            metrics["AUC_mean"] = np.nan
+
+        # 5. D-Calibration (returns p-value and binary details)
+        p_val, dcal_details = evaluator.d_calibration(return_details=True)
+        metrics["D-cal_pval"] = p_val
+
+        # 6. MAE (Mean Absolute Error)
+        try:
+            metrics["MAE-Margin"] = evaluator.mae(method='Margin', weighted=True)
+            metrics["MAE-PO"] = evaluator.mae(method='Pseudo_obs', weighted=True)
+        except Exception:
+            metrics["MAE-Margin"] = np.nan
+            metrics["MAE-PO"] = np.nan
+
+        return metrics
+        
+    except Exception as e:
+        warnings.warn(f"SurvivalEVAL evaluation failed: {e}", stacklevel=2)
+        return {"C-index": np.nan, "IBS": np.nan}
+    finally:
+        # Ensure all figures are closed to prevent memory leaks
+        plt.close('all')

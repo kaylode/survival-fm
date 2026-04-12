@@ -197,6 +197,7 @@ def evaluate_cr(
     cif_per_cause: list,
     surv_times: np.ndarray,
     n_time_points: int = 50,
+    risk_scores = None,
 ) -> dict:
     """Evaluate a competing-risks model with per-cause and macro-averaged metrics.
 
@@ -268,47 +269,50 @@ def evaluate_cr(
             metrics[f"C-index_cause{k}"] = float("nan")
 
         # ── Cause-k IBS and AUC ───────────────────────────────────────────────
-        grid = _safe_time_grid(y_train_k, y_test_k, n_points=n_time_points)
+        from .utils import _filter_ipcw_test
+        # _filter_ipcw_test returns (y_filtered, cif_filtered, risk_filtered)
+        y_test_k_filtered, cif_k_filtered, risk_k_filtered = _filter_ipcw_test(
+            y_train_k, y_test_k, cif_k, risk_k
+        )
+
+        if len(y_test_k_filtered) == 0:
+            metrics[f"IBS_cause{k}"] = float("nan")
+            metrics[f"AUC_cause{k}"] = float("nan")
+            continue
+
+        grid = _safe_time_grid(y_train_k, y_test_k_filtered, n_points=n_time_points)
         if len(grid) == 0:
             metrics[f"IBS_cause{k}"] = float("nan")
             metrics[f"AUC_cause{k}"] = float("nan")
             continue
 
-        from .utils import _filter_ipcw_test
-        
+        # 1. Cause-k IBS
         try:
-            y_test_k_ibs, cif_k_ibs = _filter_ipcw_test(y_train_k, y_test_k, cif_k)
-            if len(y_test_k_ibs) > 0:
-                # Interpolate 1 − CIF_k onto the safe grid
-                surv_k_grid = np.zeros((len(cif_k_ibs), len(grid)))
-                for i in range(len(cif_k_ibs)):
-                    surv_k_grid[i] = 1.0 - np.interp(grid, surv_times, cif_k_ibs[i])
+            # Interpolate 1 − CIF_k onto the safe grid
+            surv_k_grid = np.zeros((len(cif_k_filtered), len(grid)))
+            for i in range(len(cif_k_filtered)):
+                surv_k_grid[i] = 1.0 - np.interp(grid, surv_times, cif_k_filtered[i])
 
-                ibs_k = integrated_brier_score(y_train_k, y_test_k_ibs, surv_k_grid, grid)
-                metrics[f"IBS_cause{k}"] = float(ibs_k)
-                ibs_vals.append(ibs_k)
-            else:
-                metrics[f"IBS_cause{k}"] = float("nan")
+            ibs_k = integrated_brier_score(y_train_k, y_test_k_filtered, surv_k_grid, grid)
+            metrics[f"IBS_cause{k}"] = float(ibs_k)
+            ibs_vals.append(ibs_k)
         except Exception as e:
             warnings.warn(f"Cause-{k} IBS failed: {e}", stacklevel=2)
             metrics[f"IBS_cause{k}"] = float("nan")
 
+        # 2. Cause-k AUC
         lo, hi = float(grid[0]), float(grid[-1])
-        mask_k = y_test_k["event"]
+        mask_k = y_test_k_filtered["event"]
         if mask_k.sum() >= 2:
-            time_horizons = np.percentile(y_test_k["time"][mask_k], [25, 50, 75])
+            time_horizons = np.percentile(y_test_k_filtered["time"][mask_k], [25, 50, 75])
             valid_times   = np.array([t for t in time_horizons if lo < t < hi])
             if len(valid_times) > 0:
                 try:
-                    y_test_k_auc, risk_k_auc = _filter_ipcw_test(y_train_k, y_test_k, risk_k)
-                    if len(y_test_k_auc) > 0:
-                        _, mean_auc_k = cumulative_dynamic_auc(
-                            y_train_k, y_test_k_auc, risk_k_auc, valid_times
-                        )
-                        metrics[f"AUC_cause{k}"] = float(mean_auc_k)
-                        auc_vals.append(mean_auc_k)
-                    else:
-                        metrics[f"AUC_cause{k}"] = float("nan")
+                    _, mean_auc_k = cumulative_dynamic_auc(
+                        y_train_k, y_test_k_filtered, risk_k_filtered, valid_times
+                    )
+                    metrics[f"AUC_cause{k}"] = float(mean_auc_k)
+                    auc_vals.append(mean_auc_k)
                 except Exception as e:
                     warnings.warn(f"Cause-{k} AUC failed: {e}", stacklevel=2)
                     metrics[f"AUC_cause{k}"] = float("nan")
