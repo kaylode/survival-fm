@@ -1,36 +1,39 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# run.sh  –  Bulk benchmark runner for survpfn
+# run_sr.sh — Single-risk survival benchmark runner
 #
-# Usage:
-#   ./run.sh                               # run ALL models on ALL datasets
-#   ./run.sh classical                     # cox + tree models only
-#   ./run.sh deep                          # deep survival baselines only
-#   ./run.sh tabpfn                        # TabPFN jointly-trained heads only
-#   ./run.sh fm_embedding                  # all FM frozen-embedding × head combos
-#   ./run.sh tabpfn_embedding              # TabPFN frozen embedding × 4 heads
-#   ./run.sh tabdpt                        # TabDPT frozen embedding × 4 heads
-#   ./run.sh tabicl                        # TabICL frozen embedding × 4 heads
-#   ./run.sh all GBSG                      # all models, one dataset
-#   ./run.sh deep "GBSG METABRIC"          # deep models, two datasets
-#   ./run.sh --parallel                    # one background job per dataset
+# Usage
+# ─────
+#   ./run_sr.sh                            # all models, all datasets
+#   ./run_sr.sh classical                  # cox + tree baselines only
+#   ./run_sr.sh deep                       # deep survival baselines
+#   ./run_sr.sh fm_embedding               # all FM frozen-embedding models
+#   ./run_sr.sh fm_joint                   # all FM jointly-trained models
+#   ./run_sr.sh fm                         # all FM models (embedding + joint + zeroshot)
+#   ./run_sr.sh tabpfn                     # all TabPFN variants
+#   ./run_sr.sh tabdpt                     # all TabDPT variants
+#   ./run_sr.sh tabicl                     # all TabICL variants
+#   ./run_sr.sh zeroshot                   # zero-shot ICL (single_context mode)
+#   ./run_sr.sh zeroshot_perbin            # zero-shot ICL (per_bin mode)
+#   ./run_sr.sh surv_adapter               # KM-adapter models
+#   ./run_sr.sh all GBSG                   # all SR models, one dataset
+#   ./run_sr.sh deep "GBSG METABRIC"       # deep models, two datasets
+#   ./run_sr.sh classical public           # classical models, public datasets
+#   ./run_sr.sh all --parallel             # one background job per dataset
 #
-# Model groups
-# ─────────────────────────────────────────────────────────────────────────────
-#   classical      →  cox  km  rsf  gbsa
-#   deep           →  deepsurv  mtlr  pchazard  deephit_single  soden
-#   tabpfn         →  tabpfn_cox  tabpfn_deephit  tabpfn_pchazard  tabpfn_mtlr
-#   tabpfn_embedding → tabpfn_embedding_cox  tabpfn_embedding_deephit
-#                      tabpfn_embedding_pchazard  tabpfn_embedding_mtlr
-#   tabdpt         →  tabdpt_embedding_{cox,deephit,pchazard,mtlr}  (frozen)
-#   tabdpt_joint   →  tabdpt_{cox,deephit,pchazard,mtlr}            (jointly-trained)
-#   tabicl         →  tabicl_embedding_{cox,deephit,pchazard,mtlr}  (frozen)
-#   tabicl_joint   →  tabicl_{cox,deephit,pchazard,mtlr}            (jointly-trained)
-#   fm_embedding   →  tabpfn_embedding + tabdpt + tabicl  (12 models total)
-#   beta           →  beta_surv  (trainable backbone + frozen TabPFN)
-#   all            →  everything above
+# Dataset keywords (2nd positional arg)
+# ──────────────────────────────────────
+#   public    → SUPPORT2 METABRIC GBSG WHAS500 VETERANS FLCHAIN SEER
+#   survset   → 26 curated SS_* datasets
+#   ormoni_tirodei → ORMONI_TIRODEI_CV ORMONI_TIRODEI_MI ORMONI_TIRODEI_STROKE ORMONI_TIRODEI_MORTALITY
+#   ehr       → EICU_SURV MIMIC_SURV_B  (large-scale ICU survival)
+#   (default) → public + survset
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "$SCRIPT_DIR/_lib.sh"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 PYTHON="uv run python -m"
@@ -42,190 +45,126 @@ SEED=42
 OUTPUT_DIR="results/benchmark"
 LOG_DIR="logs"
 
-# FM / deep-model GPU args
-EPOCHS=500
-LR="1e-3"
+EPOCHS=50
+LR="1e-4"
 DEVICE="cuda:0"
+BATCH_SIZE=64
+N_ENSEMBLE=5
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
 PUBLIC_DATASETS="SUPPORT2 METABRIC GBSG WHAS500 VETERANS FLCHAIN SEER"
-SIRBU_DATASETS="SIRBU_CV SIRBU_MI SIRBU_STROKE SIRBU_MORTALITY"
-# SurvSet healthcare-only benchmark (SS_ prefix) SS_CANCER SS_BREAST SS_GBSG2 SS_ROTT2 SS_COLON SS_PROSTATE SS_OVARIAN SS_MELANOMA SS_E1684 SS_PBC SS_HEPATOCELLULAR SS_NWTCO SS_RETINOPATHY SS_HEART SS_MGUS 
-SURVSET_DATASETS="SS_CGD SS_COST SS_LEUKSURV SS_DIALYSIS SS_ACTG SS_RHC SS_VLBW SS_GRACE SS_TRACE  SS_DLBCL SS_DIABETES  SS_FRAMINGHAM"
-# Small SurvSet subset (6 datasets for fast sanity checks)
-SURVSET_SMALL="SS_VETERAN SS_RETINOPATHY SS_CANCER SS_PBC SS_CGD SS_HEPATOCELLULAR"
-ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS" #$SIRBU_DATASETS
+ORMONI_TIRODEI_DATASETS="ORMONI_TIRODEI_CV ORMONI_TIRODEI_MI ORMONI_TIRODEI_STROKE ORMONI_TIRODEI_MORTALITY"
+URRAH_DATASETS="URRAH"
+SIRBU_DATASETS="ORMONI_TIRODEI_MORTALITY" #URRAH
+SURVSET_DATASETS="SS_CANCER SS_BREAST SS_GBSG2 SS_ROTT2 SS_COLON SS_PROSTATE \
+SS_OVARIAN SS_MELANOMA SS_E1684 SS_PBC SS_HEPATOCELLULAR SS_NWTCO \
+SS_RETINOPATHY SS_HEART SS_CGD SS_COST SS_LEUKSURV SS_DIALYSIS \
+SS_ACTG SS_RHC SS_VLBW SS_GRACE SS_TRACE SS_DLBCL SS_DIABETES SS_FRAMINGHAM"
+EHR_DATASETS="EICU_SURV MIMIC_SURV_B"
+ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 
-# ── Model groups ──────────────────────────────────────────────────────────────
-CLASSICAL_MODELS="cox km rsf gbsa"
-DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace" #soden"
-# DEEP_MODELS="sur/vtrace" # survtrace soden"
+# ── Model groups (must match analysis.py groupings) ───────────────────────────
+CLASSICAL_MODELS="km cox"
+TREE_MODELS="rsf gbsa"
+DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace"
 
-TABPFN_EMBEDDING="tabpfn_embedding_cox  tabpfn_embedding_deephit  tabpfn_embedding_pchazard  tabpfn_embedding_mtlr"
-TABPFN_JOINT="tabpfn_joint_cox tabpfn_joint_deephit tabpfn_joint_pchazard tabpfn_joint_mtlr"
-TABPFN_MODELS="$TABPFN_EMBEDDING $TABPFN_JOINT tabpfn_zeroshot"
+EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox tabicl_embedding_cox"
+EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit tabicl_embedding_deephit"
+EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr tabicl_embedding_mtlr"
+EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard tabicl_embedding_pchazard"
+FM_EMBEDDING="$EMBEDDING_COX $EMBEDDING_DEEPHIT $EMBEDDING_MTLR $EMBEDDING_PCHAZARD"
 
-TABDPT_EMBEDDING="tabdpt_embedding_cox tabdpt_embedding_deephit tabdpt_embedding_pchazard tabdpt_embedding_mtlr"
-TABDPT_JOINT="tabdpt_joint_cox tabdpt_joint_deephit tabdpt_joint_pchazard tabdpt_joint_mtlr"
-TABDPT_MODELS="$TABDPT_EMBEDDING $TABDPT_JOINT tabdpt_zeroshot"
-# TABDPT_MODELS="tabdpt_joint_cox_adapter"
+JOINT_COX="tabpfn_joint_cox tabdpt_joint_cox tabicl_joint_cox"
+JOINT_DEEPHIT="tabpfn_joint_deephit tabdpt_joint_deephit tabicl_joint_deephit"
+JOINT_MTLR="tabpfn_joint_mtlr tabdpt_joint_mtlr tabicl_joint_mtlr"
+JOINT_PCHAZARD="tabpfn_joint_pchazard tabdpt_joint_pchazard tabicl_joint_pchazard"
+FM_JOINT="$JOINT_COX $JOINT_DEEPHIT $JOINT_MTLR $JOINT_PCHAZARD"
 
-TABICL_EMBEDDING="tabicl_embedding_cox tabicl_embedding_deephit tabicl_embedding_pchazard tabicl_embedding_mtlr"
-TABICL_JOINT="tabicl_joint_cox tabicl_joint_deephit tabicl_joint_pchazard tabicl_joint_mtlr"
-TABICL_MODELS="$TABICL_EMBEDDING $TABICL_JOINT tabicl_zeroshot"
+ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
+ZEROSHOT_TEMPORAL="tabpfn_zeroshot_perbin_time tabdpt_zeroshot_perbin_time tabicl_zeroshot_perbin_time tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
+FINETUNE="tabpfn_finetune tabdpt_finetune tabicl_finetune"
 
-FM_EMBEDDING="$TABPFN_EMBEDDING $TABDPT_EMBEDDING $TABICL_EMBEDDING"
-FM_JOINT="$TABPFN_JOINT $TABDPT_JOINT $TABICL_JOINT"
-ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot"
-ZEROSHOT_PERBIN="tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
-BETA_MODELS="beta_surv"
+ALL_SR_MODELS="$CLASSICAL_MODELS $TREE_MODELS $DEEP_MODELS $FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE"
 
-FM_MODELS="$FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS"
-ALL_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_MODELS $BETA_MODELS"
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
-    echo "Usage: $0 [group] [\"dataset1 dataset2 ...\"] [--parallel]"
-    echo ""
-    echo "Groups:    all (default) | classical | deep | tabpfn | tabdpt | tabicl | fm"
-    echo "Datasets:  $PUBLIC_DATASETS"
-    echo "Flags:     --parallel   run each dataset as a background job"
+    cat <<EOF
+Usage: $0 [group] [dataset-keyword | "ds1 ds2 ..."] [--parallel]
+
+Groups (default: all):
+  classical | deep | fm | fm_embedding | fm_joint
+  tabpfn | tabdpt | tabicl
+  tabpfn_embedding | tabdpt_embedding | tabicl_embedding
+  tabpfn_joint    | tabdpt_joint    | tabicl_joint
+  zeroshot | zeroshot_temporal | finetune | all
+
+Dataset keywords:  public  survset  ormoni_tirodei  ehr  (default: public+survset)
+Flags:  --parallel   run one background job per dataset
+EOF
     exit 0
 }
 
-timestamp() { date +"%Y%m%d_%H%M%S"; }
-
-# _extra_args: emit GPU + TabDPT args when the model set includes FM models
-_extra_args() {
-    local models="$1"
-    local args=()
-    if echo "$models" | grep -qE "tabpfn|tabdpt|tabicl|deepsurv|mtlr|pchazard|deephit"; then
-        args+=("--epochs" "$EPOCHS" "--lr" "$LR" "--device" "$DEVICE")
-    fi
-    echo "${args[@]}"
-}
-
-# run_models <label> <models> <datasets> [extra_args...]
-run_models() {
-    local label="$1"
-    local models="$2"
-    local datasets="$3"
-    shift 3
-    local extra=("$@")
-
-    mkdir -p "$LOG_DIR"
-    local logfile="$LOG_DIR/${label}_$(timestamp).log"
-
-    echo ""
-    echo "┌─────────────────────────────────────────────────────────────┐"
-    printf "│  %-61s│\n" "Group   : $label"
-    printf "│  %-61s│\n" "Models  : $models"
-    printf "│  %-61s│\n" "Data    : $datasets"
-    printf "│  %-61s│\n" "Log     : $logfile"
-    echo "└─────────────────────────────────────────────────────────────┘"
-
-    # shellcheck disable=SC2086
-    $PYTHON $SCRIPT \
-        --datasets $datasets \
-        --models $models \
-        --folds "$FOLDS" \
-        --tune --trials "$TRIALS" \
-        --seed "$SEED" \
-        --output-dir "$OUTPUT_DIR" \
-        "${extra[@]}" \
-        2>&1 | tee "$logfile"
-}
-
-# run_dataset_parallel <label> <models> <dataset> [extra_args...]
-run_dataset_parallel() {
-    local label="$1"
-    local models="$2"
-    local dataset="$3"
-    shift 3
-    local extra=("$@")
-
-    mkdir -p "$LOG_DIR"
-    local logfile="$LOG_DIR/${label}_${dataset}_$(timestamp).log"
-
-    echo "  → Spawning: $dataset ($label) — log: $logfile"
-
-    # shellcheck disable=SC2086
-    $PYTHON $SCRIPT \
-        --datasets "$dataset" \
-        --models $models \
-        --folds "$FOLDS" \
-        --tune --trials "$TRIALS" \
-        --seed "$SEED" \
-        --output-dir "$OUTPUT_DIR" \
-        "${extra[@]}" \
-        > "$logfile" 2>&1 &
-}
-
-# ── Parse args ────────────────────────────────────────────────────────────────
 GROUP="${1:-all}"
 DATASET_OVERRIDE="${2:-}"
 PARALLEL=false
 
-for arg in "$@"; do
-    [[ "$arg" == "--parallel" ]] && PARALLEL=true
-done
-
+for arg in "$@"; do [[ "$arg" == "--parallel" ]] && PARALLEL=true; done
 [[ "$GROUP" == "--help" || "$GROUP" == "-h" ]] && usage
 [[ "$GROUP" == "--parallel" ]] && GROUP="all"
 
-# Expand dataset group keywords in DATASET_OVERRIDE
 case "${DATASET_OVERRIDE:-}" in
-    survset)          DATASETS="$SURVSET_DATASETS" ;;
-    survset_small)    DATASETS="$SURVSET_SMALL" ;;
-    public)           DATASETS="$PUBLIC_DATASETS" ;;
-    sirbu)            DATASETS="$SIRBU_DATASETS" ;;
-    "")               DATASETS="$ALL_DATASETS" ;;
-    *)                DATASETS="$DATASET_OVERRIDE" ;;
+    public)        DATASETS="$PUBLIC_DATASETS" ;;
+    survset)       DATASETS="$SURVSET_DATASETS" ;;
+    ormoni_tirodei) DATASETS="$ORMONI_TIRODEI_DATASETS" ;;
+    sirbu)         DATASETS="$SIRBU_DATASETS" ;;
+    ehr)           DATASETS="$EHR_DATASETS" ;;
+    "")            DATASETS="$ALL_DATASETS" ;;
+    *)             DATASETS="$DATASET_OVERRIDE" ;;
 esac
 
 case "$GROUP" in
-    all)              MODELS="$ALL_MODELS" ;;
-    classical)        MODELS="$CLASSICAL_MODELS" ;;
-    deep)             MODELS="$DEEP_MODELS" ;;
-    tabpfn)           MODELS="$TABPFN_MODELS" ;;
-    tabdpt)           MODELS="$TABDPT_MODELS" ;;
-    tabicl)           MODELS="$TABICL_MODELS" ;;
-    fm_embedding)     MODELS="$FM_EMBEDDING" ;;
-    fm)               MODELS="$FM_MODELS" ;;
-    fm_joint)         MODELS="$FM_JOINT" ;;
-    zeroshot)         MODELS="$ZEROSHOT_MODELS" ;;
-    zeroshot_perbin)  MODELS="$ZEROSHOT_PERBIN" ;;
-    beta)             MODELS="$BETA_MODELS" ;;
-    *) echo "Unknown group: $GROUP"; usage ;;
+    all)               MODELS="$ALL_SR_MODELS" ;;
+    classical)         MODELS="$CLASSICAL_MODELS" ;;
+    tree)              MODELS="$TREE_MODELS" ;;
+    deep)              MODELS="$DEEP_MODELS" ;;
+    fm)                MODELS="$FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE" ;;
+    fm_embedding)      MODELS="$FM_EMBEDDING" ;;
+    fm_joint)          MODELS="$FM_JOINT" ;;
+    embedding_cox)     MODELS="$EMBEDDING_COX" ;;
+    embedding_deephit) MODELS="$EMBEDDING_DEEPHIT" ;;
+    embedding_pch)     MODELS="$EMBEDDING_PCHAZARD" ;;
+    embedding_mtlr)     MODELS="$EMBEDDING_MTLR" ;;
+    joint_cox)         MODELS="$JOINT_COX" ;;
+    joint_deephit)     MODELS="$JOINT_DEEPHIT" ;;
+    zeroshot)          MODELS="$ZEROSHOT_MODELS" ;;
+    zeroshot_temporal) MODELS="$ZEROSHOT_TEMPORAL" ;;
+    finetune)          MODELS="$FINETUNE" ;;
+    tabpfn)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;
+    tabdpt)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabdpt | xargs) ;;
+    tabicl)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabicl | xargs) ;;
+    *)                 MODELS="$GROUP" ;;
 esac
 
-# Build extra args for this model set
 read -ra EXTRA <<< "$(_extra_args "$MODELS")"
 
 # ── Run ───────────────────────────────────────────────────────────────────────
-echo "═══════════════════════════════════════════════════════════════"
-echo "  survpfn benchmark  •  group=$GROUP  •  parallel=$PARALLEL"
-echo "  datasets : $DATASETS"
-echo "  folds=$FOLDS  trials=$TRIALS  seed=$SEED"
-echo "═══════════════════════════════════════════════════════════════"
+printf '\n═══════════════════════════════════════════════════════════════\n'
+printf '  run_sr.sh  •  group=%-12s  parallel=%s\n' "$GROUP" "$PARALLEL"
+printf '  datasets : %s\n' "$DATASETS"
+printf '  folds=%-2s  trials=%-3s  seed=%s\n' "$FOLDS" "$TRIALS" "$SEED"
+printf '═══════════════════════════════════════════════════════════════\n'
 
 if $PARALLEL; then
-    echo ""
-    echo "Parallel mode — spawning one job per dataset …"
-    echo ""
     for ds in $DATASETS; do
         run_dataset_parallel "$GROUP" "$MODELS" "$ds" "${EXTRA[@]}"
     done
-    echo ""
-    echo "All jobs spawned. Waiting for completion …"
+    echo "All jobs spawned. Waiting …"
     wait
-    echo "All parallel jobs done."
+    echo "Done."
 else
     run_models "$GROUP" "$MODELS" "$DATASETS" "${EXTRA[@]}"
 fi
 
-echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "  Done. Results in: $OUTPUT_DIR"
-echo "  Logs  in: $LOG_DIR"
-echo "═══════════════════════════════════════════════════════════════"
+printf '\n═══════════════════════════════════════════════════════════════\n'
+printf '  Done. Results: %s   Logs: %s\n' "$OUTPUT_DIR" "$LOG_DIR"
+printf '═══════════════════════════════════════════════════════════════\n'
