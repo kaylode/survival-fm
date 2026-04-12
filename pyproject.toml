@@ -44,6 +44,7 @@ dependencies = [
     # --- Neural ODE (SODEN model) ----------------------------------------
     "torchdiffeq>=0.2.3",
     "pytest>=9.0.2",
+    "survivaleval>=0.2.7",
 ]
 
 [project.optional-dependencies]
@@ -87,5 +88,7 @@ survpfn = [
 filterwarnings = [
     "ignore::DeprecationWarning:SurvSet.*",
     "ignore::DeprecationWarning:numpy.*",
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
-
