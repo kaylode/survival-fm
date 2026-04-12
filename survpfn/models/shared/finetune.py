@@ -401,40 +401,56 @@ class BaseSurvExpandedFinetune:
 
         while not success:
             try:
+                # Balanced sampler on the EXPANDED dataset (y_exp labels: 0=survived,
+                # >0=event-at-bin-k).  Guarantees each training batch sees at least
+                # min_events event rows, preventing gradient collapse toward all-survived
+                # on low-event-rate datasets (e.g. MIMIC-IV ~10 % event rate).
+                _train_sampler = EventBalancedBatchSampler(
+                    events=y_exp,           # numpy, shape (M,), from temporal expansion
+                    batch_size=current_bs,
+                    seed=kwargs.get("random_state", 42),
+                )
+
                 self.net.train()
                 for epoch in range(epochs):
-                    perm, epoch_loss, n_batches = torch.randperm(M), 0.0, 0
-                    for start in range(0, M, current_bs):
-                        batch_idx = perm[start : start + current_bs]
+                    epoch_loss, n_batches = 0.0, 0
+                    self.net.train()    # re-assert after validation eval() each epoch
+
+                    for batch_idx_cpu in _train_sampler:
+                        batch_idx = batch_idx_cpu  # CPU tensor; index CPU X_pt/y_pt
                         bx, by = X_pt[batch_idx].to(self.device), y_pt[batch_idx].to(self.device)
-                        
+
                         # Context shopping
                         context_mask = torch.ones(M, dtype=torch.bool)
                         context_mask[batch_idx] = False
                         pool = context_mask.nonzero(as_tuple=True)[0]
                         n_ctx = min(self.context_size, len(pool))
                         ctx_idx = pool[torch.randperm(len(pool))[:n_ctx]]
-                        
+
                         x_ctx_raw, y_ctx = X_pt[ctx_idx].to(self.device), y_pt[ctx_idx].float().to(self.device)
                         x_ctx = self.net._to_padded(x_ctx_raw) if hasattr(self.net, "_to_padded") else x_ctx_raw
-                        
+
                         optimizer.zero_grad()
                         cls_logits = self.net(bx, x_context=x_ctx, y_context=y_ctx, return_backbone_logits=False)
-                        loss = criterion(cls_logits, by) 
-                        
-                        if torch.isnan(loss): 
-                            print(f"NaN loss at epoch {epoch} during training", flush=True)
+                        loss = criterion(cls_logits, by)
+
+                        if not torch.isfinite(loss):
+                            warnings.warn(
+                                f"[{self.backbone_name}/Expanded] epoch {epoch}: "
+                                f"non-finite train loss ({loss.item():.4g}), skipping batch.",
+                                stacklevel=2,
+                            )
                             continue
 
                         loss.backward()
-                        
+
                         if all(torch.isfinite(p.grad).all() for p in self.net.parameters() if p.grad is not None):
                             torch.nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=1.0)
                             optimizer.step()
                         optimizer.zero_grad()
                         epoch_loss += loss.item()
                         n_batches += 1
-                    
+
                     scheduler.step()
                     avg_loss = epoch_loss / max(1, n_batches)
 
@@ -442,21 +458,47 @@ class BaseSurvExpandedFinetune:
                     if VX_pt is not None:
                         self.net.eval()
                         val_loss, n_val_batches = 0.0, 0
+                        # Balanced sampler on expanded validation set — same reason as
+                        # training: avoids all-censored batches and the stale NaN-after-
+                        # accumulate bug (old code added to val_loss before checking).
+                        _val_sampler_exp = EventBalancedBatchSampler(
+                            events=vy_exp,          # numpy, shape (M_val,)
+                            batch_size=batch_size,
+                            seed=kwargs.get("random_state", 42) + epoch,
+                        )
                         with torch.no_grad():
-                            for vs in range(0, len(VX_pt), batch_size):
-                                vbx, vby = VX_pt[vs : vs + batch_size].to(self.device), vy_pt[vs : vs + batch_size].to(self.device)
+                            for vbidx_cpu in _val_sampler_exp:
+                                vbx = VX_pt[vbidx_cpu].to(self.device)
+                                vby = vy_pt[vbidx_cpu].to(self.device)
                                 # Fresh context from TRAINING set for validation
                                 vctx_idx = torch.randperm(M)[:min(self.context_size, M)]
-                                vx_ctx_raw, vy_ctx_raw = X_pt[vctx_idx].to(self.device), y_pt[vctx_idx].float().to(self.device)
+                                vx_ctx_raw = X_pt[vctx_idx].to(self.device)
+                                vy_ctx_raw = y_pt[vctx_idx].float().to(self.device)
                                 vx_ctx = self.net._to_padded(vx_ctx_raw) if hasattr(self.net, "_to_padded") else vx_ctx_raw
                                 vlogits = self.net(vbx, x_context=vx_ctx, y_context=vy_ctx_raw)
-                                val_loss += criterion(vlogits, vby).item()
+                                vl = criterion(vlogits, vby)
 
-                                if torch.isnan(val_loss):
-                                    print(f"  NaN loss at epoch {epoch}", flush=True)
+                                # Check BEFORE accumulating — old code added NaN to
+                                # val_loss first, permanently poisoning the running total.
+                                if not torch.isfinite(vl):
+                                    warnings.warn(
+                                        f"[{self.backbone_name}/Expanded] epoch {epoch}: "
+                                        f"non-finite val loss ({vl.item():.4g}), skipping batch.",
+                                        stacklevel=2,
+                                    )
                                     continue
+                                val_loss += vl.item()
                                 n_val_batches += 1
-                        avg_val_loss = val_loss / max(1, n_val_batches)
+
+                        if n_val_batches == 0:
+                            warnings.warn(
+                                f"[{self.backbone_name}/Expanded] epoch {epoch}: "
+                                "ALL validation batches non-finite; using train loss for early stopping.",
+                                stacklevel=2,
+                            )
+                            avg_val_loss = avg_loss
+                        else:
+                            avg_val_loss = val_loss / n_val_batches
                         stop_loss = avg_val_loss
                     else:
                         stop_loss = avg_loss
