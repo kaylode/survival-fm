@@ -133,10 +133,10 @@ case "$GROUP" in
     embedding_cox)     MODELS="$EMBEDDING_COX" ;;
     embedding_deephit) MODELS="$EMBEDDING_DEEPHIT" ;;
     embedding_pch)     MODELS="$EMBEDDING_PCHAZARD" ;;
-    embedding_mtlr)     MODELS="$EMBEDDING_MTLR" ;;
+    embedding_mtlr)     MODELS=("tabdpt_embedding_mtlr") ;;
     joint_cox)         MODELS="$JOINT_COX" ;;
     joint_deephit)     MODELS="$JOINT_DEEPHIT" ;;
-    zeroshot)          MODELS="$ZEROSHOT_MODELS" ;;
+    zeroshot)          MODELS="$ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL" ;;
     zeroshot_temporal) MODELS="$ZEROSHOT_TEMPORAL" ;;
     finetune)          MODELS="$FINETUNE" ;;
     tabpfn)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;

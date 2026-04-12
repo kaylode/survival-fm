@@ -147,7 +147,7 @@ def load_model_only_inference(path, filename, device):
 
 def load_model_workflow(device='cpu', only_inference=True):
     
-    base_path = pathlib.Path(__file__).parent.parent
+    base_path = pathlib.Path(__file__).parent.parent.parent
     model_tuple, config, _ = _load_model_workflow(
         0, 42, add_name='',
         base_path=base_path, device=device,

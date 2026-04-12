@@ -31,6 +31,127 @@ from survpfn.models.shared.loss import (
 )
 
 
+# ---------------------------------------------------------------------------
+# EventBalancedBatchSampler
+# ---------------------------------------------------------------------------
+
+class EventBalancedBatchSampler:
+    """Generates batch index arrays guaranteeing ≥ ``min_events`` event samples
+    per batch.
+
+    Root cause this fixes
+    ---------------------
+    CoxPH partial-likelihood is undefined (→ NaN loss) when a mini-batch
+    contains *zero* events.  On low-event-rate datasets such as MIMIC-IV
+    (event rate ≈ 8–15 %) this happens frequently with standard random
+    shuffling, especially for larger batch sizes.
+
+    Strategy
+    --------
+    Training indices are split into an *event pool* and a *censored pool*.
+    Each batch is assembled from:
+
+    * exactly ``min_events`` samples drawn from the event pool (without
+      replacement within an epoch; the pool is re-shuffled when exhausted), and
+    * ``batch_size − min_events`` samples drawn from a global permutation of
+      **all** training indices (so events can also appear in the fill portion).
+
+    The assembled batch is shuffled before yielding so events are not clustered
+    at the front — this matters for CoxPH which relies on the rank order of
+    event times within the batch.
+
+    Parameters
+    ----------
+    events : array-like, shape (N,)
+        Event indicator for each training sample (0 = censored, >0 = event).
+        Competing-risks codes (2, 3, …) are treated as events.
+    batch_size : int
+        Target batch size.
+    min_events : int, optional
+        Minimum number of event samples per batch.  Defaults to
+        ``max(1, batch_size // 8)``.  Clamped to
+        ``min(min_events, n_events_in_dataset, batch_size // 2)``.
+    seed : int, optional
+        NumPy seed for reproducible sampling.
+    """
+
+    def __init__(
+        self,
+        events: np.ndarray,
+        batch_size: int,
+        min_events: Optional[int] = None,
+        seed: Optional[int] = None,
+    ):
+        events = np.asarray(events)
+        self.batch_size = batch_size
+        self._rng = np.random.default_rng(seed)
+        self._n   = len(events)
+
+        self._event_idx  = np.where(events > 0)[0]
+        self._censor_idx = np.where(events == 0)[0]
+
+        if len(self._event_idx) == 0:
+            raise ValueError(
+                "Training fold has no observed events — "
+                "survival model cannot be trained."
+            )
+
+        # Resolve and clamp min_events
+        default_min = max(1, batch_size // 8)
+        raw = min_events if min_events is not None else default_min
+        self.min_events = int(min(raw, len(self._event_idx), max(1, batch_size // 2)))
+        self._fill_size = batch_size - self.min_events
+
+    # ------------------------------------------------------------------
+    def __iter__(self):
+        """Yield one shuffled LongTensor of indices per batch, for one epoch."""
+        # Shuffle event pool at epoch start; recycle if exhausted mid-epoch
+        e_perm = self._rng.permutation(self._event_idx)
+        e_ptr  = 0
+
+        # Shuffle ALL indices for the fill portion; recycle independently
+        all_perm = self._rng.permutation(self._n)
+        f_ptr    = 0
+
+        while e_ptr < len(e_perm):
+            # ── Guaranteed event slice ─────────────────────────────────────
+            e_end = e_ptr + self.min_events
+            if e_end <= len(e_perm):
+                e_batch = e_perm[e_ptr:e_end]
+                e_ptr   = e_end
+            else:
+                # Fewer events remain than min_events → wrap the event pool
+                tail    = e_perm[e_ptr:]
+                e_perm  = self._rng.permutation(self._event_idx)
+                need    = self.min_events - len(tail)
+                e_batch = np.concatenate([tail, e_perm[:need]])
+                e_ptr   = need
+
+            # ── Fill slice (drawn from all indices) ────────────────────────
+            if self._fill_size > 0:
+                chunks, need = [], self._fill_size
+                while need > 0:
+                    avail = all_perm[f_ptr:]
+                    take  = min(need, len(avail))
+                    chunks.append(avail[:take])
+                    need  -= take
+                    f_ptr += take
+                    if f_ptr >= len(all_perm):   # recycle
+                        all_perm = self._rng.permutation(self._n)
+                        f_ptr    = 0
+                fill_batch = np.concatenate(chunks)
+                batch_np   = np.concatenate([e_batch, fill_batch])
+            else:
+                batch_np = e_batch
+
+            # Shuffle within batch so events are not always at front
+            self._rng.shuffle(batch_np)
+            yield torch.from_numpy(batch_np.astype(np.int64))
+
+    # ------------------------------------------------------------------
+    def __len__(self) -> int:
+        """Approximate number of batches per epoch."""
+        return max(1, len(self._event_idx) // self.min_events)
 
 
 # ---------------------------------------------------------------------------
@@ -557,17 +678,31 @@ class BaseJointSurvFinetune:
         
         current_bs = batch_size
         success = False
-        
+
         while not success:
             try:
+                # Build the balanced sampler once per while-attempt so that any
+                # OOM-triggered batch-size reduction is reflected in a fresh sampler.
+                _batch_sampler = EventBalancedBatchSampler(
+                    events=events,          # original numpy array, pre-transform
+                    batch_size=current_bs,
+                    seed=kwargs.get("random_state", 42),
+                )
+                if verbose:
+                    print(
+                        f"  [Sampler] batch_size={current_bs}, "
+                        f"min_events_per_batch={_batch_sampler.min_events}, "
+                        f"n_event={len(_batch_sampler._event_idx)}/{N}",
+                        flush=True,
+                    )
+
                 for epoch in range(epochs):
                     self.net.train()
-                    indices = torch.randperm(N, device=self.device)
                     epoch_loss = 0.0
-                    n_batches = 0
+                    n_batches  = 0
 
-                    for i in range(0, N, current_bs):
-                        batch_idx = indices[i : i + current_bs]
+                    for batch_idx_cpu in _batch_sampler:
+                        batch_idx = batch_idx_cpu.to(self.device)
                         bx, bdur, bev = x_pt[batch_idx], dur_pt[batch_idx], ev_pt[batch_idx]
                         bdur_cont, bfrac = dur_pt_cont[batch_idx], (frac_pt[batch_idx] if frac_pt is not None else None)
 
@@ -629,19 +764,32 @@ class BaseJointSurvFinetune:
                     if vx_pt_val is not None:
                         self.net.eval()
                         val_loss, n_val_batches = 0.0, 0
+                        # Use the same balanced sampler so validation batches are
+                        # also guaranteed to contain events — sequential slicing can
+                        # produce all-censored tail batches on low-event-rate datasets
+                        # (e.g. MIMIC-IV ~10 % event rate) causing NaN CoxPH loss.
+                        _val_sampler = EventBalancedBatchSampler(
+                            events=ve,              # raw numpy from val_data
+                            batch_size=batch_size,
+                            seed=kwargs.get("random_state", 42) + epoch,  # vary per epoch
+                        )
                         with torch.no_grad():
-                            for vs in range(0, len(vx_pt_val), batch_size):
-                                vbx, vbdur, vbev = vx_pt_val[vs : vs + batch_size], vdur_pt_val[vs : vs + batch_size], vev_pt_val[vs : vs + batch_size]
-                                vbdur_cont, vbfrac = vdur_pt_cont_val[vs : vs + batch_size], (vfrac_pt_val[vs : vs + batch_size] if vfrac_pt_val is not None else None)
+                            for vbidx_cpu in _val_sampler:
+                                vbidx = vbidx_cpu.to(self.device)
+                                vbx      = vx_pt_val[vbidx]
+                                vbdur    = vdur_pt_val[vbidx]
+                                vbev     = vev_pt_val[vbidx]
+                                vbdur_cont = vdur_pt_cont_val[vbidx]
+                                vbfrac   = vfrac_pt_val[vbidx] if vfrac_pt_val is not None else None
 
-                                # Context from TRAINING set
+                                # Context always drawn from TRAINING set
                                 vctx_idx = torch.randperm(N, device=self.device)[:min(self.context_size, N)]
                                 vx_ctx = x_pt[vctx_idx]
                                 if hasattr(self.net, "_to_padded"): vx_ctx = self.net._to_padded(vx_ctx)
                                 vy_ctx = y_bin_pt[vctx_idx]
 
                                 vhead_out, _ = self.net(vbx, x_context=vx_ctx, y_context=vy_ctx, return_logits=True)
-                                
+
                                 if self.task_type == "cr":
                                     if self.cr_loss_type == "deephit":
                                         vl = compute_deephit_cr_loss(vhead_out, vbdur_cont, vbev, vbdur, self.num_events, self.num_durations, self.device)
@@ -656,9 +804,33 @@ class BaseJointSurvFinetune:
                                     vl = criterion_surv(vhead_out, vbdur, vbev, vbfrac)
                                 else:
                                     vl = criterion_surv(vhead_out, vbdur, vbev)
+
+                                # Skip NaN batches rather than poisoning the running
+                                # total — log once so the user can track frequency.
+                                if not torch.isfinite(vl):
+                                    warnings.warn(
+                                        f"[{self.backbone_name}/{self.head_type}] "
+                                        f"epoch {epoch}: non-finite val loss "
+                                        f"({vl.item():.4g}), skipping batch.",
+                                        stacklevel=2,
+                                    )
+                                    continue
+
                                 val_loss += vl.item()
                                 n_val_batches += 1
-                        avg_val_loss = val_loss / max(1, n_val_batches)
+
+                        if n_val_batches == 0:
+                            # Entire validation set produced NaN — fall back to
+                            # train loss for early-stopping so training continues.
+                            warnings.warn(
+                                f"[{self.backbone_name}/{self.head_type}] "
+                                f"epoch {epoch}: ALL validation batches were NaN; "
+                                "using train loss for early stopping this epoch.",
+                                stacklevel=2,
+                            )
+                            avg_val_loss = avg_loss
+                        else:
+                            avg_val_loss = val_loss / n_val_batches
                         stop_loss = avg_val_loss
                     else:
                         stop_loss = avg_loss

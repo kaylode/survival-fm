@@ -250,6 +250,16 @@ class FMDataPrep:
 # Label / target preprocessing
 # ---------------------------------------------------------------------------
 
+@dataclass
+class TargetTensors:
+    """Container for all target tensors needed by the training loop."""
+    dur_disc: torch.Tensor          # discretised / labtrans-transformed duration (for loss)
+    dur_cont: torch.Tensor          # original continuous duration (for CR ranking loss)
+    events: torch.Tensor            # event indicator (float for Cox, long for discrete)
+    interval_frac: Optional[torch.Tensor]  # only for PCHazard
+    bin_times: Optional[np.ndarray]       # CR bin edges (stored for CIF prediction)
+
+
 class FMTargetPrep:
     """Unified target preprocessing for survival and competing risks models.
     
