@@ -11,14 +11,8 @@ from optuna.storages.journal import JournalFileBackend
 from survpfn.utils.config import load_model_config, apply_tuning_params
 from survpfn.utils.optuna import get_n_trials_to_run
 
-# ---------------------------------------------------------------------------
-# Scalability constants
-# ---------------------------------------------------------------------------
-# Large ICU datasets (eICU ≈148k, MIMIC ≈70k) have thousands of unique event
-# times. Without capping, the survival matrix becomes (N_test × K_times) which
-# can hit 200M+ floats in a Python loop, taking 30–60 min per fold.
 _MAX_SURV_TIMES  = 100      # max time-grid points for the returned surv matrix
-_MAX_SAMPLES_FIT = 50_000   # max bootstrap samples for RSF/GBSA final fit
+_MAX_SAMPLES_FIT = 20_000   # max bootstrap/subsample samples for RSF/GBSA fit
 
 
 def _build_surv_matrix(model, X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -27,9 +21,13 @@ def _build_surv_matrix(model, X_test: np.ndarray) -> tuple[np.ndarray, np.ndarra
     if len(times) > _MAX_SURV_TIMES:
         idx = np.linspace(0, len(times) - 1, _MAX_SURV_TIMES, dtype=int)
         times = times[idx]
-    surv_probs = np.row_stack(
-        [fn(times) for fn in model.predict_survival_function(X_test)]
-    )
+    
+    # Pre-allocate to avoid slow np.row_stack
+    fns = model.predict_survival_function(X_test)
+    surv_probs = np.empty((len(X_test), len(times)), dtype=np.float32)
+    for i, fn in enumerate(fns):
+        surv_probs[i] = fn(times)
+        
     return surv_probs, times
 
 
@@ -123,8 +121,13 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
 
         def objective(trial):
             p = apply_tuning_params(trial, config["tuning"])
+            # Cap subsample during tuning to keep trials fast
+            subsample = 1.0
+            if len(X_tr) > _MAX_SAMPLES_FIT:
+                subsample = _MAX_SAMPLES_FIT / len(X_tr)
+                
             model = GradientBoostingSurvivalAnalysis(
-                **{**params, **p, "random_state": random_state, "verbose": 1}
+                **{**params, **p, "random_state": random_state, "verbose": 0, "subsample": subsample}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)

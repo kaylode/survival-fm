@@ -28,7 +28,7 @@ dependencies = [
     "matplotlib>=3.7",
     "seaborn>=0.12",
     # --- TabPFN embedding model ------------------------------------------
-    "tabpfn>=6.4.1",
+    "tabpfn==7.1.1",
     "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
     "omegaconf>=2.3.0",         # config for aware_cox / TabPFNCoxModel
     # --- notebook support ------------------------------------------------

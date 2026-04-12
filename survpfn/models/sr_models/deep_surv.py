@@ -105,7 +105,8 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
     # ── Final training ──────────────────────────────────────────────────────
     # For the final model, we'll split off 10% for EarlyStopping if epochs are high
     X_tr_final, X_val_final, T_tr_final, T_val_final, E_tr_final, E_val_final = train_test_split(
-        X_train.values, T_train.values, E_train.values, test_size=0.1, random_state=random_state
+        X_train.values, T_train.values, E_train.values, test_size=0.1, random_state=random_state,
+        stratify=E_train.values
     )
     
     in_features = X_train.shape[1]

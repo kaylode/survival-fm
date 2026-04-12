@@ -173,17 +173,14 @@ def train_mtlr(
     out_features = labtrans.out_features
 
     if tune:
-        X_tr, X_val, y_tr_0, y_val_0, y_tr_1, y_val_1 = train_test_split(
+        # Split everything together for consistency
+        E_all = df_train[event_col].values
+        (X_tr, X_val, y_tr_0, y_val_0, y_tr_1, y_val_1, T_tr, T_val, E_tr, E_val) = train_test_split(
             X_train, y_train_t[0], y_train_t[1],
-            test_size=0.2, random_state=random_state,
+            df_train[duration_col].values, E_all,
+            test_size=0.2, random_state=random_state, stratify=E_all
         )
         y_tr = (y_tr_0, y_tr_1)
-        
-        # Split original continuous data for proper evaluation
-        T_tr, T_val, E_tr, E_val = train_test_split(
-            df_train[duration_col].values, df_train[event_col].values,
-            test_size=0.2, random_state=random_state,
-        )
 
         os.makedirs(out_dir, exist_ok=True)
         log_name = f"optuna_mtlr_{study_id}.log" if study_id else "optuna_mtlr.log"
@@ -313,24 +310,17 @@ def train_pchazard(
     out_features = labtrans.out_features
 
     if tune:
-        # PCHazard returns (idx, event, interval_frac). We must split all three.
-        split_results = [
-            train_test_split(y, test_size=0.2, random_state=random_state)
-            for y in y_train_t
-        ]
-        y_tr = tuple(s[0] for s in split_results)
-        y_val_t = tuple(s[1] for s in split_results) # for validation, though pycox fit doesn't use it directly
-
-        X_tr, X_val, _, _ = train_test_split(
-            X_train, np.zeros(len(X_train)),
-            test_size=0.2, random_state=random_state,
+        # Split everything together for consistency
+        E_all = df_train[event_col].values
+        (X_tr, X_val, 
+         y_tr_0, y_val_0, y_tr_1, y_val_1, y_tr_2, y_val_2,
+         T_tr, T_val, E_tr, E_val) = train_test_split(
+            X_train, y_train_t[0], y_train_t[1], y_train_t[2],
+            df_train[duration_col].values, E_all,
+            test_size=0.2, random_state=random_state, stratify=E_all
         )
-
-        # Get continuous ground truth for HPO evaluation
-        T_tr, T_val, E_tr, E_val = train_test_split(
-            df_train[duration_col].values, df_train[event_col].values,
-            test_size=0.2, random_state=random_state,
-        )
+        y_tr = (y_tr_0, y_tr_1, y_tr_2)
+        # y_val_t = (y_val_0, y_val_1, y_val_2) # for validation, though pycox fit doesn't use it directly
 
         os.makedirs(out_dir, exist_ok=True)
         log_name = f"optuna_pchazard_{study_id}.log" if study_id else "optuna_pchazard.log"
@@ -460,17 +450,14 @@ def train_deephit_single(
     out_features = labtrans.out_features
 
     if tune:
-        X_tr, X_val, y_tr_0, y_val_0, y_tr_1, y_val_1 = train_test_split(
+        # Split everything together for consistency
+        E_all = df_train[event_col].values
+        (X_tr, X_val, y_tr_0, y_val_0, y_tr_1, y_val_1, T_tr, T_val, E_tr, E_val) = train_test_split(
             X_train, y_train_t[0], y_train_t[1],
-            test_size=0.2, random_state=random_state,
+            df_train[duration_col].values, E_all,
+            test_size=0.2, random_state=random_state, stratify=E_all
         )
         y_tr = (y_tr_0, y_tr_1)
-        
-        # Continuous ground-truth for tuning evaluation
-        T_tr, T_val, E_tr, E_val = train_test_split(
-            df_train[duration_col].values, df_train[event_col].values,
-            test_size=0.2, random_state=random_state,
-        )
 
         os.makedirs(out_dir, exist_ok=True)
         log_name = f"optuna_deephit_single_{study_id}.log" if study_id else "optuna_deephit_single.log"

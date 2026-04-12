@@ -201,14 +201,10 @@ class BaseSurvExpandedFinetune:
         times, unique_idx = np.unique(times, return_index=True)
         surv = surv[:, unique_idx]
 
-        if self.num_durations <= 10:
-            grid_times = np.linspace(0, self.bin_times.max(), 1000)
-            from scipy.interpolate import interp1d
-            f = interp1d(times, surv, kind='linear', axis=1, fill_value="extrapolate")
-            surv_matrix_interp = np.clip(f(grid_times), 0.0, 1.0)
-        else:
-            surv_matrix_interp = surv
-            grid_times = times
+        grid_times = np.linspace(0, self.bin_times.max(), 1000)
+        from scipy.interpolate import interp1d
+        f = interp1d(times, surv, kind='linear', axis=1, fill_value="extrapolate")
+        surv_matrix_interp = np.clip(f(grid_times), 0.0, 1.0)
 
         return pd.DataFrame(
             surv_matrix_interp.T,
@@ -236,7 +232,8 @@ class BaseSurvExpandedFinetune:
         # ── 0. Validation Split ──
         if val_data is None and val_split > 0:
             x, x_val, durations, durations_val, events, events_val = train_test_split(
-                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42)
+                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42),
+                stratify=events
             )
             val_data = (x_val, durations_val, events_val)
 
@@ -471,7 +468,8 @@ class BaseJointSurvFinetune:
         # ── 0. Validation Split ──
         if val_data is None and val_split > 0:
             x, x_val, durations, durations_val, events, events_val = train_test_split(
-                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42)
+                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42),
+                stratify=events
             )
             val_data = (x_val, durations_val, events_val)
 
@@ -711,11 +709,22 @@ class BaseJointSurvFinetune:
         def _predict_single():
             with torch.no_grad():
                 if self.task_type == "cr":
-                    out = self.net(x_pt) 
+                    out = self.net(x_pt) # (N, num_events, num_durations)
+                    grid_times = np.linspace(0, self._bin_times.max(), 1000)
+                    from scipy.interpolate import interp1d
+                    
                     cifs = []
+                    times = np.concatenate([[0], self._bin_times])
                     for k in range(self.num_events):
-                        cif_k = torch.cumsum(out[:, k, :], dim=1).cpu().numpy()
-                        cifs.append(pd.DataFrame(cif_k.T, index=self._bin_times))
+                        # Calculate discrete CIF for cause k
+                        cif_k_discrete = torch.cumsum(out[:, k, :], dim=1).cpu().numpy()
+                        cif_k_ext = np.concatenate([np.zeros((len(x_pt), 1)), cif_k_discrete], axis=1)
+                        
+                        # Interpolate to 1000 points
+                        f = interp1d(times, cif_k_ext, kind='linear', axis=1, fill_value="extrapolate")
+                        cif_k_interp = np.clip(f(grid_times), 0.0, 1.0)
+                        
+                        cifs.append(pd.DataFrame(cif_k_interp.T, index=grid_times))
                     return cifs
                 if hasattr(self.model, "interpolate"):
                     # Smooth evaluation for discrete models to break ties in risk scores during evaluation
