@@ -1,0 +1,19 @@
+{
+  "dataset": "EICU_SURV",
+  "model": "cox",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 118656,
+  "n_test": 29663,
+  "n_features": 124,
+  "n_events_train": 6911,
+  "n_events_test": 1727,
+  "event_rate_train": 0.0582,
+  "event_rate_test": 0.0582,
+  "fit_time_s": 26.4362,
+  "eval_time_s": 196.8646,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-12T08:35:03.631119"
+}
