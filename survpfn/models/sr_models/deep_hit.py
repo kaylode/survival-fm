@@ -33,6 +33,9 @@ import pandas as pd
 import torch
 from torch import nn
 
+C_YELLOW = "\033[93m"
+C_RESET = "\033[0m"
+
 import torchtuples as tt
 from pycox.evaluation import EvalSurv
 import optuna
@@ -70,11 +73,10 @@ def _prep_discrete(
     X_train = df_train.drop(columns=[duration_col, event_col]).values.astype(np.float32)
     X_test = df_test.drop(columns=[duration_col, event_col]).values.astype(np.float32)
 
-    # Scale features (mandatory for neural models)
-    from sklearn.preprocessing import StandardScaler
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    # NOTE: No StandardScaler here — benchmark._scale_fold() already applies
+    # StandardScaler per fold (fit on train, transform on test) before any model
+    # is called.  A second scaler would double-normalise the features, compressing
+    # variance further and harming model quality.
 
     # Use quantile binning by default for better event distribution
     try:
@@ -200,14 +202,28 @@ def train_mtlr(
             p = apply_tuning_params(trial, config["tuning"])
             net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
             m = MTLR(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
-            try:
-                m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
-                surv = m.interpolate(10).predict_surv_df(X_val)
-                # Use continuous evaluation for accurate Antolini C-index
-                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
-                return ev.concordance_td()
-            except Exception:
-                return 0.0
+            success = False
+            current_bs = params["batch_size"]
+            while not success:
+                try:
+                    m.fit(X_tr, y_tr, current_bs, 30, verbose=False)
+                    success = True
+                except RuntimeError as e:
+                    if "CUDA out of memory" in str(e) and current_bs > 1:
+                        torch.cuda.empty_cache()
+                        current_bs = max(1, current_bs // 2)
+                        print(f"      {C_YELLOW}→ CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}")
+                        net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+                        m = MTLR(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
+                    else:
+                        return 0.0
+                except Exception:
+                    return 0.0
+            
+            surv = m.interpolate(10).predict_surv_df(X_val)
+            # Use continuous evaluation for accurate Antolini C-index
+            ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
+            return ev.concordance_td()
 
         n_remaining = get_n_trials_to_run(study, n_trials)
         if n_remaining > 0:
@@ -219,7 +235,22 @@ def train_mtlr(
 
     net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
     model = MTLR(net, tt.optim.Adam(params["lr"]), duration_index=labtrans.cuts)
-    model.fit(X_train, y_train_t, params["batch_size"], params["epochs"], verbose=True)
+    
+    success = False
+    current_bs = params["batch_size"]
+    while not success:
+        try:
+            model.fit(X_train, y_train_t, current_bs, params["epochs"], verbose=True)
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}")
+                net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
+                model = MTLR(net, tt.optim.Adam(params["lr"]), duration_index=labtrans.cuts)
+            else:
+                raise e
     surv_df = model.interpolate(10).predict_surv_df(X_test)
 
     risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_df)
@@ -229,6 +260,8 @@ def train_mtlr(
 # ---------------------------------------------------------------------------
 # 2.  PC-Hazard
 # ---------------------------------------------------------------------------
+
+
 
 def train_pchazard(
     df_train: pd.DataFrame,
@@ -268,6 +301,7 @@ def train_pchazard(
     """
     try:
         from pycox.models import PCHazard
+        from pycox.models.loss import NLLPCHazardLoss
     except ImportError as exc:
         raise ImportError("pycox is required. Install with: uv add pycox") from exc
 
@@ -279,11 +313,18 @@ def train_pchazard(
     out_features = labtrans.out_features
 
     if tune:
-        X_tr, X_val, y_tr_0, y_val_0, y_tr_1, y_val_1 = train_test_split(
-            X_train, y_train_t[0], y_train_t[1],
+        # PCHazard returns (idx, event, interval_frac). We must split all three.
+        split_results = [
+            train_test_split(y, test_size=0.2, random_state=random_state)
+            for y in y_train_t
+        ]
+        y_tr = tuple(s[0] for s in split_results)
+        y_val_t = tuple(s[1] for s in split_results) # for validation, though pycox fit doesn't use it directly
+
+        X_tr, X_val, _, _ = train_test_split(
+            X_train, np.zeros(len(X_train)),
             test_size=0.2, random_state=random_state,
         )
-        y_tr = (y_tr_0, y_tr_1)
 
         # Get continuous ground truth for HPO evaluation
         T_tr, T_val, E_tr, E_val = train_test_split(
@@ -308,14 +349,29 @@ def train_pchazard(
             p = apply_tuning_params(trial, config["tuning"])
             net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
             m = PCHazard(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
-            try:
-                m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
-                surv = m.predict_surv_df(X_val)
-                # Use continuous ground truth
-                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
-                return ev.concordance_td()
-            except Exception:
-                return 0.0
+            
+            success = False
+            current_bs = params["batch_size"]
+            while not success:
+                try:
+                    m.fit(X_tr, y_tr, current_bs, 30, verbose=False)
+                    success = True
+                except RuntimeError as e:
+                    if "CUDA out of memory" in str(e) and current_bs > 1:
+                        torch.cuda.empty_cache()
+                        current_bs = max(1, current_bs // 2)
+                        print(f"      {C_YELLOW}→ CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}")
+                        net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+                        m = PCHazard(net, tt.optim.Adam(p["lr"]), duration_index=labtrans.cuts)
+                    else:
+                        return 0.0
+                except Exception:
+                    return 0.0
+
+            surv = m.predict_surv_df(X_val)
+            # Use continuous ground truth
+            ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
+            return ev.concordance_td()
 
         n_remaining = get_n_trials_to_run(study, n_trials)
         if n_remaining > 0:
@@ -327,7 +383,23 @@ def train_pchazard(
 
     net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
     model = PCHazard(net, tt.optim.Adam(params["lr"]), duration_index=labtrans.cuts)
-    model.fit(X_train, y_train_t, params["batch_size"], params["epochs"], verbose=True)
+    
+    success = False
+    current_bs = params["batch_size"]
+    while not success:
+        try:
+            model.fit(X_train, y_train_t, current_bs, params["epochs"], verbose=True)
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}")
+                net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
+                model = PCHazard(net, tt.optim.Adam(params["lr"]), duration_index=labtrans.cuts)
+            else:
+                raise e
+      
     surv_df = model.predict_surv_df(X_test)
 
     risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_df)
@@ -419,14 +491,30 @@ def train_deephit_single(
             m = DeepHitSingle(net, tt.optim.Adam(p["lr"]),
                                alpha=p["alpha"], sigma=p["sigma"],
                                duration_index=labtrans.cuts)
-            try:
-                m.fit(X_tr, y_tr, params["batch_size"], 30, verbose=False)
-                surv = m.interpolate(10).predict_surv_df(X_val)
-                # Continuous evaluation for higher quality tuning
-                ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
-                return ev.concordance_td()
-            except Exception:
-                return 0.0
+            success = False
+            current_bs = params["batch_size"]
+            while not success:
+                try:
+                    m.fit(X_tr, y_tr, current_bs, 30, verbose=False)
+                    success = True
+                except RuntimeError as e:
+                    if "CUDA out of memory" in str(e) and current_bs > 1:
+                        torch.cuda.empty_cache()
+                        current_bs = max(1, current_bs // 2)
+                        print(f"      {C_YELLOW}→ CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}")
+                        net = _build_net(in_features, [p["nodes"]] * p["layers"], out_features, p["dropout"])
+                        m = DeepHitSingle(net, tt.optim.Adam(p["lr"]),
+                                           alpha=p["alpha"], sigma=p["sigma"],
+                                           duration_index=labtrans.cuts)
+                    else:
+                        return 0.0
+                except Exception:
+                    return 0.0
+
+            surv = m.interpolate(10).predict_surv_df(X_val)
+            # Continuous evaluation for higher quality tuning
+            ev = EvalSurv(surv, T_val, E_val, censor_surv="km")
+            return ev.concordance_td()
 
         n_remaining = get_n_trials_to_run(study, n_trials)
         if n_remaining > 0:
@@ -444,7 +532,26 @@ def train_deephit_single(
         alpha=params["alpha"], sigma=params["sigma"],
         duration_index=labtrans.cuts,
     )
-    model.fit(X_train, y_train_t, params["batch_size"], params["epochs"], verbose=True)
+    
+    success = False
+    current_bs = params["batch_size"]
+    while not success:
+        try:
+            model.fit(X_train, y_train_t, current_bs, params["epochs"], verbose=True)
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}")
+                net = _build_net(in_features, params["num_nodes"], out_features, params["dropout"])
+                model = DeepHitSingle(
+                    net, tt.optim.Adam(params["lr"]),
+                    alpha=params["alpha"], sigma=params["sigma"],
+                    duration_index=labtrans.cuts,
+                )
+            else:
+                raise e
     surv_df = model.interpolate(10).predict_surv_df(X_test)
 
     risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_df)

@@ -8,6 +8,9 @@ import pandas as pd
 
 from survpfn.dataloaders.competing import SurvivalDatasetDeepHit
 
+C_YELLOW = "\033[93m"
+C_RESET = "\033[0m"
+
 class FCLayer(nn.Module):
     def __init__(self, in_dim, out_dim, activation=nn.ReLU(), batch_norm=False, dropout_rate=0.0):
         super().__init__()
@@ -182,22 +185,33 @@ def train_deephit_cr(
     num_Event = int(np.max(E_train))
     
     dataset = SurvivalDatasetDeepHit(X_train, T_train, E_train, num_durations)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
-    model = DeepHitCRPattern(x_dim=X_train.shape[1], num_Event=num_Event, num_Category=num_durations).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    
-    for epoch in range(epochs):
-        model.train()
-        for x, t, e, t_disc in loader:
-            x, t, e, t_disc = x.to(device), t.to(device), e.to(device), t_disc.to(device)
-            mask1 = create_fc_mask1_gpu(e, t_disc, num_Event, num_durations, device)
-            mask2 = create_fc_mask2_gpu(t_disc, num_durations, device)
-            out, _ = model(x)
-            loss = model.compute_loss(out, t.view(-1, 1), e.view(-1, 1), mask1, mask2)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    success = False
+    current_bs = batch_size
+    while not success:
+        try:
+            loader = DataLoader(dataset, batch_size=current_bs, shuffle=True)
+            model = DeepHitCRPattern(x_dim=X_train.shape[1], num_Event=num_Event, num_Category=num_durations).to(device)
+            optimizer = optim.Adam(model.parameters(), lr=lr)
+
+            for epoch in range(epochs):
+                model.train()
+                for x, t, e, t_disc in loader:
+                    x, t, e, t_disc = x.to(device), t.to(device), e.to(device), t_disc.to(device)
+                    mask1 = create_fc_mask1_gpu(e, t_disc, num_Event, num_durations, device)
+                    mask2 = create_fc_mask2_gpu(t_disc, num_durations, device)
+                    out, _ = model(x)
+                    loss = model.compute_loss(out, t.view(-1, 1), e.view(-1, 1), mask1, mask2)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (DeepHitCR)! Reducing batch_size to {current_bs} and restarting{C_RESET}")
+            else:
+                raise e
             
     # Inference wrapper mapping
     grid = np.linspace(np.min(T_train) + 1e-6, np.max(T_train) - 1e-6, 50)

@@ -12,6 +12,10 @@ from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalFileBackend
 from survpfn.utils.config import load_model_config, apply_tuning_params
 from survpfn.utils.optuna import get_n_trials_to_run
+import numpy as np
+
+C_YELLOW = "\033[93m"
+C_RESET = "\033[0m"
 
 
 def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir: str = "results", out_dir: str = "results", study_id: Optional[str] = None, **kwargs):
@@ -43,6 +47,8 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
         T_tr_t = torch.tensor(T_tr, dtype=torch.float32)
         E_tr_t = torch.tensor(E_tr, dtype=torch.float32)
         X_val_t = torch.tensor(X_val, dtype=torch.float32)
+        T_val_t = torch.tensor(T_val, dtype=torch.float32)
+        E_val_t = torch.tensor(E_val, dtype=torch.float32)
 
         os.makedirs(out_dir, exist_ok=True)
         log_name = f"optuna_deepsurv_{study_id}.log" if study_id else "optuna_deepsurv.log"
@@ -73,17 +79,19 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
 
             # Use internal validation for better early stopping and evaluation
             callbacks = [tt.callbacks.EarlyStopping(patience=5)]
-            try:
-                # Use a small internal validation for EarlyStopping within the search
-                model.fit(X_tr_t, (T_tr_t, E_tr_t), params['batch_size'], epochs_trial, 
-                          verbose=False, callbacks=callbacks, val_data=(X_val_t, (T_val_t, E_val_t)))
-                model.compute_baseline_hazards()
-                surv = model.predict_surv_df(X_val_t)
-                ev = EvalSurv(surv, T_val, E_val, censor_surv='km')
-                res = ev.concordance_td()
-                return res if not np.isnan(res) else 0.0
-            except Exception:
-                return 0.0
+            
+            current_bs = params['batch_size']
+            model.fit(
+                X_tr_t, (T_tr_t, E_tr_t), 
+                current_bs, epochs_trial, 
+                verbose=True, callbacks=callbacks, 
+                val_data=(X_val_t, (T_val_t, E_val_t))
+            )
+            model.compute_baseline_hazards()
+            surv = model.predict_surv_df(X_val_t)
+            ev = EvalSurv(surv, T_val, E_val, censor_surv='km')
+            res = ev.concordance_td()
+            return res if not np.isnan(res) else 0.0
 
         n_remaining = get_n_trials_to_run(study, n_trials)
         if n_remaining > 0:
@@ -106,14 +114,30 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
     model = CoxPH(net, optimizer)
     
     callbacks = [tt.callbacks.EarlyStopping(patience=5)]
-    model.fit(
-        torch.tensor(X_tr_final, dtype=torch.float32), 
-        (torch.tensor(T_tr_final, dtype=torch.float32), torch.tensor(E_tr_final, dtype=torch.float32)), 
-        params['batch_size'], params.get('epochs', 30), 
-        verbose=True, callbacks=callbacks,
-        val_data=(torch.tensor(X_val_final, dtype=torch.float32), 
-                  (torch.tensor(T_val_final, dtype=torch.float32), torch.tensor(E_val_final, dtype=torch.float32)))
-    )
+    
+    success = False
+    current_bs = params['batch_size']
+    while not success:
+        try:
+            model.fit(
+                torch.tensor(X_tr_final, dtype=torch.float32), 
+                (torch.tensor(T_tr_final, dtype=torch.float32), torch.tensor(E_tr_final, dtype=torch.float32)), 
+                current_bs, params.get('epochs', 30), 
+                verbose=True, callbacks=callbacks,
+                val_data=(torch.tensor(X_val_final, dtype=torch.float32), 
+                          (torch.tensor(T_val_final, dtype=torch.float32), torch.tensor(E_val_final, dtype=torch.float32)))
+            )
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}")
+                # Re-init model
+                net = tt.practical.MLPVanilla(in_features, params['num_nodes'], 1, batch_norm=True, dropout=params['dropout'], activation=nn.ReLU)
+                model = CoxPH(net, tt.optim.Adam(lr=params['lr'], weight_decay=1e-4))
+            else:
+                raise e
 
     model.compute_baseline_hazards()
     surv_df = model.predict_surv_df(X_test_tensor)

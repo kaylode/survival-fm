@@ -30,7 +30,7 @@ Benchmark API
 """
 
 from __future__ import annotations
-
+import os
 import math
 from copy import deepcopy
 from typing import Optional
@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+from sklearn.preprocessing import StandardScaler
 from survpfn.utils.optuna import get_n_trials_to_run
 
 
@@ -115,10 +116,7 @@ class SODENODEFunc(BaseSurvODEFunc):
         )
         output = torch.cat([output, zeros], dim=1)
 
-        if self.batch_time_mode:
-            return output
-        else:
-            return output.squeeze(0)
+        return output
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +146,8 @@ class SODENModel:
         lr: float = 1e-2,
         batch_size: int = 128,
         epochs: int = 100,
-        rtol: float = 1e-3,
-        atol: float = 1e-5,
+        rtol: float = 1e-2,
+        atol: float = 1e-4,
         device: str = "cpu",
     ):
         self.n_features = n_features
@@ -158,6 +156,7 @@ class SODENModel:
         self.rtol = rtol
         self.atol = atol
         self.device = device
+        self.scaler = None
 
         # Hazard network: (H(t), t, x) → positive scalar
         # Input dim = 2 + n_features (cumulative hazard, time, covariates)
@@ -171,7 +170,7 @@ class SODENModel:
         base_net = nn.Sequential(*layers).to(device)
 
         self.ode_func = SODENODEFunc(base_net, n_features).to(device)
-        self.optimizer = torch.optim.Adam(base_net.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(base_net.parameters(), lr=lr, weight_decay=1e-4)
 
     # ------------------------------------------------------------------
     # Loss
@@ -203,18 +202,33 @@ class SODENModel:
         t = torch.tensor([0.0, 1.0], device=device)
 
         self.ode_func.set_batch_time_mode(False)
-        cum_haz = odeint(
-            self.ode_func, init_cond, t,
-            rtol=self.rtol, atol=self.atol
-        )[1:].squeeze()
-        self.ode_func.set_batch_time_mode(True)
+        try:
+            cum_haz = odeint(
+                self.ode_func, init_cond, t,
+                rtol=self.rtol, atol=self.atol
+            )[1:].squeeze(0)
+        except (AssertionError, RuntimeError) as e:
+            # Catch 'underflow in dt' or 'non-finite values' and return high loss
+            return torch.tensor(1e6, device=device, requires_grad=True)
 
-        hazards = self.ode_func(t[1:], cum_haz).squeeze()
+        self.ode_func.set_batch_time_mode(True)
+        hazards = self.ode_func(t[1:], cum_haz)
+        
+        # Force 2D if batch_size=1
+        if cum_haz.dim() == 1:
+            cum_haz = cum_haz.unsqueeze(0)
+            hazards = hazards.unsqueeze(0)
+
         cum_haz = cum_haz[:, 0]
-        hazards = hazards[:, 0] / Y_batch.view(-1)
+        hazards = hazards[:, 0] / Y_batch.view(-1).clamp(min=1e-6)
 
         log_h = torch.log(hazards.clamp(min=1e-8))
         loss = (-D_batch.float().view(-1) * log_h + cum_haz).mean()
+        
+        # Final safety check on loss
+        if not torch.isfinite(loss):
+            return torch.tensor(1e6, device=device, requires_grad=True)
+            
         return loss
 
     # ------------------------------------------------------------------
@@ -232,11 +246,24 @@ class SODENModel:
 
         Parameters
         ----------
-        x         : (N, n_features) standardised features.
+        x         : (N, n_features) features.
         durations : (N,) observed times > 0.
         events    : (N,) binary event indicator.
         """
         from torch.utils.data import DataLoader, TensorDataset
+
+        # Robustness: Remove NaNs and Infs if they slipped through
+        # and ensure durations are > 0
+        mask = np.isfinite(x).all(axis=1) & np.isfinite(durations) & (durations > 0)
+        x = x[mask]
+        durations = durations[mask]
+        events = events[mask]
+
+        if self.scaler is None:
+            self.scaler = StandardScaler()
+            x = self.scaler.fit_transform(x)
+        else:
+            x = self.scaler.transform(x)
 
         X  = torch.tensor(x,         dtype=torch.float32, device=self.device)
         Y  = torch.tensor(durations, dtype=torch.float32, device=self.device)
@@ -255,6 +282,7 @@ class SODENModel:
                 loss = self._ode_loss(Xb, Yb, Db)
                 self.optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.ode_func.parameters(), max_norm=1.0)
                 self.optimizer.step()
                 epoch_loss += loss.item() * len(Xb)
 
@@ -318,6 +346,12 @@ class SODENModel:
         t_rescaled = torch.tensor(
             time_grid / max_time, dtype=torch.float32, device=self.device
         )
+
+        if self.scaler is not None:
+            # Handle NaNs in test data by replacing with 0 (which is the mean after scaling)
+            # and ensure finite values.
+            x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+            x = self.scaler.transform(x)
 
         X = torch.tensor(x, dtype=torch.float32, device=self.device)
         B = X.size(0)

@@ -11,6 +11,27 @@ from optuna.storages.journal import JournalFileBackend
 from survpfn.utils.config import load_model_config, apply_tuning_params
 from survpfn.utils.optuna import get_n_trials_to_run
 
+# ---------------------------------------------------------------------------
+# Scalability constants
+# ---------------------------------------------------------------------------
+# Large ICU datasets (eICU ≈148k, MIMIC ≈70k) have thousands of unique event
+# times. Without capping, the survival matrix becomes (N_test × K_times) which
+# can hit 200M+ floats in a Python loop, taking 30–60 min per fold.
+_MAX_SURV_TIMES  = 100      # max time-grid points for the returned surv matrix
+_MAX_SAMPLES_FIT = 50_000   # max bootstrap samples for RSF/GBSA final fit
+
+
+def _build_surv_matrix(model, X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (surv_probs, surv_times) with time grid capped at _MAX_SURV_TIMES."""
+    times = model.unique_times_
+    if len(times) > _MAX_SURV_TIMES:
+        idx = np.linspace(0, len(times) - 1, _MAX_SURV_TIMES, dtype=int)
+        times = times[idx]
+    surv_probs = np.row_stack(
+        [fn(times) for fn in model.predict_survival_function(X_test)]
+    )
+    return surv_probs, times
+
 
 def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=10, random_state=42, out_dir="results", study_id=None, **kwargs):
     T_train = df_train[duration_col]
@@ -45,7 +66,7 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
         def objective(trial):
             p = apply_tuning_params(trial, config["tuning"])
             model = RandomSurvivalForest(
-                **{**params, **p, "n_jobs": -1, "random_state": random_state}
+                **{**params, **p, "n_jobs": -1, "random_state": random_state, "verbose": 1, "max_samples": min(len(X_tr), _MAX_SAMPLES_FIT)}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)
@@ -55,14 +76,17 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
             study.optimize(objective, n_trials=n_remaining)
         params.update(study.best_params)
 
-    model = RandomSurvivalForest(**params)
+    # Cap bootstrap samples for large datasets to avoid O(N²) blowup
+    final_params = {**params}
+    if len(X_train) > _MAX_SAMPLES_FIT:
+        final_params["max_samples"] = _MAX_SAMPLES_FIT
+
+    model = RandomSurvivalForest(**final_params)
     model.fit(X_train, y_train_sksurv)
 
-    X_test = df_test.drop(columns=[duration_col, event_col])
+    X_test = df_test.drop(columns=[duration_col, event_col]).values
     risk_scores = model.predict(X_test)
-    surv_funcs = model.predict_survival_function(X_test)
-    surv_times = model.unique_times_
-    surv_probs = pd.DataFrame([fn(surv_times) for fn in surv_funcs]).values
+    surv_probs, surv_times = _build_surv_matrix(model, X_test)
 
     return model, risk_scores, surv_probs, surv_times
 
@@ -100,7 +124,7 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
         def objective(trial):
             p = apply_tuning_params(trial, config["tuning"])
             model = GradientBoostingSurvivalAnalysis(
-                **{**params, **p, "random_state": random_state}
+                **{**params, **p, "random_state": random_state, "verbose": 1}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)
@@ -110,13 +134,16 @@ def train_gbsa(df_train, df_test, duration_col, event_col, tune=False, n_trials=
             study.optimize(objective, n_trials=n_remaining)
         params.update(study.best_params)
 
-    model = GradientBoostingSurvivalAnalysis(**params)
+    # For large datasets cap row-subsampling fraction (GBSA uses `subsample`, not `max_samples`)
+    final_params = {**params}
+    if len(X_train) > _MAX_SAMPLES_FIT and "subsample" not in final_params:
+        final_params["subsample"] = _MAX_SAMPLES_FIT / len(X_train)
+
+    model = GradientBoostingSurvivalAnalysis(**final_params)
     model.fit(X_train, y_train_sksurv)
 
-    X_test = df_test.drop(columns=[duration_col, event_col])
+    X_test = df_test.drop(columns=[duration_col, event_col]).values
     risk_scores = model.predict(X_test)
-    surv_funcs = model.predict_survival_function(X_test)
-    surv_times = model.unique_times_
-    surv_probs = pd.DataFrame([fn(surv_times) for fn in surv_funcs]).values
+    surv_probs, surv_times = _build_surv_matrix(model, X_test)
 
     return model, risk_scores, surv_probs, surv_times
