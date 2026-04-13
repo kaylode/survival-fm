@@ -6,6 +6,8 @@ import os
 import math
 import numpy as np
 import torch
+import sys
+from tqdm import tqdm
 from torch.optim import Optimizer
 from torch.nn.utils import clip_grad_norm_
 from torch import optim
@@ -41,7 +43,7 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, name)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            # print(f'  [EarlyStopping] counter: {self.counter} out of {self.patience}', flush=True)
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -52,7 +54,7 @@ class EarlyStopping:
     def save_checkpoint(self, val_loss, model, name):
         '''Saves model when validation loss decrease.'''
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+            print(f'  [EarlyStopping] validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). Saving model...', flush=True)
         torch.save(model.state_dict(), name)
         self.val_loss_min = val_loss
 
@@ -131,9 +133,9 @@ class BERTAdam(Optimizer):
 
     def get_lr(self):
         lr = []
-        print("l_total=",len(self.param_groups))
+        print("l_total=",len(self.param_groups), flush=True)
         for group in self.param_groups:
-            print("l_p=",len(group['params']))
+            print("l_p=",len(group['params']), flush=True)
             for p in group['params']:
                 state = self.state[p]
                 if len(state) == 0:
@@ -253,11 +255,11 @@ class Trainer:
         self.get_target = lambda df: (df['duration'].values, df['event'].values)
         self.use_gpu = True if torch.cuda.is_available() else False
         if self.use_gpu:
-            print('use pytorch-cuda for training.')
+            print('  [SurvTrace] use pytorch-cuda for training.', flush=True)
             self.model.cuda()
             self.model.use_gpu = True
         else:
-            print('GPU not found! will use cpu for training!')
+            print('  [SurvTrace] GPU not found! will use cpu for training!', flush=True)
         self.early_stopping = None
         ckpt_dir = os.path.dirname(model.config['checkpoint'])
         self.ckpt = model.config['checkpoint']
@@ -340,7 +342,7 @@ class Trainer:
 
                 epoch_loss += batch_loss.item()
 
-            train_loss_list.append(epoch_loss / (batch_idx+1))
+            train_loss_list.append(epoch_loss / num_train_batch)
 
             if val_set is not None:
                 self.model.eval()
@@ -348,17 +350,18 @@ class Trainer:
                     phi_val = self.model.predict(tensor_val, val_batch_size)
                 
                 val_loss = self.metrics[0](phi_val, tensor_y_val[:,0].long(), tensor_y_val[:,1].long(), tensor_y_val[:,2].float())
-                print("[Train-{}]: {}".format(epoch, epoch_loss))
-                print("[Val-{}]: {}".format(epoch, val_loss.item()))
+                avg_loss = epoch_loss / num_train_batch
+                print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f} val_loss={val_loss.item():.4f}", flush=True)
                 val_loss_list.append(val_loss.item())
                 self.early_stopping(val_loss.item(), self.model, name=self.ckpt)
                 if self.early_stopping.early_stop:
-                    print(f"early stops at epoch {epoch+1}")
+                    print(f"  [SurvTrace] Early stopping at epoch {epoch+1}", flush=True)
                     # load best checkpoint
                     self.model.load_state_dict(torch.load(self.ckpt))
                     return train_loss_list, val_loss_list
             else:
-                print("[Train-{}]: {}".format(epoch, epoch_loss))
+                avg_loss = epoch_loss / num_train_batch
+                print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}", flush=True)
 
         return train_loss_list, val_loss_list
 
@@ -441,7 +444,7 @@ class Trainer:
                 optimizer.step()
                 epoch_loss += batch_loss.item()
 
-            train_loss_list.append(epoch_loss / (batch_idx+1))
+            train_loss_list.append(epoch_loss / num_train_batch)
             if val_set is not None:
                 self.model.eval()
                 val_loss = 0
@@ -450,17 +453,18 @@ class Trainer:
                         phi_val = self.model.predict(tensor_val, val_batch_size, event=risk)
                         val_loss += self.metrics[0](phi_val, tensor_y_val["risk_{}".format(risk)][:,0].long(), tensor_y_val["risk_{}".format(risk)][:,1].long(), tensor_y_val["risk_{}".format(risk)][:,2].float())
 
-                print("[Train-{}]: {}".format(epoch, epoch_loss / (batch_idx+1)))
-                print("[Val-{}]: {}".format(epoch, val_loss.item()))
+                avg_loss = epoch_loss / num_train_batch
+                print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f} val_loss={val_loss.item():.4f}", flush=True)
                 val_loss_list.append(val_loss.item())
                 self.early_stopping(val_loss.item(), self.model, name=self.ckpt)
                 if self.early_stopping.early_stop:
-                    print(f"early stops at epoch {epoch+1}")
+                    print(f"  [SurvTrace] Early stopping at epoch {epoch+1}", flush=True)
                     # load best checkpoint
                     self.model.load_state_dict(torch.load(self.ckpt))
                     return train_loss_list, val_loss_list
             else:
-                print("[Train-{}]: {}".format(epoch, epoch_loss))
+                avg_loss = epoch_loss / num_train_batch
+                print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}", flush=True)
 
         return train_loss_list, val_loss_list
 

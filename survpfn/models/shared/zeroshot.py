@@ -23,11 +23,13 @@ Two modes
 from __future__ import annotations
 
 import os
+import sys
 import warnings
 from typing import Optional, List, Dict, Any, Union
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from sklearn.isotonic import IsotonicRegression
 from sklearn.decomposition import PCA
 from survpfn.models.shared.binning import get_cuts, resolve_num_durations
@@ -75,6 +77,7 @@ class ZeroShotSurvivalPredictor:
         self.model_path = model_path
         self.use_time_bin_encoder = use_time_bin_encoder
         self.n_estimators = n_estimators
+        self.verbose = kwargs.get("verbose", True)
 
         self._bin_times = None
         self._X_train = None
@@ -138,6 +141,9 @@ class ZeroShotSurvivalPredictor:
             # Right edges of quantile bins (prediction time points)
             self._bin_times = get_cuts(self._durations, self._events, n_bins)#[1:]
 
+        if self.verbose:
+            print(f"  [{self.backbone}/ZeroShot] Method: {self.method}, Bins: {len(self._bin_times)}, Estimators: {self.n_estimators}", flush=True)
+
         # PCA Feature Reduction: Fit once globally if features exceed TabPFN limit (2000)
         # This prevents state overwriting during multi-bin or multi-event fitting.
         n_temp_features = 6 if self.use_time_bin_encoder else 1
@@ -152,6 +158,7 @@ class ZeroShotSurvivalPredictor:
             print(f"Global PCA fitted: {n_features} -> {n_components} components.")
 
         if self.method == "single_context":
+            if self.verbose: print(f"  [{self.backbone}/ZeroShot] Building context (single-context mode)...", flush=True)
             if self._num_events == 1 or self.cr_method == "multinomial":
                 self._clf = self._fit_context(self._X_train, self._durations, self._events)
             else: # per_event
@@ -161,7 +168,8 @@ class ZeroShotSurvivalPredictor:
                     self._clfs[e] = self._fit_context(self._X_train, self._durations, e_binary)
         else: # per_bin
             self._clfs_per_bin = {}
-            for k, t_k in enumerate(self._bin_times):
+            pbar = tqdm(enumerate(self._bin_times), total=len(self._bin_times), desc=f"  [{self.backbone}/ZeroShot] Fitting per-bin context", file=sys.stdout, leave=False, disable=not self.verbose)
+            for k, t_k in pbar:
                 if self._num_events == 1 or self.cr_method == "multinomial":
                     self._clfs_per_bin[k] = self._fit_context(self._X_train, self._durations, self._events, bin_times=[t_k])
                 else: # per_event
@@ -286,7 +294,8 @@ class ZeroShotSurvivalPredictor:
         n_test = len(X_test)
         surv_matrix = np.zeros((n_test, K))
 
-        for k, t_k in enumerate(self._bin_times):
+        pbar = tqdm(enumerate(self._bin_times), total=K, desc=f"  [{self.backbone}/ZeroShot] Predicting", file=sys.stdout, leave=False, disable=not self.verbose)
+        for k, t_k in pbar:
             if self.use_time_bin_encoder:
                 feat = self._time_encoder.bin_feats[k]
                 t_f_col = np.tile(feat, (n_test, 1))
@@ -331,7 +340,8 @@ class ZeroShotSurvivalPredictor:
         # Prob of Event m by time t_k
         event_probs = [np.zeros((n_test, K)) for _ in range(self._num_events)]
 
-        for k, t_k in enumerate(self._bin_times):
+        pbar = tqdm(enumerate(self._bin_times), total=K, desc=f"  [{self.backbone}/ZeroShot] Predicting (Multinomial CR)", file=sys.stdout, leave=False, disable=not self.verbose)
+        for k, t_k in pbar:
             if self.use_time_bin_encoder:
                 feat = self._time_encoder.bin_feats[k]
                 t_f_col = np.tile(feat, (n_test, 1))
@@ -380,7 +390,8 @@ class ZeroShotSurvivalPredictor:
             n_test = len(X_test)
             cif_m = np.zeros((n_test, K))
             
-            for k, t_k in enumerate(self._bin_times):
+            pbar = tqdm(enumerate(self._bin_times), total=K, desc=f"  [{self.backbone}/ZeroShot] Predicting (Event {m})", file=sys.stdout, leave=False, disable=not self.verbose)
+            for k, t_k in pbar:
                 if self.use_time_bin_encoder:
                     feat = self._time_encoder.bin_feats[k]
                     t_f_col = np.tile(feat, (n_test, 1))

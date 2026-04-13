@@ -435,10 +435,10 @@ class BaseSurvExpandedFinetune:
                         loss = criterion(cls_logits, by)
 
                         if not torch.isfinite(loss):
-                            warnings.warn(
+                            print(
                                 f"[{self.backbone_name}/Expanded] epoch {epoch}: "
                                 f"non-finite train loss ({loss.item():.4g}), skipping batch.",
-                                stacklevel=2,
+                                flush=True
                             )
                             continue
 
@@ -454,60 +454,35 @@ class BaseSurvExpandedFinetune:
                     scheduler.step()
                     avg_loss = epoch_loss / max(1, n_batches)
 
-                    # ── Validation ──
-                    if VX_pt is not None:
+                    # ── Validation (Inference-style with C-index) ──
+                    if val_data is not None:
                         self.net.eval()
-                        val_loss, n_val_batches = 0.0, 0
-                        # Balanced sampler on expanded validation set — same reason as
-                        # training: avoids all-censored batches and the stale NaN-after-
-                        # accumulate bug (old code added to val_loss before checking).
-                        _val_sampler_exp = EventBalancedBatchSampler(
-                            events=vy_exp,          # numpy, shape (M_val,)
-                            batch_size=batch_size,
-                            seed=kwargs.get("random_state", 42) + epoch,
-                        )
+                        vx_v, vd_v, ve_v = val_data
+                        
+                        # Use a fixed context from training set for this validation step
+                        # to ensure stability across epochs.
+                        vctx_idx = torch.randperm(M)[:min(self.context_size, M)]
+                        vx_ctx_raw, vy_ctx = X_pt[vctx_idx].to(self.device), y_pt[vctx_idx].float().to(self.device)
+                        vx_ctx = self.net._to_padded(vx_ctx_raw) if hasattr(self.net, "_to_padded") else vx_ctx_raw
+                        self.net.set_context(vx_ctx, vy_ctx)
+
                         with torch.no_grad():
-                            for vbidx_cpu in _val_sampler_exp:
-                                vbx = VX_pt[vbidx_cpu].to(self.device)
-                                vby = vy_pt[vbidx_cpu].to(self.device)
-                                # Fresh context from TRAINING set for validation
-                                vctx_idx = torch.randperm(M)[:min(self.context_size, M)]
-                                vx_ctx_raw = X_pt[vctx_idx].to(self.device)
-                                vy_ctx_raw = y_pt[vctx_idx].float().to(self.device)
-                                vx_ctx = self.net._to_padded(vx_ctx_raw) if hasattr(self.net, "_to_padded") else vx_ctx_raw
-                                vlogits = self.net(vbx, x_context=vx_ctx, y_context=vy_ctx_raw)
-                                vl = criterion(vlogits, vby)
-
-                                # Check BEFORE accumulating — old code added NaN to
-                                # val_loss first, permanently poisoning the running total.
-                                if not torch.isfinite(vl):
-                                    warnings.warn(
-                                        f"[{self.backbone_name}/Expanded] epoch {epoch}: "
-                                        f"non-finite val loss ({vl.item():.4g}), skipping batch.",
-                                        stacklevel=2,
-                                    )
-                                    continue
-                                val_loss += vl.item()
-                                n_val_batches += 1
-
-                        if n_val_batches == 0:
-                            warnings.warn(
-                                f"[{self.backbone_name}/Expanded] epoch {epoch}: "
-                                "ALL validation batches non-finite; using train loss for early stopping.",
-                                stacklevel=2,
-                            )
-                            avg_val_loss = avg_loss
-                        else:
-                            avg_val_loss = val_loss / n_val_batches
-                        stop_loss = avg_val_loss
+                            # predict_survival_df handles scaling via self._prep.transform
+                            surv_df = self.predict_survival_df(vx_v, n_ensemble=0)
+                            val_metrics = self.evaluate(surv_df, vd_v, ve_v, durations, events)
+                            val_cindex = val_metrics["c_index"]
+                        
+                        # For early stopping, we use 1 - c_index (so lower is better)
+                        stop_loss = 1.0 - val_cindex
                     else:
                         stop_loss = avg_loss
+                        val_cindex = None
 
                     
 
                     if verbose:
                         msg = f"  [{self.backbone_name}/Expanded] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}"
-                        if VX_pt is not None: msg += f" val_loss={avg_val_loss:.4f}"
+                        if val_data is not None: msg += f" val_cindex={val_cindex:.4f}"
                         print(msg, flush=True)
 
                     if stop_loss < best_loss:
@@ -554,10 +529,8 @@ class BaseSurvExpandedFinetune:
             censor_surv="km",
         )
         c_index = ev.concordance_td("antolini")
-        time_grid = np.linspace(durations_test.min(), durations_test.max(), 100)
-        ibs = ev.integrated_brier_score(time_grid)
 
-        return {"c_index": c_index, "ibs": ibs}
+        return {"c_index": c_index}
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +596,33 @@ class BaseJointSurvFinetune:
             return NLLMTLRLoss()
         else:
             raise ValueError(f"Unknown head_type: {head_type}")
+
+    @staticmethod
+    def evaluate(
+        surv_df: Union[pd.DataFrame, List[pd.DataFrame]],
+        durations_test: np.ndarray,
+        events_test: np.ndarray,
+        durations_train: np.ndarray,
+        events_train: np.ndarray,
+    ) -> dict:
+        """Compute survival evaluation metrics via pycox EvalSurv."""
+        from pycox.evaluation import EvalSurv
+        
+        # In CR models, predict_survival_df returns a list of CIFs DataFrames
+        if isinstance(surv_df, list):
+            # For simplicity, evaluate Cause 1 (index 0)
+            # EvalSurv expects a survival function, so we treat 1 - CIF_1 as survival
+            surv_df = 1.0 - surv_df[0]
+
+        ev = EvalSurv(
+            surv_df,
+            durations_test,
+            events_test,
+            censor_surv="km",
+        )
+        c_index = ev.concordance_td("antolini")
+
+        return {"c_index": c_index}
 
     def fit(
         self,
@@ -710,7 +710,21 @@ class BaseJointSurvFinetune:
         # ── 3. Loss & Optimizer ──
         criterion_surv = self._get_criterion_surv(self.head_type)
         criterion_cls = nn.CrossEntropyLoss()
-        optimizer = self.model.optimizer if self.model else torch.optim.Adam(self.net.parameters(), lr=self.learning_rate)
+
+        # Weight decay for regularization
+        weight_decay = kwargs.get("weight_decay", 1e-4)
+        optimizer = torch.optim.AdamW(
+            filter(lambda p: p.requires_grad, self.net.parameters()), 
+            lr=self.learning_rate, 
+            weight_decay=weight_decay
+        )
+        
+        # Learning rate scheduler
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, 
+            T_max=epochs, 
+            eta_min=self.learning_rate * 0.01
+        )
 
         # ── 4. Main loop ──
         best_loss = float('inf')
@@ -800,86 +814,38 @@ class BaseJointSurvFinetune:
                         epoch_loss += total_loss.item()
                         n_batches += 1
 
+                    scheduler.step() # Decay learning rate
                     avg_loss = epoch_loss / max(1, n_batches)
 
-                    # ── Validation ──
-                    if vx_pt_val is not None:
+                    # ── Validation (Inference-style with C-index) ──
+                    if val_data is not None:
                         self.net.eval()
-                        val_loss, n_val_batches = 0.0, 0
-                        # Use the same balanced sampler so validation batches are
-                        # also guaranteed to contain events — sequential slicing can
-                        # produce all-censored tail batches on low-event-rate datasets
-                        # (e.g. MIMIC-IV ~10 % event rate) causing NaN CoxPH loss.
-                        _val_sampler = EventBalancedBatchSampler(
-                            events=ve,              # raw numpy from val_data
-                            batch_size=batch_size,
-                            seed=kwargs.get("random_state", 42) + epoch,  # vary per epoch
-                        )
+                        vx_v, vd_v, ve_v = val_data
+                        
+                        # Stable training context for validation
+                        vctx_idx = torch.randperm(N, device=self.device)[:min(self.context_size, N)]
+                        vx_ctx = x_pt[vctx_idx]
+                        if hasattr(self.net, "_to_padded"): vx_ctx = self.net._to_padded(vx_ctx)
+                        vy_ctx = y_bin_pt[vctx_idx]
+                        self.net.set_context(vx_ctx, vy_ctx)
+
                         with torch.no_grad():
-                            for vbidx_cpu in _val_sampler:
-                                vbidx = vbidx_cpu.to(self.device)
-                                vbx      = vx_pt_val[vbidx]
-                                vbdur    = vdur_pt_val[vbidx]
-                                vbev     = vev_pt_val[vbidx]
-                                vbdur_cont = vdur_pt_cont_val[vbidx]
-                                vbfrac   = vfrac_pt_val[vbidx] if vfrac_pt_val is not None else None
+                            if self.head_type in ("cox", "deepsurv"):
+                                self.model.compute_baseline_hazards(input=x_pt, target=(dur_pt, ev_pt))
 
-                                # Context always drawn from TRAINING set
-                                vctx_idx = torch.randperm(N, device=self.device)[:min(self.context_size, N)]
-                                vx_ctx = x_pt[vctx_idx]
-                                if hasattr(self.net, "_to_padded"): vx_ctx = self.net._to_padded(vx_ctx)
-                                vy_ctx = y_bin_pt[vctx_idx]
-
-                                vhead_out, _ = self.net(vbx, x_context=vx_ctx, y_context=vy_ctx, return_logits=True)
-
-                                if self.task_type == "cr":
-                                    if self.cr_loss_type == "deephit":
-                                        vl = compute_deephit_cr_loss(vhead_out, vbdur_cont, vbev, vbdur, self.num_events, self.num_durations, self.device)
-                                    elif self.cr_loss_type == "deephit_v2":
-                                        vl = compute_deephit_cr_loss_v2(vhead_out, vbdur_cont, vbev, vbdur, self.num_events, self.num_durations, self.device)
-                                    elif self.cr_loss_type == "cox":
-                                        vl = compute_cox_cr_loss(vhead_out, vbdur_cont, vbev, self.num_events, self.device)
-                                elif self.head_type == "deephit":
-                                    vrank_mat = torch.from_numpy(pair_rank_mat(vbdur_cont.cpu().numpy(), vbev.cpu().numpy())).float().to(self.device)
-                                    vl = criterion_surv(vhead_out, vbdur, vbev, vrank_mat)
-                                elif self.head_type == "pchazard":
-                                    vl = criterion_surv(vhead_out, vbdur, vbev, vbfrac)
-                                else:
-                                    vl = criterion_surv(vhead_out, vbdur, vbev)
-
-                                # Skip NaN batches rather than poisoning the running
-                                # total — log once so the user can track frequency.
-                                if not torch.isfinite(vl):
-                                    warnings.warn(
-                                        f"[{self.backbone_name}/{self.head_type}] "
-                                        f"epoch {epoch}: non-finite val loss "
-                                        f"({vl.item():.4g}), skipping batch.",
-                                        stacklevel=2,
-                                    )
-                                    continue
-
-                                val_loss += vl.item()
-                                n_val_batches += 1
-
-                        if n_val_batches == 0:
-                            # Entire validation set produced NaN — fall back to
-                            # train loss for early-stopping so training continues.
-                            warnings.warn(
-                                f"[{self.backbone_name}/{self.head_type}] "
-                                f"epoch {epoch}: ALL validation batches were NaN; "
-                                "using train loss for early stopping this epoch.",
-                                stacklevel=2,
-                            )
-                            avg_val_loss = avg_loss
-                        else:
-                            avg_val_loss = val_loss / n_val_batches
-                        stop_loss = avg_val_loss
+                            # Actual inference method
+                            surv_result = self.predict_survival_df(vx_v, n_ensemble=0)
+                            val_metrics = self.evaluate(surv_result, vd_v, ve_v, durations, events)
+                            val_cindex = val_metrics["c_index"]
+                        
+                        stop_loss = 1.0 - val_cindex
                     else:
                         stop_loss = avg_loss
+                        val_cindex = None
 
                     if verbose:
                         msg = f"  [{self.backbone_name}/{self.head_type}] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}"
-                        if vx_pt_val is not None: msg += f" val_loss={avg_val_loss:.4f}"
+                        if val_data is not None: msg += f" val_cindex={val_cindex:.4f}"
                         print(msg, flush=True)
 
                     if stop_loss < best_loss:
@@ -948,8 +914,11 @@ class BaseJointSurvFinetune:
                     return cifs
                 if hasattr(self.model, "interpolate"):
                     # Smooth evaluation for discrete models to break ties in risk scores during evaluation
-                    return self.model.interpolate(10).predict_surv_df(x_pt)
-                return self.model.predict_surv_df(x_pt)
+                    surv_df = self.model.interpolate(10).predict_surv_df(x_pt)
+                else:
+                    surv_df = self.model.predict_surv_df(x_pt)
+                    
+                return surv_df
 
         if n_ensemble > 0 and hasattr(self, "_train_x"):
             ensemble_results = []

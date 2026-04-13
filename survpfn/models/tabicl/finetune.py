@@ -285,7 +285,7 @@ class TabICLSurvPHFinetune(BaseSurvExpandedFinetune):
         hidden_dim: int = 256,
         dropout: float = 0.1,
         freeze_backbone: bool = True,
-        patience: int = 10,
+        patience: int = 5,
         device: str = "cuda:0",
         random_state: int = 0,
         checkpoint_version: str = "tabicl-classifier-v1.1-0506.ckpt",

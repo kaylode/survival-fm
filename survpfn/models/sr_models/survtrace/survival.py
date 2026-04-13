@@ -55,7 +55,7 @@ def train_survtrace(
     epochs: int = 100,
     batch_size: int = 64,
     learning_rate: float = 1e-3,
-    val_fraction: float = 0.1,
+    val_fraction: float = 0.2,
     hidden_size: int = 16,
     num_hidden_layers: int = 3,
     num_attention_heads: int = 2,
@@ -211,7 +211,7 @@ def train_survtrace(
                             train_set=(df_x_tr_hpo, df_y_tr_hpo),
                             val_set=(df_x_val_hpo, df_y_val_hpo),
                             batch_size=current_bs,
-                            epochs=20, # reduced for speed
+                            epochs=2, # reduced for speed
                             learning_rate=p["learning_rate"],
                         )
                         success = True
@@ -219,7 +219,7 @@ def train_survtrace(
                         if "CUDA out of memory" in str(e) and current_bs > 1:
                             torch.cuda.empty_cache()
                             current_bs = max(1, current_bs // 2)
-                            print(f"      {C_YELLOW}→ CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}")
+                            print(f"      {C_YELLOW}→ CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}", flush=True)
                         else:
                             raise e
                 

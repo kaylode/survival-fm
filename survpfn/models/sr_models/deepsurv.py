@@ -18,7 +18,9 @@ C_YELLOW = "\033[93m"
 C_RESET = "\033[0m"
 
 
-def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir: str = "results", out_dir: str = "results", study_id: Optional[str] = None, **kwargs):
+def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="Total mortality", random_state=42, tune=False, n_trials=10, save_dir: str = "results", out_dir: str = "results", study_id: Optional[str] = None, verbose: bool = True, **kwargs):
+    if verbose:
+        print(f"  [DeepSurv] Method: CoxPH MLP, Tuning: {tune}, Device: {kwargs.get('device', 'cpu')}", flush=True)
     out_dir = kwargs.get("out_dir", out_dir)
     T_train = df_train[duration_col]
     E_train = df_train[event_col]
@@ -90,13 +92,16 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
             model.compute_baseline_hazards()
             surv = model.predict_surv_df(X_val_t)
             ev = EvalSurv(surv, T_val, E_val, censor_surv='km')
-            res = ev.concordance_td()
+            res = ev.concordance_td('antolini')
             return res if not np.isnan(res) else 0.0
 
         n_remaining = get_n_trials_to_run(study, n_trials)
         if n_remaining > 0:
+            if verbose: print(f"  [DeepSurv] Running {n_remaining} Optuna trials...", flush=True)
             study.optimize(objective, n_trials=n_remaining)
         best_p = study.best_params
+        if verbose:
+            print(f"  [DeepSurv] Best params: {best_p}", flush=True)
         params['lr'] = best_p['lr']
         params['dropout'] = best_p['dropout']
         params['num_nodes'] = [best_p['nodes']] * best_p['layers']
@@ -124,7 +129,7 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
                 torch.tensor(X_tr_final, dtype=torch.float32), 
                 (torch.tensor(T_tr_final, dtype=torch.float32), torch.tensor(E_tr_final, dtype=torch.float32)), 
                 current_bs, params.get('epochs', 30), 
-                verbose=True, callbacks=callbacks,
+                verbose=verbose, callbacks=callbacks,
                 val_data=(torch.tensor(X_val_final, dtype=torch.float32), 
                           (torch.tensor(T_val_final, dtype=torch.float32), torch.tensor(E_val_final, dtype=torch.float32)))
             )
@@ -133,7 +138,7 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
             if "CUDA out of memory" in str(e) and current_bs > 1:
                 torch.cuda.empty_cache()
                 current_bs = max(1, current_bs // 2)
-                print(f"      {C_YELLOW}→ CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}")
+                print(f"  [DeepSurv] CUDA OOM! Reducing batch_size to {current_bs}", flush=True)
                 # Re-init model
                 net = tt.practical.MLPVanilla(in_features, params['num_nodes'], 1, batch_norm=True, dropout=params['dropout'], activation=nn.ReLU)
                 model = CoxPH(net, tt.optim.Adam(lr=params['lr'], weight_decay=1e-4))

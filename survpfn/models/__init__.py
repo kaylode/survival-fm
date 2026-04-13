@@ -28,8 +28,8 @@ from .shared.binning import resolve_num_durations
 # ── classical / deep SR models ────────────────────────────────────────────────
 from .sr_models.classical import run_multivariate_cox, run_kaplan_meier
 from .sr_models.tree import train_rsf, train_gbsa
-from .sr_models.deep_surv import train_deepsurv
-from .sr_models.deep_hit import train_mtlr, train_pchazard, train_deephit_single
+from .sr_models.deepsurv import train_deepsurv
+from .sr_models.discrete import train_mtlr, train_pchazard, train_deephit_single, _surv_df_to_arrays
 from .sr_models.soden import train_soden
 from .sr_models.survtrace import train_survtrace
 
@@ -64,11 +64,14 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
         num_events = int(df_train[ev_col].max())
         feat_cols = [c for c in df_train.columns if c not in {dur_col, ev_col}]
 
-        num_durations = resolve_num_durations(
-            df_train[dur_col].values,
-            df_train[ev_col].values,
-            -1,
-        )
+        if kw.get("num_durations") is not None and kw.get("num_durations") > 0:
+            num_durations = kw["num_durations"]
+        else:
+            num_durations = resolve_num_durations(
+                df_train[dur_col].values,
+                df_train[ev_col].values,
+                -1,
+            )
 
         wrapper = _SurvPH(
             head_type=head_type,
@@ -77,7 +80,7 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
             num_durations=num_durations,
             head_num_nodes=cfg.head_hidden_dims,
             dropout=cfg.dropout,
-            learning_rate=5e-5,#cfg.learning_rate,
+            learning_rate=cfg.learning_rate,
             cr_loss_type=cfg.cr_loss_type,
             use_adapter=cfg.use_adapter,
             input_dim=len(feat_cols),
@@ -103,8 +106,12 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
             risk = 1.0 - cifs[0].iloc[-1].values
             return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
         else:
-            risk = 1.0 - surv_out.iloc[-1].values
-            return wrapper, risk, surv_out.values.T, surv_out.index.values
+            if head_type != 'cox':
+                risk = 1.0 - surv_out.iloc[-1].values
+                return wrapper, risk, surv_out.values.T, surv_out.index.values
+            else:
+                risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_out)
+                return wrapper, risk_scores, surv_probs, surv_times
 
     _fn.__name__ = f"train_{fm_name}_{'frozen' if freeze_backbone else 'joint'}_{head_type}_{task_type}"
     return _fn
@@ -124,11 +131,14 @@ def _finetune_wrapper(fm_name: str) -> Callable:
         cfg = cfg or FMConfig.from_kwargs(**kw)
         feat_cols = [c for c in df_train.columns if c not in {dur_col, ev_col}]
 
-        num_durations = resolve_num_durations(
-            df_train[dur_col].values,
-            df_train[ev_col].values,
-            -1,
-        )
+        if kw.get("num_durations") is not None and kw.get("num_durations") > 0:
+            num_durations = kw["num_durations"]
+        else:
+            num_durations = resolve_num_durations(
+                df_train[dur_col].values,
+                df_train[ev_col].values,
+                -1,
+            )
 
         wrapper = _SurvPH(
             num_durations=num_durations,

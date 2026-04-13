@@ -281,7 +281,7 @@ class TabDPTSurvPHFinetune(BaseSurvExpandedFinetune):
         hidden_dim: int = 128,
         dropout: float = 0.1,
         freeze_backbone: bool = True,
-        patience: int = 10,
+        patience: int = 5,
         device: str = "cuda:0",
         random_state: int = 0,
         **kwargs,
