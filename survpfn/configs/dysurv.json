@@ -1,0 +1,16 @@
+{
+    "default": {
+        "epochs": 100,
+        "batch_size": 128,
+        "lr": 1e-3,
+        "encoded_features": 32,
+        "alpha": [1.0, 0.1, 0.1],
+        "patience": 10,
+        "num_durations": 50
+    },
+    "tuning": {
+        "lr": {"type": "float", "low": 1e-4, "high": 1e-2, "log": true},
+        "encoded_features": {"type": "categorical", "choices": [16, 32, 64, 128]},
+        "batch_size": {"type": "categorical", "choices": [64, 128, 256]}
+    }
+}

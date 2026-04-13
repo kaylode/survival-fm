@@ -440,6 +440,7 @@ def main():
     g.add_argument("--epochs",     type=int,   default=50,     help="Training epochs.")
     g.add_argument("--batch-size", type=int,   default=512,     help="Mini-batch size.")
     g.add_argument("--context-size", type=int,   default=512,     help="Context size.")
+    g.add_argument("--sampling-ratio", type=float, default=0.05,     help="Ratio of samples to use for training (None = use all).")
     g.add_argument("--n-ensemble", type=int,   default=1,     help="Number of ensemble members.")
     g.add_argument("--lr",         type=float, default=1e-4,   help="Learning rate.")
     g.add_argument("--alpha",      type=float, default=0.5,    help="PFN loss weight.")
@@ -491,6 +492,7 @@ def main():
         "random_state":       args.seed,
         "context_size":       args.context_size,
         "n_ensemble":         args.n_ensemble,
+        "sampling_ratio":     args.sampling_ratio,
     }
 
     logger = LoggerObserver.getLogger("main")

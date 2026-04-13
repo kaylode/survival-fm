@@ -65,13 +65,13 @@ ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 
 # ── Model groups (must match analysis.py groupings) ───────────────────────────
 CLASSICAL_MODELS="cox rsf gbsa"
-DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace"
+DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace dysurv"
 
 EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox tabicl_embedding_cox"
 EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit tabicl_embedding_deephit"
 EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr tabicl_embedding_mtlr"
 EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard tabicl_embedding_pchazard"
-FM_EMBEDDING="$EMBEDDING_COX $EMBEDDING_DEEPHIT $EMBEDDING_MTLR $EMBEDDING_PCHAZARD"
+FM_EMBEDDING="$EMBEDDING_COX $EMBEDDING_DEEPHIT $EMBEDDING_MTLR"
 
 JOINT_COX="tabpfn_joint_cox tabdpt_joint_cox tabicl_joint_cox"
 JOINT_DEEPHIT="tabpfn_joint_deephit tabdpt_joint_deephit tabicl_joint_deephit"
@@ -84,7 +84,7 @@ ZEROSHOT_TEMPORAL="tabpfn_zeroshot_perbin_time tabdpt_zeroshot_perbin_time tabic
 BESTSHOT="tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
 FINETUNE="tabpfn_finetune tabdpt_finetune tabicl_finetune"
 
-ALL_SR_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE"
+ALL_SR_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_EMBEDDING $BESTSHOT $FINETUNE"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
