@@ -5,7 +5,7 @@ Runs 5-fold CV across all supported datasets and models. For each
 (dataset, model, fold), creates an independent result folder:
 
     results/<DATASET>/<model>/fold_<N>/
-        metrics.json            — C-index, IBS, AUC, D-cal
+        metrics.json            — C_td, IBS, AUC, D-cal
         feature_importance.json — model-specific feature weights (if available)
         best_params.json        — best Optuna hyperparameters + tuning summary
         optuna_<model>.log      — Optuna journal (tunable models only)
@@ -34,11 +34,11 @@ Available model names
   cox, km
   rsf, gbsa
   survtrace, deepsurv, mtlr, pchazard, deephit_single
-  tabpfn_embedding_cox, tabpfn_embedding_deephit, tabpfn_embedding_pchazard, tabpfn_embedding_mtlr
+  tabpfn_embedding_{cox,deepsurv,deephit,pchazard,mtlr}
                                                (TabPFN frozen → survival head)
   tabpfn_cox, tabpfn_deephit, tabpfn_pchazard, tabpfn_mtlr
                                                (TabPFN jointly trained)
-  tabdpt_embedding_{cox,deephit,pchazard,mtlr} (TabDPT frozen; needs TABDPT_CHECKPOINT)
+  tabdpt_embedding_{cox,deephit,pchazard,mtlr} (TabDPT frozen; auto-downloads checkpoint)
   tabicl_embedding_{cox,deephit,pchazard,mtlr} (TabICL frozen; auto-downloads checkpoint)
   tabpfn_zeroshot, tabdpt_zeroshot, tabicl_zeroshot
                                                (zero-shot ICL; single_context mode)
@@ -57,562 +57,91 @@ import warnings
 from datetime import datetime
 from typing import Callable
 
+# ── Color codes ──────────────────────────────────────────────────────────────
+C_GREEN = "\033[92m"
+C_YELLOW = "\033[93m"
+C_BLUE = "\033[96m"
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 
-from survpfn.dataloaders import BENCHMARK_DATASETS
-from survpfn.metrics.metrics import evaluate_survival_model
-
-
-# ---------------------------------------------------------------------------
-# Fold-level data preparation
-# ---------------------------------------------------------------------------
-
-def _scale_fold(
-    df: pd.DataFrame,
-    train_idx: np.ndarray,
-    test_idx: np.ndarray,
-    duration_col: str,
-    event_col: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split, scale features (fit on train only), binarize competing risks.
-
-    Competing-risk event columns (values > 1) are binarized to {0, 1} so that
-    single-risk models can be applied uniformly across all datasets.
-    """
-    feat_cols = [c for c in df.columns if c not in {duration_col, event_col}]
-
-    df_train = df.iloc[train_idx].reset_index(drop=True).copy()
-    df_test = df.iloc[test_idx].reset_index(drop=True).copy()
-
-    # Binarize competing-risk events
-    if df[event_col].max() > 1:
-        df_train[event_col] = (df_train[event_col] > 0).astype(float)
-        df_test[event_col] = (df_test[event_col] > 0).astype(float)
-
-    scaler = StandardScaler()
-    df_train[feat_cols] = scaler.fit_transform(df_train[feat_cols])
-    df_test[feat_cols] = scaler.transform(df_test[feat_cols])
-
-    return df_train, df_test
+# New imports
+from survpfn.dataloaders import get_dataset
+from survpfn.models import ALL_MODELS
+from survpfn.metrics import evaluate_cr, evaluate_sr_survival_eval
+from survpfn.utils.config import seed_everything
+from survpfn.utils.logger import LoggerObserver
+from survpfn.utils.optuna import (
+    _scale_fold,
+    get_feature_importance,
+    get_best_params,
+    count_params
+)
+from survpfn.models.shared.binning import resolve_num_durations
 
 
 # ---------------------------------------------------------------------------
-# Feature importance extraction
+# Model groups for CLI selection
 # ---------------------------------------------------------------------------
 
-def get_feature_importance(
-    model_name: str,
-    model,
-    feature_names: list[str],
-) -> dict | None:
-    """Return a serialisable feature-importance dict or None if not available.
+MODEL_GROUPS: dict[str, list[str]] = {
+    "classical": ["cox", "km"],
+    "tree":      ["rsf", "gbsa"],
+    "deep":      ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden"],
 
-    Supported models
-    ----------------
-    cox  — coefficients + hazard ratios + p-values from ``CoxPHFitter.summary``
-    rsf  — impurity-based feature importances from ``RandomSurvivalForest``
-    gbsa — impurity-based feature importances from ``GradientBoostingSurvivalAnalysis``
-    """
-    if model is None:
-        return None
+    # Strategy 1 — Frozen Transfer (SR)
+    "fm_embedding": [
+        "tabpfn_embedding_cox", "tabpfn_embedding_deephit", "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
+        "tabdpt_embedding_cox", "tabdpt_embedding_deephit", "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
+        "tabicl_embedding_cox", "tabicl_embedding_deephit", "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
+    ],
 
-    try:
-        if model_name in ("rsf", "gbsa") and hasattr(model, "feature_importances_"):
-            return {
-                "type": "impurity",
-                "features": dict(zip(feature_names, model.feature_importances_.tolist())),
-            }
+    # Strategy 2 — Joint Adaptation (SR)
+    "fm_joint": [
+        "tabpfn_joint_cox", "tabpfn_joint_deephit", "tabpfn_joint_pchazard", "tabpfn_joint_mtlr",
+        "tabdpt_joint_cox", "tabdpt_joint_deephit", "tabdpt_joint_pchazard", "tabdpt_joint_mtlr",
+        "tabicl_joint_cox", "tabicl_joint_deephit", "tabicl_joint_pchazard", "tabicl_joint_mtlr",
+    ],
 
-        if model_name == "cox" and hasattr(model, "summary"):
-            s = model.summary.reset_index()
-            feat_col = "covariate" if "covariate" in s.columns else s.columns[0]
-            feats = s[feat_col].tolist()
-            return {
-                "type": "cox_coefficients",
-                "coef":     dict(zip(feats, s["coef"].tolist())),
-                "exp_coef": dict(zip(feats, np.exp(s["coef"]).tolist())),
-                "p":        dict(zip(feats, s["p"].tolist())),
-            }
-    except (NotImplementedError, Exception):
-        return None
+    # Strategy 3 — Zero-shot ICL (SR)
+    "zeroshot": [
+        "tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot",
+        "tabpfn_zeroshot_perbin", "tabdpt_zeroshot_perbin", "tabicl_zeroshot_perbin",
+    ],
+    "zeroshot_temporal": [
+        "tabpfn_zeroshot_perbin_time", "tabdpt_zeroshot_perbin_time", "tabicl_zeroshot_perbin_time",
+        "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
+    ],
 
-    return None
+    # Strategy 4 — Temporal Finetuning
+    "finetune": [
+        "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+    ],
 
-
-# ---------------------------------------------------------------------------
-# Optuna best-params extraction
-# ---------------------------------------------------------------------------
-
-# Maps model_name → (log_filename, optuna study_name) matching each model module.
-_OPTUNA_STUDY: dict[str, tuple[str, str]] = {
-    "rsf":            ("optuna_rsf.log",            "rsf_tuning"),
-    "gbsa":           ("optuna_gbsa.log",            "gbsa_tuning"),
-    "deepsurv":       ("optuna_deepsurv.log",        "deepsurv_tuning"),
-    "mtlr":           ("optuna_mtlr.log",            "mtlr_tuning"),
-    "pchazard":       ("optuna_pchazard.log",        "pchazard_tuning"),
-    "deephit_single": ("optuna_deephit_single.log",  "deephit_single_tuning"),
-    "survtrace":      ("optuna_survtrace.log",       "survtrace_tuning"),
-    # TabPFN frozen embedding heads
-    "tabpfn_embedding_cox":          ("optuna_tabpfn_cox.log",           "tabpfn_cox"),
-    "tabpfn_embedding_deephit":      ("optuna_tabpfn_deephit.log",       "tabpfn_deephit"),
-    "tabpfn_embedding_pchazard":     ("optuna_tabpfn_pchazard.log",      "tabpfn_pchazard"),
-    "tabpfn_embedding_mtlr":         ("optuna_tabpfn_mtlr.log",          "tabpfn_mtlr"),
-    # TabDPT frozen embedding heads
-    "tabdpt_embedding_cox":      ("optuna_tabdpt_cox.log",        "tabdpt_cox"),
-    "tabdpt_embedding_deephit":  ("optuna_tabdpt_deephit.log",    "tabdpt_deephit"),
-    "tabdpt_embedding_pchazard": ("optuna_tabdpt_pchazard.log",   "tabdpt_pchazard"),
-    "tabdpt_embedding_mtlr":     ("optuna_tabdpt_mtlr.log",       "tabdpt_mtlr"),
-    # TabICL frozen embedding heads
-    "tabicl_embedding_cox":      ("optuna_tabicl_cox.log",        "tabicl_cox"),
-    "tabicl_embedding_deephit":  ("optuna_tabicl_deephit.log",    "tabicl_deephit"),
-    "tabicl_embedding_pchazard": ("optuna_tabicl_pchazard.log",   "tabicl_pchazard"),
-    "tabicl_embedding_mtlr":     ("optuna_tabicl_mtlr.log",       "tabicl_mtlr"),
-    # TabICL jointly-trained heads
-    "tabicl_cox":      ("optuna_tabicl_joint_cox.log",      "tabicl_joint_cox"),
-    "tabicl_deephit":  ("optuna_tabicl_joint_deephit.log",  "tabicl_joint_deephit"),
-    "tabicl_pchazard": ("optuna_tabicl_joint_pchazard.log", "tabicl_joint_pchazard"),
-    "tabicl_mtlr":     ("optuna_tabicl_joint_mtlr.log",     "tabicl_joint_mtlr"),
-    # SODEN + BetaSurv
-    "soden":     ("optuna_soden.log",     "soden_tuning"),
-    "beta_surv": ("optuna_beta_surv.log", "beta_surv_tuning"),
+    # Competing Risks
+    "cr": [
+        "cox_cr", "aj_cr", "fine_gray_cr", "survival_boost_cr", "deephit_cr",
+        "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
+        "tabpfn_joint_deephit_cr", "tabdpt_joint_deephit_cr", "tabicl_joint_deephit_cr",
+        "tabpfn_zeroshot_cr", "tabdpt_zeroshot_cr", "tabicl_zeroshot_cr",
+    ],
 }
 
+# ── Backwards compatibility & Backbone groups ────────────────────────────────
+MODEL_GROUPS["tabpfn"] = [m for m in ALL_MODELS.keys() if "tabpfn" in m]
+MODEL_GROUPS["tabdpt"] = [m for m in ALL_MODELS.keys() if "tabdpt" in m]
+MODEL_GROUPS["tabicl"] = [m for m in ALL_MODELS.keys() if "tabicl" in m]
+MODEL_GROUPS["fm"] = MODEL_GROUPS["fm_embedding"] + MODEL_GROUPS["fm_joint"] + MODEL_GROUPS["zeroshot"] + MODEL_GROUPS["finetune"]
 
-def get_best_params(model_name: str, out_dir: str) -> dict | None:
-    """Read best hyperparameters + tuning summary from the Optuna journal in out_dir.
-
-    Returns a dict with keys:
-        best_params, best_value, n_completed_trials, best_trial_number
-    Returns None if the model is not tunable or the journal does not exist yet.
-    """
-    if model_name not in _OPTUNA_STUDY:
-        return None
-    log_name, study_name = _OPTUNA_STUDY[model_name]
-    log_file = os.path.join(out_dir, log_name)
-    if not os.path.exists(log_file):
-        return None
-    try:
-        import optuna
-        from optuna.storages import JournalStorage
-        from optuna.storages.journal import JournalFileBackend
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
-        storage = JournalStorage(JournalFileBackend(log_file))
-        study = optuna.load_study(study_name=study_name, storage=storage)
-        completed = [t for t in study.trials
-                     if t.state == optuna.trial.TrialState.COMPLETE]
-        return {
-            "best_params":        study.best_params,
-            "best_value":         study.best_value,
-            "n_completed_trials": len(completed),
-            "best_trial_number":  study.best_trial.number,
-        }
-    except Exception:
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Neural-network parameter counter
-# ---------------------------------------------------------------------------
-
-def count_params(model) -> int | None:
-    """Return the number of trainable parameters for PyTorch / pycox models.
-
-    Returns None for non-neural models (Cox, RSF, GBSA, KM).
-    """
-    try:
-        import torch.nn as nn
-        # Direct nn.Module (e.g. TabPFNSurvPH)
-        if isinstance(model, nn.Module):
-            return sum(p.numel() for p in model.parameters() if p.requires_grad)
-        # pycox / torchtuples wrappers expose .net
-        if hasattr(model, "net") and isinstance(model.net, nn.Module):
-            return sum(p.numel() for p in model.net.parameters() if p.requires_grad)
-    except Exception:
-        pass
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Per-model training functions
-# All return (model_obj, risk_scores, surv_probs, surv_times).
-# ---------------------------------------------------------------------------
-
-def _train_cox(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from lifelines import CoxPHFitter
-    cph = CoxPHFitter(penalizer=0.1)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        cph.fit(df_train, duration_col=dur_col, event_col=ev_col)
-
-    X_test = df_test.drop(columns=[dur_col, ev_col])
-    risk = cph.predict_partial_hazard(X_test).values
-
-    t_events = df_train.loc[df_train[ev_col] > 0, dur_col].values
-    t_grid = (np.percentile(t_events, np.linspace(5, 95, 50))
-              if len(t_events) > 0
-              else np.linspace(df_train[dur_col].min(), df_train[dur_col].max(), 50))
-    surv_df = cph.predict_survival_function(X_test, times=t_grid)
-    return cph, risk, surv_df.values.T, t_grid
-
-
-def _train_km(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from sksurv.nonparametric import kaplan_meier_estimator
-    t_km, s_km = kaplan_meier_estimator(
-        df_train[ev_col].astype(bool), df_train[dur_col]
-    )
-    risk = np.zeros(len(df_test))
-    surv_probs = np.tile(s_km, (len(df_test), 1))
-    return None, risk, surv_probs, t_km
-
-
-def _train_rsf(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.tree import train_rsf
-    return train_rsf(df_train, df_test, dur_col, ev_col,
-                     tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_gbsa(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.tree import train_gbsa
-    return train_gbsa(df_train, df_test, dur_col, ev_col,
-                      tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_deepsurv(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.deep_surv import train_deepsurv
-    return train_deepsurv(df_train, df_test, dur_col, ev_col,
-                          tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_mtlr(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.deep_hit import train_mtlr
-    return train_mtlr(df_train, df_test, dur_col, ev_col,
-                      tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_pchazard(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.deep_hit import train_pchazard
-    return train_pchazard(df_train, df_test, dur_col, ev_col,
-                          tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_deephit_single(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **_):
-    from survpfn.models.deep_hit import train_deephit_single
-    return train_deephit_single(df_train, df_test, dur_col, ev_col,
-                                tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None)
-
-
-def _train_survtrace(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
-    from survpfn.models.survtrace.survival import train_survtrace
-    return train_survtrace(
-        df_train, df_test, dur_col, ev_col,
-        tune=tune, n_trials=n_trials, save_dir=out_dir,
-        epochs=kw.get("epochs", 100),
-        batch_size=kw.get("batch_size", 64),
-        learning_rate=kw.get("lr", 1e-3),
-        device=kw.get("device", "cuda:0"),
-    )
-
-
-def _train_fm_embedding(
-    fm: str,
-    head: str,
-    df_train, df_test, dur_col, ev_col,
-    tune, n_trials, out_dir,
-    **kw,
-):
-    """Generic dispatcher: FM backbone × survival head.
-
-    fm   : "tabpfn" | "tabdpt" | "tabicl"
-    head : "cox" | "deephit" | "pchazard" | "mtlr"
-    """
-    if fm == "tabpfn":
-        from survpfn.models.tabpfn import train_tabpfn_embedding_surv
-        return train_tabpfn_embedding_surv(
-            df_train, df_test, dur_col, ev_col,
-            head_type=head,
-            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
-            num_durations=kw.get("num_durations", 10),
-        )
-    if fm == "tabdpt":
-        from survpfn.models.tabdpt import train_tabdpt_embedding_surv
-        return train_tabdpt_embedding_surv(
-            df_train, df_test, dur_col, ev_col,
-            head_type=head,
-            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
-            checkpoint_path=kw.get("tabdpt_checkpoint", None),
-            context_size=kw.get("tabdpt_context_size", None),
-            use_retrieval=kw.get("tabdpt_use_retrieval", True),
-            device=kw.get("device", None),
-            num_durations=kw.get("num_durations", 10),
-        )
-    if fm == "tabicl":
-        from survpfn.models.tabicl import train_tabicl_embedding_surv
-        return train_tabicl_embedding_surv(
-            df_train, df_test, dur_col, ev_col,
-            head_type=head,
-            tune=tune, n_trials=n_trials, save_dir=out_dir, study_id=None,
-            device=kw.get("device", None),
-            num_durations=kw.get("num_durations", 10),
-        )
-    raise ValueError(f"Unknown FM backbone: {fm!r}")
-
-
-def _train_tabpfn_surv(
-    head_type: str,
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    dur_col: str,
-    ev_col: str,
-    **kwargs,
-):
-    """Shared implementation for jointly-trained TabPFN survival heads."""
-    from survpfn.models.tabpfn import TabPFNSurvPH
-    model = TabPFNSurvPH(
-        head_type=head_type,
-        learning_rate=kwargs.get("lr", 1e-3),
-        alpha=kwargs.get("alpha", 1.0),
-        device=kwargs.get("device", "cuda:0"),
-    )
-    model.fit(
-        x=df_train.drop(columns=[dur_col, ev_col]).values,
-        durations=df_train[dur_col].values,
-        events=df_train[ev_col].values,
-        y_pfn=(df_train[ev_col] > 0).astype(int).values,
-        epochs=kwargs.get("epochs", 50),
-        batch_size=kwargs.get("batch_size", 64),
-        verbose=False,
-    )
-    surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
-    
-    # Use integrated survival (AUC) as a more robust risk score.
-    # Lower AUC (shorter life expectancy) = Higher risk.
-    times = surv_df.index.values
-    surv_array = surv_df.values  # (n_times, n_subjects)
-    # Average survival over time for each subject
-    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    if _trapz is None:
-        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
-    auc = _trapz(surv_array.T, times)
-    risk = -auc
-    return model, risk, surv_df.values.T, surv_df.index.values
-
-
-def _train_tabdpt_surv(
-    head_type: str,
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    dur_col: str,
-    ev_col: str,
-    **kwargs,
-):
-    """Shared implementation for jointly-trained TabDPT survival heads."""
-    from survpfn.models.tabdpt import TabDPTSurvPH
-    model = TabDPTSurvPH(
-        head_type=head_type,
-        learning_rate=kwargs.get("lr", 1e-3),
-        device=kwargs.get("device", "cuda:0"),
-        checkpoint_path=kwargs.get("tabdpt_checkpoint", None),
-        context_size=int(kwargs.get("tabdpt_context_size", 128)),
-    )
-    model.fit(
-        x=df_train.drop(columns=[dur_col, ev_col]).values,
-        durations=df_train[dur_col].values,
-        events=df_train[ev_col].values,
-        epochs=kwargs.get("epochs", 50),
-        batch_size=kwargs.get("batch_size", 64),
-        verbose=False,
-    )
-    surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
-
-    times = surv_df.index.values
-    surv_array = surv_df.values   # (n_times, n_subjects)
-    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    if _trapz is None:
-        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
-    auc = _trapz(surv_array.T, times)
-    risk = -auc
-    return model, risk, surv_df.values.T, surv_df.index.values
-
-
-# ---------------------------------------------------------------------------
-# Model registry
-# ---------------------------------------------------------------------------
-
-def _train_soden(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    dur_col: str,
-    ev_col: str,
-    tune: bool,
-    n_trials: int,
-    out_dir: str,
-    **kwargs,
-):
-    """SODEN neural-ODE continuous-time survival baseline."""
-    from survpfn.models.soden import train_soden
-    return train_soden(
-        df_train, df_test, dur_col, ev_col,
-        hidden_size=kwargs.get("hidden_size", 32),
-        n_layers=kwargs.get("n_layers", 2),
-        lr=kwargs.get("lr", 1e-2),
-        batch_size=kwargs.get("batch_size", 128),
-        epochs=kwargs.get("epochs", 100),
-        device=kwargs.get("device", "cpu"),
-        tune=tune,
-        n_trials=n_trials,
-        save_dir=out_dir,
-    )
-
-
-def _train_tabicl_surv(
-    head_type: str,
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    dur_col: str,
-    ev_col: str,
-    **kwargs,
-):
-    """Shared implementation for jointly-trained TabICL survival heads."""
-    from survpfn.models.tabicl import TabICLSurvPH
-    model = TabICLSurvPH(
-        head_type=head_type,
-        learning_rate=kwargs.get("lr", 1e-3),
-        device=kwargs.get("device", "cuda:0"),
-        context_size=int(kwargs.get("tabicl_context_size", 256)),
-        freeze_tabicl=True,   # frozen embedding by default (Approach A)
-    )
-    model.fit(
-        x=df_train.drop(columns=[dur_col, ev_col]).values,
-        durations=df_train[dur_col].values,
-        events=df_train[ev_col].values,
-        epochs=kwargs.get("epochs", 50),
-        batch_size=kwargs.get("batch_size", 64),
-        verbose=False,
-    )
-    surv_df = model.predict_survival_df(df_test.drop(columns=[dur_col, ev_col]).values)
-
-    times = surv_df.index.values
-    surv_array = surv_df.values   # (n_times, n_subjects)
-    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-    if _trapz is None:
-        raise AttributeError("module 'numpy' has no attribute 'trapezoid' or 'trapz'")
-    auc = _trapz(surv_array.T, times)
-    risk = -auc
-    return model, risk, surv_df.values.T, surv_df.index.values
-
-
-def _train_beta_surv(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    dur_col: str,
-    ev_col: str,
-    tune: bool,
-    n_trials: int,
-    out_dir: str,
-    **kwargs,
-):
-    """BetaSurv: trainable backbone MLP + frozen TabPFN + zero-shot survival ICL."""
-    from survpfn.models.beta_surv import train_beta_surv
-    return train_beta_surv(
-        df_train, df_test, dur_col, ev_col,
-        lr=kwargs.get("lr", 1e-3),
-        epochs=kwargs.get("epochs", 50),
-        device=kwargs.get("device", "cuda:0"),
-        tune=tune,
-        n_trials=n_trials,
-        save_dir=out_dir,
-    )
-
-
-def _make_fm_embedding(fm: str, head: str) -> Callable:
-    """Build a benchmark-compatible callable for (fm, head) pair."""
-    def _fn(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
-        return _train_fm_embedding(
-            fm, head, df_train, df_test, dur_col, ev_col,
-            tune, n_trials, out_dir, **kw,
-        )
-    _fn.__name__ = f"_train_{fm}_embedding_{head}"
-    return _fn
-
-
-def _make_zeroshot(backbone: str, method: str = "single_context") -> Callable:
-    """Build a benchmark-compatible callable for zero-shot ICL survival."""
-    def _fn(df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir, **kw):
-        from survpfn.models.zeroshot_surv import train_zeroshot_surv
-        return train_zeroshot_surv(
-            df_train, df_test, dur_col, ev_col,
-            backbone=backbone,
-            method=method,
-            device=kw.get("device", "cpu"),
-            checkpoint_path=kw.get("tabdpt_checkpoint", None),
-            context_size=kw.get("tabdpt_context_size", 128),
-            use_retrieval=kw.get("tabdpt_use_retrieval", True),
-        )
-    _fn.__name__ = f"_train_{backbone}_zeroshot"
-    return _fn
-
-
-ALL_MODELS: dict[str, Callable] = {
-    # ── Classical ──────────────────────────────────────────────────────────
-    "cox":            _train_cox,
-    "km":             _train_km,
-    # ── Tree ───────────────────────────────────────────────────────────────
-    "rsf":            _train_rsf,
-    "gbsa":           _train_gbsa,
-    # ── Deep survival (classical DL heads on raw features) ─────────────────
-    "deepsurv":       _train_deepsurv,
-    "mtlr":           _train_mtlr,
-    "pchazard":       _train_pchazard,
-    "deephit_single": _train_deephit_single,
-    "survtrace":      _train_survtrace,
-    # ── TabPFN frozen embedding × 4 heads ──────────────────────────────────
-    "tabpfn_embedding_cox":         _make_fm_embedding("tabpfn", "cox"),
-    "tabpfn_embedding_deephit":     _make_fm_embedding("tabpfn", "deephit"),
-    "tabpfn_embedding_pchazard":    _make_fm_embedding("tabpfn", "pchazard"),
-    "tabpfn_embedding_mtlr":        _make_fm_embedding("tabpfn", "mtlr"),
-    # ── TabPFN jointly-trained (tabpfn_*) ────────────────────────────────────
-    # positional: (df_train, df_test, dur_col, ev_col, tune, n_trials, out_dir)
-    # _train_tabpfn_surv only uses the first 4; the rest forwarded via **kw
-    "tabpfn_cox":       lambda *a, **kw: _train_tabpfn_surv("cox",      *a[:4], **kw),
-    "tabpfn_deephit":   lambda *a, **kw: _train_tabpfn_surv("deephit",  *a[:4], **kw),
-    "tabpfn_pchazard":  lambda *a, **kw: _train_tabpfn_surv("pchazard", *a[:4], **kw),
-    "tabpfn_mtlr":      lambda *a, **kw: _train_tabpfn_surv("mtlr",     *a[:4], **kw),
-    # ── TabDPT frozen embedding × 4 heads ──────────────────────────────────
-    "tabdpt_embedding_cox":      _make_fm_embedding("tabdpt", "cox"),
-    "tabdpt_embedding_deephit":  _make_fm_embedding("tabdpt", "deephit"),
-    "tabdpt_embedding_pchazard": _make_fm_embedding("tabdpt", "pchazard"),
-    "tabdpt_embedding_mtlr":     _make_fm_embedding("tabdpt", "mtlr"),
-    # ── TabDPT jointly-trained (tabdpt_*) ──────────────────────────────────
-    "tabdpt_cox":      lambda *a, **kw: _train_tabdpt_surv("cox",      *a[:4], **kw),
-    "tabdpt_deephit":  lambda *a, **kw: _train_tabdpt_surv("deephit",  *a[:4], **kw),
-    "tabdpt_pchazard": lambda *a, **kw: _train_tabdpt_surv("pchazard", *a[:4], **kw),
-    "tabdpt_mtlr":     lambda *a, **kw: _train_tabdpt_surv("mtlr",     *a[:4], **kw),
-    # ── TabICL frozen embedding × 4 heads ──────────────────────────────────
-    "tabicl_embedding_cox":      _make_fm_embedding("tabicl", "cox"),
-    "tabicl_embedding_deephit":  _make_fm_embedding("tabicl", "deephit"),
-    "tabicl_embedding_pchazard": _make_fm_embedding("tabicl", "pchazard"),
-    "tabicl_embedding_mtlr":     _make_fm_embedding("tabicl", "mtlr"),
-    # ── TabICL jointly-trained (tabicl_*) — Approach A (frozen) / C (joint) ─
-    "tabicl_cox":      lambda *a, **kw: _train_tabicl_surv("cox",      *a[:4], **kw),
-    "tabicl_deephit":  lambda *a, **kw: _train_tabicl_surv("deephit",  *a[:4], **kw),
-    "tabicl_pchazard": lambda *a, **kw: _train_tabicl_surv("pchazard", *a[:4], **kw),
-    "tabicl_mtlr":     lambda *a, **kw: _train_tabicl_surv("mtlr",     *a[:4], **kw),
-    # ── SODEN (neural-ODE continuous-time baseline) ────────────────────────
-    "soden":      _train_soden,
-    # ── BetaSurv (trainable backbone + frozen TabPFN + zero-shot survival) ─
-    "beta_surv":  _train_beta_surv,
-    # ── Zero-shot ICL survival (no survival head; FM used directly) ────────
-    "tabpfn_zeroshot":  _make_zeroshot("tabpfn"),
-    "tabdpt_zeroshot":  _make_zeroshot("tabdpt"),
-    "tabicl_zeroshot":  _make_zeroshot("tabicl"),
-    # per-bin variant (slower but more accurate per bin)
-    "tabpfn_zeroshot_perbin":  _make_zeroshot("tabpfn", method="per_bin"),
-    "tabdpt_zeroshot_perbin":  _make_zeroshot("tabdpt", method="per_bin"),
-    "tabicl_zeroshot_perbin":  _make_zeroshot("tabicl", method="per_bin"),
-}
+MODEL_GROUPS["all"] = (
+    MODEL_GROUPS["classical"] +
+    MODEL_GROUPS["tree"] +
+    MODEL_GROUPS["deep"] +
+    MODEL_GROUPS["fm"]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -630,7 +159,7 @@ def run_fold_model(
     tune: bool,
     n_trials: int,
     output_dir: str,
-    **aware_kwargs,
+    **training_kwargs,
 ) -> dict:
     """Train one model for one fold, save all outputs to a dedicated folder.
 
@@ -643,26 +172,64 @@ def run_fold_model(
         metadata.json
     """
     out_dir = os.path.join(output_dir, dataset_name, model_name, f"fold_{fold}")
+    
+    # ── Skip check ────────────────────────────────────────────────────────
+    metrics_file = os.path.join(out_dir, "metrics.json")
+    # params_file = os.path.join(out_dir, "best_params.json")
+    if os.path.exists(metrics_file):
+        try:
+            with open(metrics_file, "r") as f:
+                metrics = json.load(f)
+            c = metrics.get("C_td", float("nan"))
+            ibs = metrics.get("IBS", float("nan"))
+            auc = metrics.get("AUC_mean", float("nan"))
+            if not np.isnan(c) and not np.isnan(ibs) and not np.isnan(auc):
+                print(f"      {C_BLUE}→ SKIPPING (C={c:.4f} IBS={ibs:.4f} AUC={auc:.4f}){C_RESET}")
+                return metrics
+            else:
+                print(f"      {C_YELLOW}→ Metric is NaN, retraining{C_RESET}")
+        except Exception:
+            pass
+
     os.makedirs(out_dir, exist_ok=True)
 
     feature_names = [c for c in df_train.columns
                      if c not in {duration_col, event_col}]
+
+    if training_kwargs["num_durations"] == -1:
+        training_kwargs["num_durations"] = resolve_num_durations(
+            df_train[duration_col].values,
+            df_train[event_col].values,
+            -1,
+        )
 
     # ── Train  (includes HPO when tune=True, final fit, and test-set predict) ──
     train_fn = ALL_MODELS[model_name]
     t_fit = time.perf_counter()
     model_obj, risk, surv_p, surv_t = train_fn(
         df_train, df_test, duration_col, event_col,
-        tune, n_trials, out_dir, **aware_kwargs,
+        tune=tune, n_trials=n_trials, out_dir=out_dir, **training_kwargs,
     )
     fit_time_s = time.perf_counter() - t_fit
 
     # ── Evaluate metrics ────────────────────────────────────────────────────
     t_eval = time.perf_counter()
-    metrics = evaluate_survival_model(
-        df_train, df_test, duration_col, event_col,
-        risk, surv_probs=surv_p, surv_times=surv_t,
-    )
+    num_events = int(df_train[event_col].max())
+    if num_events > 1:
+        # Competing risks: surv_p is list of CIFs
+        metrics = evaluate_cr(
+            df_train, df_test, duration_col, event_col,
+            cif_per_cause=surv_p, surv_times=surv_t,
+            risk_scores=risk,
+        )
+    else:
+        # Single risk: surv_p is matrix of S(t)
+        metrics = evaluate_sr_survival_eval(
+            df_train, df_test, duration_col, event_col,
+            surv_probs=surv_p, surv_times=surv_t,
+            risk_scores=risk,
+            output_dir=out_dir
+        )
     eval_time_s = time.perf_counter() - t_eval
 
     # ── Dataset split statistics ────────────────────────────────────────────
@@ -704,7 +271,7 @@ def run_fold_model(
         "event_rate_test":  round(n_events_test  / len(df_test),  4),
         # Timing
         # fit_time_s: wall-clock for HPO (if tune=True) + final fit + test-set inference
-        # eval_time_s: wall-clock for C-index / IBS / AUC metric computation
+        # eval_time_s: wall-clock for C_td / IBS / AUC metric computation
         "fit_time_s":              round(fit_time_s,  4),
         "eval_time_s":             round(eval_time_s, 4),
         "hpo_included_in_fit_time": tune,
@@ -715,11 +282,14 @@ def run_fold_model(
     with open(os.path.join(out_dir, "metadata.json"), "w") as f:
         json.dump(meta, f, indent=2)
 
-    c = metrics.get("C-index", float("nan"))
+    c = metrics.get("C_td", float("nan"))
+    ibs = metrics.get("IBS", float("nan"))
+    auc = metrics.get("AUC_mean", float("nan"))
     t_total = fit_time_s + eval_time_s
-    print(f"      → C-index={c:.4f}  fit={fit_time_s:.1f}s"
-          if not np.isnan(c)
-          else f"      → FAILED  ({t_total:.1f}s)")
+    if not np.isnan(c):
+        print(f"      {C_GREEN}→ C={c:.4f} IBS={ibs:.4f} AUC={auc:.4f}{C_RESET}  fit={fit_time_s:.1f}s")
+    else:
+        print(f"      {C_YELLOW}→ FAILED  ({t_total:.1f}s){C_RESET}")
     return metrics
 
 
@@ -735,9 +305,12 @@ def run_benchmark(
     n_trials: int = 10,
     output_dir: str = "results",
     random_state: int = 42,
-    aware_kwargs: dict | None = None,
+    training_kwargs: dict | None = None,
+    logger: LoggerObserver | None = None,
+    use_temporal_split: bool = False,
+    temporal_frac_train: float = 0.70,
 ) -> None:
-    """Run k-fold CV for one dataset, saving per-fold per-model results.
+    """Run k-fold CV (or a single temporal split) for one dataset.
 
     Parameters
     ----------
@@ -746,7 +319,7 @@ def run_benchmark(
     model_names:
         List of model keys from ``ALL_MODELS``.
     n_folds:
-        Number of cross-validation folds.
+        Number of cross-validation folds (ignored when use_temporal_split=True).
     tune:
         Enable Optuna hyperparameter search for tunable models.
     n_trials:
@@ -755,43 +328,86 @@ def run_benchmark(
         Root directory for per-run result folders.
     random_state:
         Seed for StratifiedKFold.
-    aware_kwargs:
+    training_kwargs:
         Extra args forwarded to jointly-trained TabPFN models (``tabpfn_*``):
         ``epochs``, ``batch_size``, ``lr``, ``alpha``, ``device``.
+    use_temporal_split:
+        If True, replace k-fold CV with a single prospective 70/30 row-order
+        split (oldest rows → train; newest rows → test).
+    temporal_frac_train:
+        Training fraction for the temporal split (default 0.70).
     """
+    from survpfn.dataloaders import temporal_split as _temporal_split
+
     print(f"\n{'='*60}")
     print(f"  DATASET: {dataset_name}")
     print(f"{'='*60}")
 
-    loader = BENCHMARK_DATASETS[dataset_name]
-    df, dur_col, ev_col = loader()
+    df, dur_col, ev_col = get_dataset(dataset_name)
     print(f"  Loaded: {df.shape[0]} samples | {df.shape[1] - 2} features "
           f"| event rate={df[ev_col].gt(0).mean():.3f}")
 
-    strat_label = (df[ev_col] > 0).astype(int)
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
-    extra = aware_kwargs or {}
+    extra = training_kwargs or {}
+    label_fractions = (training_kwargs or {}).get("label_fractions", None)
 
-    for fold_idx, (train_idx, test_idx) in enumerate(skf.split(df, strat_label)):
+    # ── Build fold iterator ──────────────────────────────────────────────────
+    if use_temporal_split:
+        print(f"  Split: temporal ({temporal_frac_train:.0%} train / "
+              f"{1-temporal_frac_train:.0%} test — row order)")
+        train_idx, test_idx = _temporal_split(df, frac_train=temporal_frac_train)
+        fold_iter = [(train_idx, test_idx)]
+    else:
+        strat_label = df[ev_col].astype(int)
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_state)
+        fold_iter = list(skf.split(df, strat_label))
+
+    for fold_idx, (train_idx, test_idx) in enumerate(fold_iter):
         fold = fold_idx + 1
-        print(f"\n  --- Fold {fold}/{n_folds} ---")
-        df_train, df_test = _scale_fold(df, train_idx, test_idx, dur_col, ev_col)
+        n_folds_display = 1 if use_temporal_split else n_folds
+        print(f"\n  --- Fold {fold}/{n_folds_display} ---")
+
+        # Scale once per fold — shared across all models on this fold.
+        # Fitting _scale_fold inside the model loop would repeat the same
+        # StandardScaler fit N×models times with identical output (BUG-M5).
+        df_train_full, df_test = _scale_fold(df, train_idx, test_idx, dur_col, ev_col)
+        print(f"  Train: {df_train_full.shape[0]} samples | {df_train_full.shape[1] - 2} features "
+              f"| event rate={df_train_full[ev_col].gt(0).mean():.3f}", flush=True)
+        print(f"  Test:  {df_test.shape[0]} samples | {df_test.shape[1] - 2} features "
+              f"| event rate={df_test[ev_col].gt(0).mean():.3f}", flush=True)
 
         for model_name in model_names:
-            print(f"    [{model_name}]", end=" ", flush=True)
-            # try:
-            run_fold_model(
-                dataset_name, model_name,
-                df_train, df_test, dur_col, ev_col,
-                fold, tune, n_trials, output_dir,
-                **extra,
-            )
-            # except Exception as exc:
-            #     warnings.warn(
-            #         f"{dataset_name}/{model_name}/fold_{fold} failed: {exc}",
-            #         stacklevel=2,
-            #     )
-            #     print("      → FAILED (see warning above)")
+            # Label-efficiency loop: subsample training set to each fraction
+            fracs = label_fractions if label_fractions else [1.0]
+            for frac in fracs:
+                if frac < 1.0:
+                    n_keep = max(10, int(len(df_train_full) * frac))
+                    # Stratified subsample — use full cause code for CR datasets
+                    strat = df_train_full[ev_col].astype(int)
+                    from sklearn.model_selection import StratifiedShuffleSplit
+                    sss = StratifiedShuffleSplit(n_splits=1, train_size=n_keep, random_state=fold)
+                    sub_idx, _ = next(sss.split(df_train_full, strat))
+                    df_train = df_train_full.iloc[sub_idx].reset_index(drop=True)
+                    frac_tag = f"_frac{frac:.2f}"
+                else:
+                    df_train = df_train_full
+                    frac_tag = ""
+
+                model_tag = model_name + frac_tag
+                print(f"    {C_BOLD}[{model_tag}][{dataset_name}]{C_RESET}", end=" ", flush=True)
+                # try:
+                run_fold_model(
+                    dataset_name, model_tag,
+                    df_train, df_test, dur_col, ev_col,
+                    fold, tune, n_trials, output_dir,
+                    **{k: v for k, v in (extra.items() if extra else {}.items())
+                       if k != "label_fractions"},
+                )
+                # except Exception as exc:
+                #     warnings.warn(
+                #         f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
+                #         stacklevel=2,
+                #     )
+                #     print("      → FAILED (see warning above)")
 
 
 # ---------------------------------------------------------------------------
@@ -806,44 +422,79 @@ def main():
     parser.add_argument(
         "--datasets", nargs="+",
         default=["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN"],
-        choices=list(BENCHMARK_DATASETS.keys()),
         help="Datasets to benchmark.",
     )
     parser.add_argument(
         "--models", nargs="+", default=["all"],
-        help="Models to run. 'all' or any subset of: " + ", ".join(ALL_MODELS),
+        help="Models or groups to run. Groups: " + ", ".join(MODEL_GROUPS.keys()) + 
+             ". Specific models: " + ", ".join(ALL_MODELS.keys()),
     )
     parser.add_argument("--folds",      type=int,   default=5,          help="CV folds.")
     parser.add_argument("--tune",       action="store_true",            help="Enable Optuna tuning.")
     parser.add_argument("--trials",     type=int,   default=10,         help="Optuna trials per fold.")
     parser.add_argument("--output-dir", default="results",              help="Root output directory.")
     parser.add_argument("--seed",       type=int,   default=42,         help="Random seed.")
+    parser.add_argument("--num-durations", type=int, default=-1, help="Number of time points to evaluate survival probabilities.")
 
     g = parser.add_argument_group("TabPFN jointly-trained model options (tabpfn_*)")
     g.add_argument("--epochs",     type=int,   default=50,     help="Training epochs.")
-    g.add_argument("--batch-size", type=int,   default=64,     help="Mini-batch size.")
-    g.add_argument("--lr",         type=float, default=1e-3,   help="Learning rate.")
-    g.add_argument("--alpha",      type=float, default=1.0,    help="PFN loss weight.")
+    g.add_argument("--batch-size", type=int,   default=512,     help="Mini-batch size.")
+    g.add_argument("--context-size", type=int,   default=512,     help="Context size.")
+    g.add_argument("--n-ensemble", type=int,   default=1,     help="Number of ensemble members.")
+    g.add_argument("--lr",         type=float, default=1e-4,   help="Learning rate.")
+    g.add_argument("--alpha",      type=float, default=0.5,    help="PFN loss weight.")
     g.add_argument("--device",     type=str,   default="cuda:0", help="Torch device.")
+    g.add_argument("--cr-loss-type", type=str, default="deephit", choices=["deephit", "deephit_v2", "cox"], help="Loss type for CR.")
+
+    g3 = parser.add_argument_group("MLHC evaluation options")
+    g3.add_argument(
+        "--label-fractions", nargs="+", type=float, default=None,
+        metavar="F",
+        help="Label-efficiency experiment: train on each fraction of training data. "
+             "E.g. --label-fractions 0.05 0.1 0.25 0.5 1.0",
+    )
+    g3.add_argument(
+        "--temporal-split", action="store_true",
+        help="Replace k-fold CV with a single prospective 70/30 split "
+             "(row order assumed to be enrollment/diagnosis order).",
+    )
+    g3.add_argument(
+        "--temporal-frac-train", type=float, default=0.70,
+        metavar="F",
+        help="Training fraction for --temporal-split (default 0.70).",
+    )
 
     args = parser.parse_args()
 
-    if "all" in args.models:
-        model_names = list(ALL_MODELS.keys())
-    else:
-        model_names = []
-        for m in args.models:
-            if m not in ALL_MODELS:
-                parser.error(f"Unknown model '{m}'. Choose from: all, " + ", ".join(ALL_MODELS))
+    model_names = []
+    for m in args.models:
+        if m in MODEL_GROUPS:
+            model_names.extend(MODEL_GROUPS[m])
+        elif m in ALL_MODELS:
             model_names.append(m)
+        else:
+            parser.error(f"Unknown model or group '{m}'.")
 
-    aware_kwargs = {
-        "epochs":     args.epochs,
-        "batch_size": args.batch_size,
-        "lr":         args.lr,
-        "alpha":      args.alpha,
-        "device":     args.device,
+    # Deduplicate while preserving order
+    seen = set()
+    model_names = [x for x in model_names if not (x in seen or seen.add(x))]
+
+    training_kwargs = {
+        "epochs":             args.epochs,
+        "batch_size":         args.batch_size,
+        "lr":                 args.lr,
+        "alpha":              args.alpha,
+        "device":             args.device,
+        "label_fractions":    args.label_fractions,
+        "num_durations":      args.num_durations,
+        "cr_loss_type":       args.cr_loss_type,
+        "random_state":       args.seed,
+        "context_size":       args.context_size,
+        "n_ensemble":         args.n_ensemble,
     }
+
+    logger = LoggerObserver.getLogger("main")
+    seed_everything(args.seed)
 
     for dataset in args.datasets:
         run_benchmark(
@@ -854,7 +505,10 @@ def main():
             n_trials=args.trials,
             output_dir=args.output_dir,
             random_state=args.seed,
-            aware_kwargs=aware_kwargs,
+            training_kwargs=training_kwargs,
+            logger=logger,
+            use_temporal_split=args.temporal_split,
+            temporal_frac_train=args.temporal_frac_train,
         )
 
 

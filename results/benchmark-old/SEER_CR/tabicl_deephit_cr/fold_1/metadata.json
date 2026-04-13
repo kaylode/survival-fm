@@ -1,0 +1,19 @@
+{
+  "dataset": "SEER_CR",
+  "model": "tabicl_deephit_cr",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3219,
+  "n_test": 805,
+  "n_features": 23,
+  "n_events_train": 493,
+  "n_events_test": 123,
+  "event_rate_train": 0.1532,
+  "event_rate_test": 0.1528,
+  "fit_time_s": 2.3536,
+  "eval_time_s": 0.0135,
+  "hpo_included_in_fit_time": true,
+  "n_params": 74954,
+  "timestamp": "2026-04-04T19:00:41.560917"
+}

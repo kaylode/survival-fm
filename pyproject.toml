@@ -28,7 +28,7 @@ dependencies = [
     "matplotlib>=3.7",
     "seaborn>=0.12",
     # --- TabPFN embedding model ------------------------------------------
-    "tabpfn>=6.4.1",
+    "tabpfn==7.1.1",
     "tabpfn-common-utils[telemetry-interactive]>=0.2.0",
     "omegaconf>=2.3.0",         # config for aware_cox / TabPFNCoxModel
     # --- notebook support ------------------------------------------------
@@ -43,6 +43,8 @@ dependencies = [
     "SurvSet>=0.1.0",
     # --- Neural ODE (SODEN model) ----------------------------------------
     "torchdiffeq>=0.2.3",
+    "pytest>=9.0.2",
+    "survivaleval>=0.2.7",
 ]
 
 [project.optional-dependencies]
@@ -56,7 +58,7 @@ dev = [
 
 [project.scripts]
 # Run the full evaluation pipeline via CLI
-survpfn-train = "survpfn.scripts.train:main"
+survpfn-benchmark = "survpfn.scripts.benchmark:main"
 survpfn-aggregate = "survpfn.xai.aggregate:main"
 survpfn-analyze = "survpfn.xai.analysis:main"
 survpfn-significance = "survpfn.scripts.significance:main"
@@ -80,4 +82,13 @@ ignore = ["E501"]
 [tool.setuptools.package-data]
 survpfn = [
     "models/models_diff/*"
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:SurvSet.*",
+    "ignore::DeprecationWarning:numpy.*",
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]

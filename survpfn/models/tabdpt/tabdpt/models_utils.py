@@ -100,7 +100,7 @@ def clip_outliers(data: torch.Tensor, eval_pos: int, n_sigma: int = 4):
     mask = ~torch.isnan(X)
     mean = maskmean(X, mask, dim=0)
     cutoff = n_sigma * maskstd(X, mask, dim=0)
-    mask &= cutoff >= torch.abs(X - mean)
+    mask = mask & (cutoff >= torch.abs(X - mean))
     cutoff = n_sigma * maskstd(X, mask, dim=0)
     return torch.clip(data, mean - cutoff, mean + cutoff)
 

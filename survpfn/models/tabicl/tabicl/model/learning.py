@@ -220,12 +220,13 @@ class ICLearning(nn.Module):
         train_size = y_train.shape[1]
         R[:, :train_size] = R[:, :train_size] + self.y_encoder(y_train.float())
         src = self.tf_icl(R, attn_mask=train_size)
-        emb = src.cpu()
+        
         if self.norm_first:
             src = self.ln(src)
+        
         out = self.decoder(src)  # (B, T, max_classes)
 
-        return out, emb
+        return out, src
 
     def _predict_standard(
         self,

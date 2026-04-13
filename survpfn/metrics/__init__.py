@@ -1,6 +1,8 @@
 """survpfn.eval — metrics and plotting utilities."""
 
-from .metrics import evaluate_survival_model, run_statistical_tests, d_calibration
+from .single import evaluate_sr, d_calibration, evaluate_sr_survival_eval
+from .competing import evaluate_cr
+from .stats import run_statistical_tests
 from .plotting import (
     plot_correlation_matrix,
     plot_feature_importance,
@@ -10,12 +12,14 @@ from .plotting import (
 )
 
 __all__ = [
-    "evaluate_survival_model",
+    "evaluate_sr",
+    "evaluate_sr_survival_eval",
+    "evaluate_cr",
     "run_statistical_tests",
     "d_calibration",
     "plot_correlation_matrix",
     "plot_feature_importance",
     "plot_forest",
     "plot_competing_risks_comparison",
-    "plot_cif",
+    "plot_cif"
 ]

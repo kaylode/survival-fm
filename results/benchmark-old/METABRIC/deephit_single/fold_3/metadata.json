@@ -11,9 +11,9 @@
   "n_events_test": 221,
   "event_rate_train": 0.5791,
   "event_rate_test": 0.5801,
-  "fit_time_s": 38.363,
-  "eval_time_s": 0.0292,
+  "fit_time_s": 58.4008,
+  "eval_time_s": 0.0406,
   "hpo_included_in_fit_time": true,
-  "n_params": 13017,
-  "timestamp": "2026-03-30T11:22:56.306353"
+  "n_params": 4441,
+  "timestamp": "2026-04-01T00:58:51.545379"
 }

@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "tabdpt_zeroshot_perbin_time",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7098,
+  "n_test": 1775,
+  "n_features": 14,
+  "n_events_train": 4828,
+  "n_events_test": 1208,
+  "event_rate_train": 0.6802,
+  "event_rate_test": 0.6806,
+  "fit_time_s": 30.6307,
+  "eval_time_s": 1.7583,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-11T20:34:44.314653"
+}

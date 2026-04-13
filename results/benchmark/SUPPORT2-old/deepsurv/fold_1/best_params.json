@@ -1,0 +1,12 @@
+{
+  "best_params": {
+    "lr": 0.0074239011669924365,
+    "dropout": 0.24875214388488565,
+    "layers": 2,
+    "nodes": 32,
+    "epochs": 70
+  },
+  "best_value": 0.6275390300944813,
+  "n_completed_trials": 20,
+  "best_trial_number": 12
+}

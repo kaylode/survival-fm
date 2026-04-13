@@ -1,6 +1,6 @@
 {
   "dataset": "METABRIC",
-  "model": "embedding_cox",
+  "model": "tabpfn_embedding_cox",
   "fold": 2,
   "tune": true,
   "n_trials": 20,
@@ -11,9 +11,9 @@
   "n_events_test": 221,
   "event_rate_train": 0.5791,
   "event_rate_test": 0.5801,
-  "fit_time_s": 32.6579,
-  "eval_time_s": 0.0128,
+  "fit_time_s": 34.2245,
+  "eval_time_s": 0.0122,
   "hpo_included_in_fit_time": true,
   "n_params": null,
-  "timestamp": "2026-03-26T16:48:08.613075"
+  "timestamp": "2026-04-01T00:45:15.254735"
 }

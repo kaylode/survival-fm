@@ -148,5 +148,5 @@ class TabDPTModel(nn.Module):
         model.load_state_dict(model_state)
         model.to(config.env.device)
         model.eval()
-        print("Loaded TabDPTModel from checkpoint.")
+        # print("Loaded TabDPTModel from checkpoint.")
         return model

@@ -49,10 +49,11 @@ class TabDPTEstimator(BaseEstimator):
         self.tensor_eval = tensor_eval
         if model is None:
             if path:
-                checkpoint = torch.load(path, weights_only=False)
+                checkpoint = torch.load(path, map_location=self.device, weights_only=False)
                 self.model = TabDPTModel.load(
                     model_state=checkpoint["model"], config=checkpoint["cfg"]
                 )
+                self.model.to(self.device)
                 self.model.eval()
             else:
                 raise ValueError("Either model or path must be provided")
@@ -83,7 +84,10 @@ class TabDPTEstimator(BaseEstimator):
         self.X_train = X
         self.y_train = y
 
-        self.autocast = torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        self.autocast = torch.autocast(
+            device_type="cuda" if "cuda" in str(self.device) else "cpu",
+            dtype=torch.bfloat16 if "cuda" in str(self.device) else torch.float16
+        )
 
     def _prepare_prediction(self, X: np.ndarray) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """preprocess the input data for prediction.
@@ -441,11 +445,16 @@ class TabDPTClassifier(TabDPTEstimator, ClassifierMixin):
                     y=y_context,
                     return_embeddings=True,
                 )
-            res = src.detach().cpu().numpy()
-            if not return_full:
                 # src is [ctx_size + n_test, 1, ninp]
-                res = res[-n_test:, 0, :]
-            return res
+                res_t = src.detach().to(torch.float32)
+                # If the classifier has its own norm (e.g. set by extractor), use it
+                if hasattr(self, 'norm') and self.norm is not None:
+                    res_t = self.norm(res_t)
+                
+                res = res_t.cpu().numpy()
+                if not return_full:
+                    res = res[-n_test:, 0, :]
+                return res
 
         # 2) Retrieval case
         else:
@@ -461,8 +470,11 @@ class TabDPTClassifier(TabDPTEstimator, ClassifierMixin):
                         return_embeddings=True,
                     )
                 # src is [context_size + n_batch, batch_size, ninp]
-                # We only want the last token for each sample in the batch
-                batch_emb = src[-1, :, :].detach().cpu().numpy()
+                res_t = src[-1, :, :].detach().to(torch.float32)
+                if hasattr(self, 'norm') and self.norm is not None:
+                    res_t = self.norm(res_t)
+                
+                batch_emb = res_t.cpu().numpy()
                 embeddings.append(batch_emb)
             
             res = np.concatenate(embeddings, axis=0)

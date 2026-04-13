@@ -245,6 +245,7 @@ class ColEmbedding(nn.Module):
                 verbose=False,
             )
         self.inference_mgr.configure(**mgr_config)
+        self.to(self.inference_mgr.exe_device)
 
         if feature_shuffles is None:
             # Processing all tables
@@ -326,6 +327,7 @@ class ColEmbedding(nn.Module):
         """
 
         if self.training:
+            self.to(X.device)
             embeddings = self._train_forward(X, d, train_size)
         else:
             embeddings = self._inference_forward(X, train_size, feature_shuffles, mgr_config)

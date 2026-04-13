@@ -1,0 +1,74 @@
+\begin{longtable}{lrrrrrl}
+\caption{\textbf{Dataset characteristics.} Event rate denotes the proportion of uncensored observations. K denotes number of distinct events.} \label{tab:datasets_all} \\
+\toprule
+\textbf{Dataset} & \textbf{$N$} & \textbf{Features} & \textbf{Event rate} & \textbf{$K$} & \textbf{Domain} & \textbf{Regime} \\
+\midrule
+\endfirsthead
+\multicolumn{7}{c}{Table \ref{tab:datasets_all} (continued)} \\
+\toprule
+\textbf{Dataset} & \textbf{$N$} & \textbf{Features} & \textbf{Event rate} & \textbf{$K$} & \textbf{Domain} & \textbf{Regime} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{7}{r}{Continued on next page} \\
+\endfoot
+\bottomrule
+\endlastfoot
+\multicolumn{7}{c}{\textit{Standard Benchmarks}} \\
+\midrule
+Veterans & 137 & 11 & 0.93 & 1 & Oncology (lung) & small \\
+Whas500 & 500 & 22 & 0.43 & 1 & Cardiovascular & small \\
+Metabric & 1,904 & 9 & 0.58 & 1 & Oncology & medium \\
+Gbsg & 2,232 & 7 & 0.57 & 1 & Oncology & medium \\
+Flchain & 6,524 & 43 & 0.30 & 1 & Haematology & large \\
+Support2 & 8,873 & 14 & 0.68 & 1 & ICU mortality & large \\
+SEER & $>100{,}000$ & $\sim$20 & -- & 10 & Oncology (reg.) & large (CR) \\
+\midrule
+\multicolumn{7}{c}{\textit{Sirbu Healthcare Datasets}} \\
+\midrule
+CV & 8,065 & 68 & 0.30 & 1 & Cardiovascular & large \\
+MI & 8,065 & 68 & 0.32 & 1 & Cardiovascular (MI) & large \\
+STROKE & 8,065 & 68 & 0.31 & 1 & Cardiovascular (Stroke) & large \\
+MORTALITY & 8,065 & 68 & 0.30 & 1 & Mortality & large \\
+\midrule
+\multicolumn{7}{c}{\textit{SurvSet Benchmark Subset}} \\
+\midrule
+Ovarian & 26 & 7 & 0.46 & 1 & Medicine & small \\
+Mgus & 46 & 14 & 0.98 & 1 & Medicine & small \\
+Heart & 69 & 6 & 0.65 & 1 & Medicine & small \\
+Breast & 100 & 8 & 0.26 & 1 & Medicine & small \\
+Hepatocellular & 101 & 56 & 0.45 & 1 & Medicine & small \\
+Cgd & 128 & 30 & 0.34 & 1 & Medicine & small \\
+Veteran & 137 & 11 & 0.93 & 1 & Medicine & small \\
+Cancer & 169 & 31 & 0.72 & 1 & Medicine & small \\
+Melanoma & 205 & 7 & 0.28 & 1 & Medicine & small \\
+Dlbcl & 240 & 7399 & 0.57 & 1 & Medicine & small \\
+Vlbw & 257 & 56 & 0.14 & 1 & Medicine & small \\
+E1684 & 284 & 5 & 0.69 & 1 & Medicine & small \\
+Pbc & 312 & 11 & 0.40 & 1 & Medicine & small \\
+Retinopathy & 394 & 16 & 0.39 & 1 & Medicine & small \\
+Diabetes & 394 & 7 & 0.39 & 1 & Medicine & small \\
+Whas500 & 461 & 26 & 0.38 & 1 & Medicine & small \\
+Prostate & 467 & 31 & 0.70 & 1 & Medicine & small \\
+Cost & 518 & 23 & 0.78 & 1 & Medicine & small \\
+Support2 & 530 & 76 & 0.53 & 1 & Medicine & small \\
+Rhc & 634 & 104 & 0.42 & 1 & Medicine & small \\
+Gbsg2 & 686 & 12 & 0.44 & 1 & Medicine & small \\
+Colon & 911 & 19 & 0.48 & 1 & Medicine & small \\
+Grace & 1,000 & 7 & 0.32 & 1 & Medicine & medium \\
+Leuksurv & 1,043 & 31 & 0.84 & 1 & Medicine & medium \\
+Actg & 1,151 & 24 & 0.08 & 1 & Medicine & medium \\
+Trace & 1,878 & 10 & 0.51 & 1 & Medicine & medium \\
+Rott2 & 2,982 & 18 & 0.43 & 1 & Medicine & medium \\
+Nwtco & 4,028 & 14 & 0.14 & 1 & Medicine & medium \\
+Framingham & 4,658 & 19 & 0.31 & 1 & Medicine & medium \\
+Flchain & 6,521 & 36 & 0.30 & 1 & Medicine & large \\
+Dialysis & 6,805 & 74 & 0.24 & 1 & Medicine & large \\
+\midrule
+\multicolumn{7}{c}{\textit{Competing Risks Benchmarks}} \\
+\midrule
+Framingham & 4,273 & 18 & -- & 2 & Cardiovascular (CR) & small (CR) \\
+Pbc2 & 1,945 & 16 & -- & 2 & Hepatology (CR) & small (CR) \\
+Support cr & 9,105 & 37 & -- & 2 & ICU mortality (CR) & large (CR) \\
+Synthetic cr & 30,000 & 12 & -- & 2 & Synthetic (CR) & large (CR) \\
+\end{longtable}
