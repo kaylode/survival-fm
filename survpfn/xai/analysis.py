@@ -54,7 +54,7 @@ warnings.filterwarnings("ignore")
 MODEL_ORDER = [
     "km", "cox",
     "rsf", "gbsa",
-    "deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden",
+    "deepsurv", "mtlr", "pchazard", "deephit_single", "soden", "dysurv", "survtrace", 
 
     # ── Strategy 2 — Jointly-trained / Specialized adapters ────────────────
     "tabpfn_joint_cox",
@@ -86,9 +86,9 @@ MODEL_ORDER = [
     "tabicl_finetune",
 
     # ── Strategy 1 — Embedding-based ───────────────────────────────────────
-    "tabpfn_embedding_pchazard",
-    "tabdpt_embedding_pchazard",
-    "tabicl_embedding_pchazard",
+    # "tabpfn_embedding_pchazard",
+    # "tabdpt_embedding_pchazard",
+    # "tabicl_embedding_pchazard",
     "tabpfn_embedding_mtlr",
     "tabdpt_embedding_mtlr",
     "tabicl_embedding_mtlr",
@@ -131,6 +131,7 @@ MODEL_LABELS = {
     "deephit_single": "DeepHit",
     "survtrace":      "SurvTrace",
     "soden":          "SODEN",
+    "dysurv":         "DySurv",
     "beta_surv":      "Beta-Surv",
 
     "tabpfn_zeroshot": "TabPFN-ZS",
@@ -196,7 +197,8 @@ for fm in ["tabpfn", "tabdpt", "tabicl"]:
 MODEL_GROUPS = {
     "Baseline": ["km", "cox"],
     "Tree":     ["rsf", "gbsa"],
-    "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden"],
+    "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv"],
+    "Attention": ["survtrace"], # , "soden"
 
     "Finetune-Cox":      [m for m in MODEL_ORDER if "_embedding" in m and "_cox" in m and "_cr" not in m],
     "Finetune-DeepHit":   [m for m in MODEL_ORDER if "_embedding" in m and "deephit" in m and "_cr" not in m],
@@ -223,11 +225,12 @@ GROUP_COLORS = {
     "Baseline": "#4e79a7",
     "Tree":     "#f28e2b",
     "Deep":     "#59a14f",
+    "Attention": "#f1ce63",
 
     "Finetune-Cox":      "#e15759",
     "Finetune-DeepHit":  "#76b6b2",
     "Finetune-MTLR":     "#17becf",
-    "Finetune-PCHazard": "#f1ce63",
+    # "Finetune-PCHazard": "#f1ce63",
 
     # "Joint-Cox":      "#9467bd",
     # "Joint-DeepHit":  "#c5b0d5",
