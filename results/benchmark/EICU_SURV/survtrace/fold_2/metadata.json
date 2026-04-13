@@ -1,0 +1,19 @@
+{
+  "dataset": "EICU_SURV",
+  "model": "survtrace",
+  "fold": 2,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 118655,
+  "n_test": 29664,
+  "n_features": 124,
+  "n_events_train": 6910,
+  "n_events_test": 1728,
+  "event_rate_train": 0.0582,
+  "event_rate_test": 0.0583,
+  "fit_time_s": 18064.7241,
+  "eval_time_s": 32.1766,
+  "hpo_included_in_fit_time": true,
+  "n_params": 73381,
+  "timestamp": "2026-04-13T00:33:58.914329"
+}

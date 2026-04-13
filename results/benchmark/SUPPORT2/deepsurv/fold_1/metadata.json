@@ -1,0 +1,19 @@
+{
+  "dataset": "SUPPORT2",
+  "model": "deepsurv",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 7098,
+  "n_test": 1775,
+  "n_features": 14,
+  "n_events_train": 4828,
+  "n_events_test": 1208,
+  "event_rate_train": 0.6802,
+  "event_rate_test": 0.6806,
+  "fit_time_s": 251.8063,
+  "eval_time_s": 3.8718,
+  "hpo_included_in_fit_time": true,
+  "n_params": 9729,
+  "timestamp": "2026-04-12T19:08:31.935358"
+}

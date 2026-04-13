@@ -1,0 +1,47 @@
+dataset,recommended_bins,reason,total_events
+FLCHAIN,100,largest n_bins with min_EPB≥5 & no empty bins,1962
+FRAMINGHAM,100,largest n_bins with min_EPB≥5 & no empty bins,1783
+GBSG,100,largest n_bins with min_EPB≥5 & no empty bins,1267
+METABRIC,100,largest n_bins with min_EPB≥5 & no empty bins,1103
+ORMONI_TIRODEI_CV,100,largest n_bins with min_EPB≥5 & no empty bins,2407
+ORMONI_TIRODEI_MI,100,largest n_bins with min_EPB≥5 & no empty bins,2619
+ORMONI_TIRODEI_MORTALITY,100,largest n_bins with min_EPB≥5 & no empty bins,2407
+ORMONI_TIRODEI_STROKE,300,largest n_bins with min_EPB≥5 & no empty bins,2482
+PBC2,50,largest n_bins with min_EPB≥5 & no empty bins,872
+SEER,30,largest n_bins with min_EPB≥5 & no empty bins,616
+SS_ACTG,10,largest n_bins with min_EPB≥5 & no empty bins,96
+SS_BREAST,10,best available (min_EPB=2),26
+SS_CANCER,20,largest n_bins with min_EPB≥5 & no empty bins,122
+SS_CGD,10,best available (min_EPB=4),44
+SS_COLON,50,largest n_bins with min_EPB≥5 & no empty bins,441
+SS_COST,50,largest n_bins with min_EPB≥5 & no empty bins,404
+SS_DIABETES,30,largest n_bins with min_EPB≥5 & no empty bins,155
+SS_DIALYSIS,10,best available (min_EPB=0),1603
+SS_DLBCL,20,largest n_bins with min_EPB≥5 & no empty bins,138
+SS_E1684,30,largest n_bins with min_EPB≥5 & no empty bins,196
+SS_FLCHAIN,100,largest n_bins with min_EPB≥5 & no empty bins,1959
+SS_FRAMINGHAM,100,largest n_bins with min_EPB≥5 & no empty bins,1465
+SS_GBSG2,50,largest n_bins with min_EPB≥5 & no empty bins,299
+SS_GRACE,20,largest n_bins with min_EPB≥5 & no empty bins,324
+SS_HEART,10,best available (min_EPB=3),45
+SS_HEPATOCELLULAR,10,best available (min_EPB=1),45
+SS_LEUKSURV,50,largest n_bins with min_EPB≥5 & no empty bins,879
+SS_MELANOMA,10,largest n_bins with min_EPB≥5 & no empty bins,57
+SS_MGUS,10,best available (min_EPB=4),45
+SS_NWTCO,50,largest n_bins with min_EPB≥5 & no empty bins,571
+SS_OVARIAN,10,best available (min_EPB=1),12
+SS_PBC,20,largest n_bins with min_EPB≥5 & no empty bins,125
+SS_PROSTATE,20,largest n_bins with min_EPB≥5 & no empty bins,328
+SS_RETINOPATHY,20,largest n_bins with min_EPB≥5 & no empty bins,155
+SS_RHC,30,largest n_bins with min_EPB≥5 & no empty bins,269
+SS_ROTT2,100,largest n_bins with min_EPB≥5 & no empty bins,1272
+SS_SUPPORT2,30,largest n_bins with min_EPB≥5 & no empty bins,280
+SS_TRACE,100,largest n_bins with min_EPB≥5 & no empty bins,958
+SS_VETERAN,20,largest n_bins with min_EPB≥5 & no empty bins,128
+SS_VLBW,10,best available (min_EPB=0),36
+SS_WHAS500,20,largest n_bins with min_EPB≥5 & no empty bins,176
+SUPPORT2,100,largest n_bins with min_EPB≥5 & no empty bins,6036
+SUPPORT_CR,100,largest n_bins with min_EPB≥5 & no empty bins,6201
+SYNTHETIC_CR,300,largest n_bins with min_EPB≥5 & no empty bins,15000
+VETERANS,20,largest n_bins with min_EPB≥5 & no empty bins,128
+WHAS500,20,largest n_bins with min_EPB≥5 & no empty bins,215
