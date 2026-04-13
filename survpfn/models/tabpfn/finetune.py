@@ -10,7 +10,7 @@ from sklearn.isotonic import IsotonicRegression
 import pandas as pd
 
 from tabpfn.finetuning.finetuned_classifier import FinetunedTabPFNClassifier
-from survpfn.models.shared.preprocessing import FMDataPrep, prepare_targets, SurvivalTimeBinEncoder
+from survpfn.models.shared.preprocessing import expand_survival_data, FMDataPrep, prepare_targets, SurvivalTimeBinEncoder
 from survpfn.models.shared.finetune import BaseSurvExpandedFinetune
 
 
@@ -72,6 +72,7 @@ class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
         durations: np.ndarray,
         events: np.ndarray,
         verbose: bool = True,
+        sampling_ratio: Optional[float] = None,
         **kwargs
     ):
         # Time Bins & Encoder
@@ -90,13 +91,21 @@ class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
         if verbose:
             print("Expanding survival dataset for FinetunedTabPFNClassifier...", flush=True)
             
-        x_exp, y_exp = self._expand_data_numpy(
-            x_scaled, durations, events, self.bin_times, self.bin_feats
+        sampling_ratio = sampling_ratio if sampling_ratio is not None else getattr(self, "sampling_ratio", None)
+        random_state = kwargs.get("random_state", self.random_state if hasattr(self, "random_state") else 42)
+
+        x_exp, y_exp = expand_survival_data(
+            x_scaled, durations, events, self.bin_times, self.bin_feats,
+            sampling_ratio=sampling_ratio,
+            random_state=random_state
         )
         
         if verbose:
             print(f"Expanded dataset: {x_exp.shape[0]:,} rows, {x_exp.shape[1]} features", flush=True)
-
+            # Label distribution
+            unique, counts = np.unique(y_exp, return_counts=True)
+            print(f"y_exp distribution: {dict(zip(unique, counts))}", flush=True)
+            
         # Fit Wrapper
         self.clf.fit(x_exp, y_exp, output_dir=self.output_dir)
         

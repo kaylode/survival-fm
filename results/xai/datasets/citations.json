@@ -1,0 +1,191 @@
+{
+  "VETERANS": {
+    "cite_key": "prentice1973exponential",
+    "authors": "Prentice (1973)",
+    "description": "VA RCT: standard vs. test chemotherapy, 137 male lung-cancer patients."
+  },
+  "WHAS500": {
+    "cite_key": "hosmer2008applied",
+    "authors": "Hosmer et al. (2008)",
+    "description": "Worcester Heart Attack Study; 500 AMI patients (textbook running example)."
+  },
+  "METABRIC": {
+    "cite_key": "curtis2012genomic",
+    "authors": "Curtis et al. (2012)",
+    "description": "Integrated genomic/transcriptomic analysis of $\\sim$2,000 breast tumours."
+  },
+  "GBSG": {
+    "cite_key": "schumacher1994randomized",
+    "authors": "Schumacher et al. (1994)",
+    "description": "German Breast Cancer Study Group 2$\\times$2 RCT; 686 node-positive patients."
+  },
+  "FLCHAIN": {
+    "cite_key": "dispenzieri2012use",
+    "authors": "Dispenzieri et al. (2012)",
+    "description": "Mayo Clinic serum free-light-chain assay; 7,874 community residents."
+  },
+  "SUPPORT2": {
+    "cite_key": "knaus1995support",
+    "authors": "Knaus et al. (1995)",
+    "description": "SUPPORT: 9,105 seriously ill adults; 180-day survival prognostic model."
+  },
+  "SEER": {
+    "cite_key": "nci2023seer",
+    "authors": "NCI SEER (2023)",
+    "description": "NCI breast-cancer registry; population-based incidence and survival data."
+  },
+  "EICU_SURV": {
+    "cite_key": "pollard2018eicu",
+    "authors": "Pollard et al. (2018)",
+    "description": "eICU CRD: $>$200k ICU admissions, 208 US hospitals (Philips/MIT)."
+  },
+  "MIMIC_SURV_B": {
+    "cite_key": "johnson2023mimiciv",
+    "authors": "Johnson et al. (2023)",
+    "description": "MIMIC-IV: de-identified EHR, Beth Israel Deaconess MC 2008--2019."
+  },
+  "FRAMINGHAM": {
+    "cite_key": "dawber1951epidemiological",
+    "authors": "Dawber et al. (1951)",
+    "description": "Framingham Heart Study; CVD vs. non-CVD mortality competing risks."
+  },
+  "PBC2": {
+    "cite_key": "murtaugh1994primary",
+    "authors": "Murtaugh et al. (1994)",
+    "description": "Mayo Clinic PBC longitudinal dataset; repeated measurements for joint modelling."
+  },
+  "SUPPORT_CR": {
+    "cite_key": "knaus1995support",
+    "authors": "Knaus et al. (1995)",
+    "description": "SUPPORT reframed as competing risks (cancer vs. non-cancer death)."
+  },
+  "SYNTHETIC_CR": {
+    "cite_key": "",
+    "authors": "Synthetic",
+    "description": "Simulated 2-cause competing-risks dataset for method validation."
+  },
+  "SS_CANCER": {
+    "cite_key": "loprinzi1994prospective",
+    "authors": "Loprinzi et al. (1994)"
+  },
+  "SS_BREAST": {
+    "cite_key": "schumacher1994randomized",
+    "authors": "Schumacher et al. (1994)"
+  },
+  "SS_GBSG2": {
+    "cite_key": "sauerbrei1999modelling",
+    "authors": "Sauerbrei et al. (1999)"
+  },
+  "SS_ROTT2": {
+    "cite_key": "royston2013external",
+    "authors": "Royston \\& Altman (2013)"
+  },
+  "SS_COLON": {
+    "cite_key": "moertel1990levamisole",
+    "authors": "Moertel et al. (1990)"
+  },
+  "SS_PROSTATE": {
+    "cite_key": "andrews1985data",
+    "authors": "Andrews \\& Herzberg (1985)"
+  },
+  "SS_OVARIAN": {
+    "cite_key": "edmonson1979different",
+    "authors": "Edmonson et al. (1979)"
+  },
+  "SS_MELANOMA": {
+    "cite_key": "drzewiecki1980biopsy",
+    "authors": "Drzewiecki et al. (1980)"
+  },
+  "SS_E1684": {
+    "cite_key": "kirkwood1996interferon",
+    "authors": "Kirkwood et al. (1996)"
+  },
+  "SS_PBC": {
+    "cite_key": "fleming1991counting",
+    "authors": "Fleming \\& Harrington (1991)"
+  },
+  "SS_HEPATOCELLULAR": {
+    "cite_key": "llovet1999prognosis",
+    "authors": "Llovet et al. (1999)"
+  },
+  "SS_NWTCO": {
+    "cite_key": "dangelo1989treatment",
+    "authors": "D'Angio et al. (1989)"
+  },
+  "SS_RETINOPATHY": {
+    "cite_key": "huster1989modelling",
+    "authors": "Huster et al. (1989)"
+  },
+  "SS_HEART": {
+    "cite_key": "crowley1977covariance",
+    "authors": "Crowley \\& Hu (1977)"
+  },
+  "SS_VETERAN": {
+    "cite_key": "kalbfleisch1980statistical",
+    "authors": "Kalbfleisch \\& Prentice (1980)"
+  },
+  "SS_WHAS500": {
+    "cite_key": "hosmer2008applied",
+    "authors": "Hosmer et al. (2008)"
+  },
+  "SS_MGUS": {
+    "cite_key": "kyle2002longterm",
+    "authors": "Kyle et al. (2002)"
+  },
+  "SS_CGD": {
+    "cite_key": "fleming1991counting",
+    "authors": "Fleming \\& Harrington (1991)"
+  },
+  "SS_COST": {
+    "cite_key": "goldberg2004randomized",
+    "authors": "Goldberg et al. (2004)"
+  },
+  "SS_LEUKSURV": {
+    "cite_key": "henderson2002modeling",
+    "authors": "Henderson et al. (2002)"
+  },
+  "SS_DIALYSIS": {
+    "cite_key": "wolfe1999comparison",
+    "authors": "Wolfe et al. (1999)"
+  },
+  "SS_ACTG": {
+    "cite_key": "hammer1997controlled",
+    "authors": "Hammer et al. (1997)"
+  },
+  "SS_RHC": {
+    "cite_key": "connors1996effectiveness",
+    "authors": "Connors et al. (1996)"
+  },
+  "SS_VLBW": {
+    "cite_key": "oshea1992prenatal",
+    "authors": "O'Shea et al. (1992)"
+  },
+  "SS_GRACE": {
+    "cite_key": "fox2006prediction",
+    "authors": "Fox et al. (2006)"
+  },
+  "SS_TRACE": {
+    "cite_key": "kober1995clinical",
+    "authors": "K{\\o}ber et al. (1995)"
+  },
+  "SS_SUPPORT2": {
+    "cite_key": "knaus1995support",
+    "authors": "Knaus et al. (1995)"
+  },
+  "SS_DLBCL": {
+    "cite_key": "rosenwald2002use",
+    "authors": "Rosenwald et al. (2002)"
+  },
+  "SS_DIABETES": {
+    "cite_key": "collett2015modelling",
+    "authors": "Collett (2015)"
+  },
+  "SS_FLCHAIN": {
+    "cite_key": "dispenzieri2012use",
+    "authors": "Dispenzieri et al. (2012)"
+  },
+  "SS_FRAMINGHAM": {
+    "cite_key": "dawber1951epidemiological",
+    "authors": "Dawber et al. (1951)"
+  }
+}

@@ -1,74 +1,79 @@
-\begin{longtable}{lrrrrrl}
-\caption{\textbf{Dataset characteristics.} Event rate denotes the proportion of uncensored observations. K denotes number of distinct events.} \label{tab:datasets_all} \\
+\begin{longtable}{lrrrrlll}
+\caption{\textbf{Dataset characteristics.} $N$: number of subjects. Event rate: proportion of uncensored observations; for competing-risks datasets the total event rate is shown with the number of distinct causes $K$ in parentheses. Bins: number of time-discretisation intervals for discrete-time survival heads (computed adaptively from the event distribution). Datasets from the SurvSet benchmark~\cite{drysdale2022survset} are prefixed `SS--'.} \label{tab:datasets_all} \\
 \toprule
-\textbf{Dataset} & \textbf{$N$} & \textbf{Features} & \textbf{Event rate} & \textbf{$K$} & \textbf{Domain} & \textbf{Regime} \\
+\textbf{Dataset} & \textbf{$N$} & \textbf{Feat.} & \textbf{Event rate} & \textbf{Bins} & \textbf{Domain} & \textbf{Regime} & \textbf{Source} \\
 \midrule
 \endfirsthead
-\multicolumn{7}{c}{Table \ref{tab:datasets_all} (continued)} \\
+\multicolumn{8}{c}{Table~\ref{tab:datasets_all} (continued)} \\
 \toprule
-\textbf{Dataset} & \textbf{$N$} & \textbf{Features} & \textbf{Event rate} & \textbf{$K$} & \textbf{Domain} & \textbf{Regime} \\
+\textbf{Dataset} & \textbf{$N$} & \textbf{Feat.} & \textbf{Event rate} & \textbf{Bins} & \textbf{Domain} & \textbf{Regime} & \textbf{Source} \\
 \midrule
 \endhead
 \midrule
-\multicolumn{7}{r}{Continued on next page} \\
+\multicolumn{8}{r}{\textit{Continued on next page}} \\
 \endfoot
 \bottomrule
 \endlastfoot
-\multicolumn{7}{c}{\textit{Standard Benchmarks}} \\
+\multicolumn{8}{c}{\textit{(a)~Standard Public Benchmarks}} \\
 \midrule
-Veterans & 137 & 11 & 0.93 & 1 & Oncology (lung) & small \\
-Whas500 & 500 & 22 & 0.43 & 1 & Cardiovascular & small \\
-Metabric & 1,904 & 9 & 0.58 & 1 & Oncology & medium \\
-Gbsg & 2,232 & 7 & 0.57 & 1 & Oncology & medium \\
-Flchain & 6,524 & 43 & 0.30 & 1 & Haematology & large \\
-Support2 & 8,873 & 14 & 0.68 & 1 & ICU mortality & large \\
-SEER & $>100{,}000$ & $\sim$20 & -- & 10 & Oncology (reg.) & large (CR) \\
+Veterans & 137 & 11 & 0.93 & 20 & Oncology (lung) & small & \cite{prentice1973exponential} \\
+WHAS500 & 500 & 22 & 0.43 & 20 & Cardiology & medium & \cite{hosmer2008applied} \\
+METABRIC & 1,904 & 9 & 0.58 & 100 & Oncology (breast) & medium & \cite{curtis2012genomic} \\
+GBSG & 2,232 & 7 & 0.57 & 100 & Oncology (breast) & medium & \cite{schumacher1994randomized} \\
+FLCHAIN & 6,524 & 43 & 0.30 & 100 & Haematology & large & \cite{dispenzieri2012use} \\
+SUPPORT2 & 8,873 & 14 & 0.68 & 30 & Critical care & large & \cite{knaus1995support} \\
+SEER & 4,024 & 23 & 0.15 & 30 & Oncology (breast) & medium & \cite{nci2023seer} \\
 \midrule
-\multicolumn{7}{c}{\textit{Sirbu Healthcare Datasets}} \\
+\multicolumn{8}{c}{\textit{(b)~Large-Scale EHR Datasets}} \\
 \midrule
-CV & 8,065 & 68 & 0.30 & 1 & Cardiovascular & large \\
-MI & 8,065 & 68 & 0.32 & 1 & Cardiovascular (MI) & large \\
-STROKE & 8,065 & 68 & 0.31 & 1 & Cardiovascular (Stroke) & large \\
-MORTALITY & 8,065 & 68 & 0.30 & 1 & Mortality & large \\
+eICU & 148,319 & 124 & 0.06 & 100 & Critical care & large & \cite{pollard2018eicu} \\
+MIMIC-IV & 65,047 & 142 & 0.10 & 100 & Critical care & large & \cite{johnson2023mimiciv} \\
 \midrule
-\multicolumn{7}{c}{\textit{SurvSet Benchmark Subset}} \\
+\multicolumn{8}{c}{\textit{(c)~Institutional Datasets (OrmoniTirodei)}} \\
 \midrule
-Ovarian & 26 & 7 & 0.46 & 1 & Medicine & small \\
-Mgus & 46 & 14 & 0.98 & 1 & Medicine & small \\
-Heart & 69 & 6 & 0.65 & 1 & Medicine & small \\
-Breast & 100 & 8 & 0.26 & 1 & Medicine & small \\
-Hepatocellular & 101 & 56 & 0.45 & 1 & Medicine & small \\
-Cgd & 128 & 30 & 0.34 & 1 & Medicine & small \\
-Veteran & 137 & 11 & 0.93 & 1 & Medicine & small \\
-Cancer & 169 & 31 & 0.72 & 1 & Medicine & small \\
-Melanoma & 205 & 7 & 0.28 & 1 & Medicine & small \\
-Dlbcl & 240 & 7399 & 0.57 & 1 & Medicine & small \\
-Vlbw & 257 & 56 & 0.14 & 1 & Medicine & small \\
-E1684 & 284 & 5 & 0.69 & 1 & Medicine & small \\
-Pbc & 312 & 11 & 0.40 & 1 & Medicine & small \\
-Retinopathy & 394 & 16 & 0.39 & 1 & Medicine & small \\
-Diabetes & 394 & 7 & 0.39 & 1 & Medicine & small \\
-Whas500 & 461 & 26 & 0.38 & 1 & Medicine & small \\
-Prostate & 467 & 31 & 0.70 & 1 & Medicine & small \\
-Cost & 518 & 23 & 0.78 & 1 & Medicine & small \\
-Support2 & 530 & 76 & 0.53 & 1 & Medicine & small \\
-Rhc & 634 & 104 & 0.42 & 1 & Medicine & small \\
-Gbsg2 & 686 & 12 & 0.44 & 1 & Medicine & small \\
-Colon & 911 & 19 & 0.48 & 1 & Medicine & small \\
-Grace & 1,000 & 7 & 0.32 & 1 & Medicine & medium \\
-Leuksurv & 1,043 & 31 & 0.84 & 1 & Medicine & medium \\
-Actg & 1,151 & 24 & 0.08 & 1 & Medicine & medium \\
-Trace & 1,878 & 10 & 0.51 & 1 & Medicine & medium \\
-Rott2 & 2,982 & 18 & 0.43 & 1 & Medicine & medium \\
-Nwtco & 4,028 & 14 & 0.14 & 1 & Medicine & medium \\
-Framingham & 4,658 & 19 & 0.31 & 1 & Medicine & medium \\
-Flchain & 6,521 & 36 & 0.30 & 1 & Medicine & large \\
-Dialysis & 6,805 & 74 & 0.24 & 1 & Medicine & large \\
+OT-CV & 8,065 & 68 & 0.30 & 100 & Cardiovascular & large & -- \\
+OT-MI & 8,065 & 68 & 0.32 & 100 & Cardiovascular & large & -- \\
+OT-Stroke & 8,065 & 68 & 0.31 & 100 & Neurovascular & large & -- \\
+OT-Mortality & 8,065 & 68 & 0.30 & 100 & All-cause mortality & large & -- \\
 \midrule
-\multicolumn{7}{c}{\textit{Competing Risks Benchmarks}} \\
+\multicolumn{8}{c}{\textit{(d)~SurvSet Benchmark Subset~\cite{drysdale2022survset}}} \\
 \midrule
-Framingham & 4,273 & 18 & -- & 2 & Cardiovascular (CR) & small (CR) \\
-Pbc2 & 1,945 & 16 & -- & 2 & Hepatology (CR) & small (CR) \\
-Support cr & 9,105 & 37 & -- & 2 & ICU mortality (CR) & large (CR) \\
-Synthetic cr & 30,000 & 12 & -- & 2 & Synthetic (CR) & large (CR) \\
+SS--Ovarian & 26 & 7 & 0.46 & 10 & Oncology (ovarian) & small & \cite{edmonson1979different} \\
+SS--Mgus & 46 & 14 & 0.98 & 10 & Haematology & small & \cite{kyle2002longterm} \\
+SS--Heart & 69 & 6 & 0.65 & 10 & Cardiology & small & \cite{crowley1977covariance} \\
+SS--Breast & 100 & 8 & 0.26 & 10 & Oncology (breast) & small & \cite{schumacher1994randomized} \\
+SS--Hepatocellular & 101 & 56 & 0.45 & 10 & Oncology (liver) & small & \cite{llovet1999prognosis} \\
+SS--Cgd & 128 & 30 & 0.34 & 10 & Immunology & small & \cite{fleming1991counting} \\
+SS--Veteran & 137 & 11 & 0.93 & 20 & Oncology (lung) & small & \cite{kalbfleisch1980statistical} \\
+SS--Cancer & 169 & 31 & 0.72 & 20 & Oncology (lung) & small & \cite{loprinzi1994prospective} \\
+SS--Melanoma & 205 & 7 & 0.28 & 10 & Oncology (melanoma) & small & \cite{drzewiecki1980biopsy} \\
+SS--Dlbcl & 240 & 7399 & 0.57 & 20 & Oncology (lymphoma) & small & \cite{rosenwald2002use} \\
+SS--Vlbw & 257 & 56 & 0.14 & 10 & Neonatology & small & \cite{oshea1992prenatal} \\
+SS--E1684 & 284 & 5 & 0.69 & 30 & Oncology (melanoma) & small & \cite{kirkwood1996interferon} \\
+SS--Pbc & 312 & 11 & 0.40 & 20 & Hepatology & small & \cite{fleming1991counting} \\
+SS--Retinopathy & 394 & 16 & 0.39 & 20 & Ophthalmology & small & \cite{huster1989modelling} \\
+SS--Diabetes & 394 & 7 & 0.39 & 30 & Endocrinology & small & \cite{collett2015modelling} \\
+SS--Whas500 & 461 & 26 & 0.38 & 20 & Cardiology & small & \cite{hosmer2008applied} \\
+SS--Prostate & 467 & 31 & 0.70 & 20 & Oncology (prostate) & small & \cite{andrews1985data} \\
+SS--Cost & 518 & 23 & 0.78 & 50 & Oncology (colorectal) & medium & \cite{goldberg2004randomized} \\
+SS--Support2 & 530 & 76 & 0.53 & 30 & Critical care & medium & \cite{knaus1995support} \\
+SS--Rhc & 634 & 104 & 0.42 & 30 & Critical care & medium & \cite{connors1996effectiveness} \\
+SS--Gbsg2 & 686 & 12 & 0.44 & 50 & Oncology (breast) & medium & \cite{sauerbrei1999modelling} \\
+SS--Colon & 911 & 19 & 0.48 & 50 & Oncology (colon) & medium & \cite{moertel1990levamisole} \\
+SS--Grace & 1,000 & 7 & 0.32 & 10 & Cardiology & medium & \cite{fox2006prediction} \\
+SS--Leuksurv & 1,043 & 31 & 0.84 & 30 & Haematology & medium & \cite{henderson2002modeling} \\
+SS--Actg & 1,151 & 24 & 0.08 & 10 & Infectious disease & medium & \cite{hammer1997controlled} \\
+SS--Trace & 1,878 & 10 & 0.51 & 100 & Cardiology & medium & \cite{kober1995clinical} \\
+SS--Rott2 & 2,982 & 18 & 0.43 & 100 & Oncology (breast) & medium & \cite{royston2013external} \\
+SS--Nwtco & 4,028 & 14 & 0.14 & 50 & Paediatric oncology & medium & \cite{dangelo1989treatment} \\
+SS--Framingham & 4,658 & 19 & 0.31 & 100 & Cardiology & medium & \cite{dawber1951epidemiological} \\
+SS--Flchain & 6,521 & 36 & 0.30 & 100 & Haematology & large & \cite{dispenzieri2012use} \\
+SS--Dialysis & 6,805 & 74 & 0.24 & 10 & Nephrology & large & \cite{wolfe1999comparison} \\
+\midrule
+\multicolumn{8}{c}{\textit{(e)~Competing-Risks Datasets}} \\
+\midrule
+Framingham & 4,273 & 18 & 0.42 ($K$=2) & 100 & Cardiology & medium (CR) & \cite{dawber1951epidemiological} \\
+PBC2 & 1,945 & 16 & 0.45 ($K$=2) & 50 & Hepatology & medium (CR) & \cite{murtaugh1994primary} \\
+SUPPORT (CR) & 9,105 & 37 & 0.68 ($K$=2) & 30 & Critical care & large (CR) & \cite{knaus1995support} \\
+Synthetic (CR) & 30,000 & 12 & 0.50 ($K$=2) & 10 & Synthetic & large (CR) &  \\
 \end{longtable}

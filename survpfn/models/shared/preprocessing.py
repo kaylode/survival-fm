@@ -61,10 +61,11 @@ class SurvivalTimeBinEncoder:
 
     N_TIME_FEATURES: int = 6
 
-    def __init__(self, n_bins: int = -1) -> None:
+    def __init__(self, n_bins: int = -1, scheme:str="quantile") -> None:
         self.n_bins = n_bins
         self._bin_times: Optional[np.ndarray] = None  # (K,) quantile cuts
         self._bin_feats: Optional[np.ndarray] = None  # (K, 6) raw features
+        self.scheme = scheme
 
     def fit(self, T: np.ndarray, E: np.ndarray) -> "SurvivalTimeBinEncoder":
         """Compute bin boundaries and KM statistics from training data.
@@ -74,7 +75,7 @@ class SurvivalTimeBinEncoder:
         E = (np.asarray(E) > 0).astype(int)
 
         n_bins = resolve_num_durations(T, E, self.n_bins)
-        cuts = get_cuts(T, E, n_bins, scheme="quantile")
+        cuts = get_cuts(T, E, n_bins, scheme=self.scheme)
         self._bin_times = np.unique(np.concatenate([[0.0], cuts])).astype(float)
         
         K = len(self._bin_times)
@@ -173,10 +174,15 @@ def expand_survival_data(
     E: np.ndarray,
     bin_times: np.ndarray,
     bin_feats: np.ndarray,
+    sampling_ratio: Optional[float] = None,
+    random_state: int = 42,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Vectorised temporal expansion: N patients × K bins -> flat binary dataset.
     
     Valid rows: event patient OR survived past this bin.
+
+    Optional sampling_ratio: if provided, keeps all y=1 rows and samples 
+    sampling_ratio * n_pos y=0 rows to reduce dataset size and handle imbalance.
     """
     N, D = X.shape
     K = len(bin_times)
@@ -198,6 +204,25 @@ def expand_survival_data(
 
     X_exp = np.concatenate([X_filt, feat_filt], axis=1)
     y_exp = np.where(T_filt <= t_filt, E_filt, 0).astype(np.int64)
+
+    # ── Downsampling Logic ──
+    if sampling_ratio is not None:
+        pos_idx = np.where(y_exp == 1)[0]
+        neg_idx = np.where(y_exp == 0)[0]
+        
+        n_pos = len(pos_idx)
+        n_neg_wanted = int(n_pos * sampling_ratio)
+        
+        if n_neg_wanted < len(neg_idx):
+            rng = np.random.default_rng(random_state)
+            sampled_neg_idx = rng.choice(neg_idx, size=n_neg_wanted, replace=False)
+            
+            # Combine and sort to maintain some semblance of order (optional but avoids total chaos)
+            keep_idx = np.concatenate([pos_idx, sampled_neg_idx])
+            keep_idx.sort()
+            
+            X_exp = X_exp[keep_idx]
+            y_exp = y_exp[keep_idx]
 
     return X_exp, y_exp
 

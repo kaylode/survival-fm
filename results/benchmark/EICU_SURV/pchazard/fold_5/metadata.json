@@ -1,0 +1,19 @@
+{
+  "dataset": "EICU_SURV",
+  "model": "pchazard",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 118656,
+  "n_test": 29663,
+  "n_features": 124,
+  "n_events_train": 6911,
+  "n_events_test": 1727,
+  "event_rate_train": 0.0582,
+  "event_rate_test": 0.0582,
+  "fit_time_s": 1185.0543,
+  "eval_time_s": 19.414,
+  "hpo_included_in_fit_time": true,
+  "n_params": 22359,
+  "timestamp": "2026-04-13T13:40:46.168438"
+}

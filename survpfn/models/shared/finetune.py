@@ -273,15 +273,6 @@ class BaseSurvExpandedFinetune:
     3. Standard evaluation
     """
 
-    def _expand_data_numpy(
-        self,
-        X: np.ndarray,
-        T: np.ndarray,
-        E: np.ndarray,
-        bin_times: np.ndarray,
-        bin_feats: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        return expand_survival_data(X, T, E, bin_times, bin_feats)
 
     def predict_survival_df(self, x: np.ndarray, n_ensemble: int = 0) -> pd.DataFrame:
         """Return survival probability DataFrame (rows=times, cols=subjects)."""
@@ -347,6 +338,7 @@ class BaseSurvExpandedFinetune:
         epochs: int = None,
         batch_size: int = None,
         verbose: bool = True,
+        sampling_ratio: Optional[float] = None,
         **kwargs
     ) -> "BaseSurvExpandedFinetune":
         """Generic training loop for Expanded Survival Models (binary classification)."""
@@ -377,14 +369,31 @@ class BaseSurvExpandedFinetune:
         x_scaled = self._prep.fit_transform(x, max_features=pca_capacity)
 
         # ── 3. Expansion ──
-        X_exp, y_exp = self._expand_data_numpy(x_scaled, durations, events, self.bin_times, self.bin_feats)
+        sampling_ratio = sampling_ratio if sampling_ratio is not None else getattr(self, "sampling_ratio", None)
+        random_state = kwargs.get("random_state", 42)
+
+        X_exp, y_exp = expand_survival_data(
+            x_scaled, durations, events, self.bin_times, self.bin_feats,
+            sampling_ratio=sampling_ratio,
+            random_state=random_state
+        )
         M = len(X_exp)
         X_pt, y_pt = torch.from_numpy(X_exp).float(), torch.from_numpy(y_exp).long()
+
+        if verbose:
+            print(f"Expanded dataset: {X_exp.shape[0]:,} rows, {X_exp.shape[1]} features", flush=True)
+            # Label distribution
+            unique, counts = np.unique(y_exp, return_counts=True)
+            print(f"y_exp distribution: {dict(zip(unique, counts))}", flush=True)
 
         if val_data is not None:
              vx, vd, ve = val_data
              vx_scaled = self._prep.transform(vx)
-             VX_exp, vy_exp = self._expand_data_numpy(vx_scaled, vd, ve, self.bin_times, self.bin_feats)
+             VX_exp, vy_exp = expand_survival_data(
+                 vx_scaled, vd, ve, self.bin_times, self.bin_feats,
+                 sampling_ratio=sampling_ratio, # Same ratio for val? Or maybe None for val?
+                 random_state=random_state
+             )
              VX_pt, vy_pt = torch.from_numpy(VX_exp).float(), torch.from_numpy(vy_exp).long()
         else:
              VX_pt, vy_pt = None, None

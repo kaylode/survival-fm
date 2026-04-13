@@ -1,0 +1,19 @@
+{
+  "dataset": "EICU_SURV",
+  "model": "dysurv",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 118655,
+  "n_test": 29664,
+  "n_features": 124,
+  "n_events_train": 6911,
+  "n_events_test": 1727,
+  "event_rate_train": 0.0582,
+  "event_rate_test": 0.0582,
+  "fit_time_s": 1582.1089,
+  "eval_time_s": 31.6972,
+  "hpo_included_in_fit_time": true,
+  "n_params": 1360949,
+  "timestamp": "2026-04-13T18:54:11.509302"
+}

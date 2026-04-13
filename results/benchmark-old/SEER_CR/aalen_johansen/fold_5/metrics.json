@@ -1,9 +1,0 @@
-{
-  "C-index_cause1": 0.5,
-  "IBS_cause1": 0.088901100703123,
-  "AUC_cause1": 0.5,
-  "C-index": 0.5,
-  "IBS": 0.088901100703123,
-  "AUC_mean": 0.5,
-  "n_causes": 1
-}

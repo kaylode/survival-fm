@@ -32,6 +32,7 @@ from .sr_models.deepsurv import train_deepsurv
 from .sr_models.discrete import train_mtlr, train_pchazard, train_deephit_single, _surv_df_to_arrays
 from .sr_models.soden import train_soden
 from .sr_models.survtrace import train_survtrace
+from .sr_models.dysurv import train_dysurv
 
 # ── CR models ─────────────────────────────────────────────────────────────────
 from .cr_models.classical import run_competing_risks_cox, run_aalen_johansen, run_fine_gray, run_survival_boost_cr
@@ -153,6 +154,7 @@ def _finetune_wrapper(fm_name: str) -> Callable:
             df_train[feat_cols].values.astype(np.float32),
             df_train[dur_col].values,
             df_train[ev_col].values,
+            sampling_ratio=cfg.sampling_ratio,
             verbose=cfg.verbose,
         )
 
@@ -219,6 +221,7 @@ ALL_MODELS: dict[str, Callable] = {
     "deephit_single":lambda df_tr, df_ts, dur, ev, **kw: train_deephit_single(df_tr, df_ts, dur, ev, **kw),
     "survtrace":     lambda df_tr, df_ts, dur, ev, **kw: train_survtrace(df_tr, df_ts, dur, ev, **kw),
     "soden":         lambda df_tr, df_ts, dur, ev, **kw: train_soden(df_tr, df_ts, dur, ev, **kw),
+    "dysurv":        lambda df_tr, df_ts, dur, ev, **kw: train_dysurv(df_tr, df_ts, dur, ev, **kw),
 
     # ── FM Frozen Embedding Models (Backward compatibility names) ───────────
     "tabpfn_embedding_cox":      _fm_joint_wrapper("tabpfn", "cox", freeze_backbone=True),
