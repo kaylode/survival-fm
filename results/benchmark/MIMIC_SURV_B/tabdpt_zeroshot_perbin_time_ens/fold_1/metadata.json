@@ -1,0 +1,19 @@
+{
+  "dataset": "MIMIC_SURV_B",
+  "model": "tabdpt_zeroshot_perbin_time_ens",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 52037,
+  "n_test": 13010,
+  "n_features": 142,
+  "n_events_train": 5437,
+  "n_events_test": 1359,
+  "event_rate_train": 0.1045,
+  "event_rate_test": 0.1045,
+  "fit_time_s": 2237.5495,
+  "eval_time_s": 14.6742,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-12T20:10:39.497151"
+}
