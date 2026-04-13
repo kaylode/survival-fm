@@ -56,20 +56,6 @@ MODEL_ORDER = [
     "rsf", "gbsa",
     "deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden",
 
-    # ── Strategy 1 — Embedding-based ───────────────────────────────────────
-    "tabpfn_embedding_cox",
-    "tabdpt_embedding_cox",
-    "tabicl_embedding_cox",
-    "tabpfn_embedding_deephit",
-    "tabdpt_embedding_deephit",
-    "tabicl_embedding_deephit",
-    "tabpfn_embedding_pchazard",
-    "tabdpt_embedding_pchazard",
-    "tabicl_embedding_pchazard",
-    "tabpfn_embedding_mtlr",
-    "tabdpt_embedding_mtlr",
-    "tabicl_embedding_mtlr",
-
     # ── Strategy 2 — Jointly-trained / Specialized adapters ────────────────
     "tabpfn_joint_cox",
     "tabdpt_joint_cox",
@@ -78,17 +64,17 @@ MODEL_ORDER = [
     "tabicl_joint_cox",
 
     # ── Strategy 3 — Zero-shot / In-context ────────────────────────────────
-    "tabpfn_zeroshot",
-    "tabdpt_zeroshot",
-    "tabicl_zeroshot",
+    # "tabpfn_zeroshot",
+    # "tabdpt_zeroshot",
+    # "tabicl_zeroshot",
 
-    "tabpfn_zeroshot_perbin",
-    "tabdpt_zeroshot_perbin",
-    "tabicl_zeroshot_perbin",
+    # "tabpfn_zeroshot_perbin",
+    # "tabdpt_zeroshot_perbin",
+    # "tabicl_zeroshot_perbin",
 
-    "tabpfn_zeroshot_perbin_time",
-    "tabdpt_zeroshot_perbin_time",
-    "tabicl_zeroshot_perbin_time",
+    # "tabpfn_zeroshot_perbin_time",
+    # "tabdpt_zeroshot_perbin_time",
+    # "tabicl_zeroshot_perbin_time",
 
     "tabpfn_zeroshot_perbin_time_ens",
     "tabdpt_zeroshot_perbin_time_ens",
@@ -98,6 +84,20 @@ MODEL_ORDER = [
     "tabpfn_finetune",
     "tabdpt_finetune",
     "tabicl_finetune",
+
+    # ── Strategy 1 — Embedding-based ───────────────────────────────────────
+    "tabpfn_embedding_pchazard",
+    "tabdpt_embedding_pchazard",
+    "tabicl_embedding_pchazard",
+    "tabpfn_embedding_mtlr",
+    "tabdpt_embedding_mtlr",
+    "tabicl_embedding_mtlr",
+    "tabpfn_embedding_deephit",
+    "tabdpt_embedding_deephit",
+    "tabicl_embedding_deephit",
+    "tabpfn_embedding_cox",
+    "tabdpt_embedding_cox",
+    "tabicl_embedding_cox",
 
     # ── Competing Risks (CR) — Grouped by Strategy ─────────────────────────
     "cox_cr", "deephit_cr", "aj_cr", "fine_gray_cr",
@@ -141,9 +141,9 @@ MODEL_LABELS = {
     "tabdpt_zeroshot_perbin": "TabDPT-ZS-PB",
     "tabicl_zeroshot_perbin": "TabICL-ZS-PB",
 
-    "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS-PB-Time-Ens",
-    "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS-PB-Time-Ens",
-    "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS-PB-Time-Ens",
+    "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS", #-PB-Time-Ens",
+    "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS",#-PB-Time-Ens",
+    "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS",#-PB-Time-Ens",
 
     "tabpfn_zeroshot_perbin_time": "TabPFN-ZS-PB-Time",
     "tabdpt_zeroshot_perbin_time": "TabDPT-ZS-PB-Time",
@@ -158,9 +158,9 @@ MODEL_LABELS = {
     "tabicl_tabtune": "TabICL-TabTune",
 
     "tabpfn_new": "TabPFN-New",
-    "tabpfn_finetune": "TabPFN-Finetune",
-    "tabdpt_finetune": "TabDPT-Finetune",
-    "tabicl_finetune": "TabICL-Finetune",
+    "tabpfn_finetune": "TabPFN-FT-CE",
+    "tabdpt_finetune": "TabDPT-FT-CE",
+    "tabicl_finetune": "TabICL-FT-CE",
 
     "cox_cr":          "Cox-CR",
     "deephit_cr":      "DeepHit-CR",
@@ -177,7 +177,7 @@ for b in ["tabpfn", "tabdpt", "tabicl"]:
 for fm in ["tabpfn", "tabdpt", "tabicl"]:
     fm_name = fm.replace("tab", "Tab").replace("pfn", "PFN").replace("dpt", "DPT").replace("icl", "ICL")
     for task in ["embedding", "joint"]:
-        task_name = "Emb" if task == "embedding" else "Joint"
+        task_name = "FT" if task == "embedding" else "Joint"
         for head in ["cox", "deephit", "pchazard", "mtlr"]:
             h_name = {"cox": "Cox", "deephit": "DeepHit", "pchazard": "PCHaz", "mtlr": "MTLR"}[head]
             mid = f"{fm}_{task}_{head}"
@@ -186,7 +186,7 @@ for fm in ["tabpfn", "tabdpt", "tabicl"]:
 
     # CR variants
     for task in ["embedding", "joint"]:
-        task_name = "Emb" if task == "embedding" else "Joint"
+        task_name = "FT" if task == "embedding" else "Joint"
         for head in ["deephit_cr", "deephit_v2_cr", "cox_cr"]:
             h_name = {"deephit_cr": "DH-CR", "deephit_v2_cr": "DH-v2-CR", "cox_cr": "Cox-CR"}[head]
             mid = f"{fm}_{task}_{head}"
@@ -198,20 +198,20 @@ MODEL_GROUPS = {
     "Tree":     ["rsf", "gbsa"],
     "Deep":     ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden"],
 
-    "Embedding-Cox":      [m for m in MODEL_ORDER if "_embedding" in m and "_cox" in m and "_cr" not in m],
-    "Embedding-DeepHit":   [m for m in MODEL_ORDER if "_embedding" in m and "deephit" in m and "_cr" not in m],
-    "Embedding-MTLR":      [m for m in MODEL_ORDER if "_embedding" in m and "mtlr" in m and "_cr" not in m],
-    "Embedding-PCHazard":  [m for m in MODEL_ORDER if "_embedding" in m and "pchazard" in m and "_cr" not in m],
+    "Finetune-Cox":      [m for m in MODEL_ORDER if "_embedding" in m and "_cox" in m and "_cr" not in m],
+    "Finetune-DeepHit":   [m for m in MODEL_ORDER if "_embedding" in m and "deephit" in m and "_cr" not in m],
+    "Finetune-MTLR":      [m for m in MODEL_ORDER if "_embedding" in m and "mtlr" in m and "_cr" not in m],
+    "Finetune-PCHazard":  [m for m in MODEL_ORDER if "_embedding" in m and "pchazard" in m and "_cr" not in m],
     
     "Joint-Cox":      [m for m in MODEL_ORDER if ("_joint" in m or m == "tabpfn_new" or m == "tabpfn_cox") and ("_cox" in m or m == "tabpfn_new" or m == "tabpfn_cox") and "_cr" not in m],
     "Joint-DeepHit":  [m for m in MODEL_ORDER if "_joint" in m and "deephit" in m and "_cr" not in m],
     "Joint-MTLR":     [m for m in MODEL_ORDER if "_joint" in m and "mtlr" in m and "_cr" not in m],
     "Joint-PCHazard": [m for m in MODEL_ORDER if "_joint" in m and "pchazard" in m and "_cr" not in m],
     
-    "Zero-shot":            ["tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot", "tabpfn_zeroshot_perbin", "tabdpt_zeroshot_perbin", "tabicl_zeroshot_perbin"],
-    "Zero-shot (Temporal)": ["tabpfn_zeroshot_perbin_time", "tabdpt_zeroshot_perbin_time", "tabicl_zeroshot_perbin_time", "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
-
-    "Finetune": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
+    # "Zero-shot":            ["tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot", "tabpfn_zeroshot_perbin", "tabdpt_zeroshot_perbin", "tabicl_zeroshot_perbin"],
+    # "Zero-shot (Temporal)": ["tabpfn_zeroshot_perbin_time", "tabdpt_zeroshot_perbin_time", "tabicl_zeroshot_perbin_time", "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
+    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
+    "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
 
     "Deep-CR":       ["cox_cr", "deephit_cr", "aj_cr", "fine_gray_cr"],
     "FM-CR-Cox":     [m for m in MODEL_ORDER if "_cr" in m and "cox" in m and m not in {"cox_cr", "deephit_cr", "aj_cr", "fine_gray_cr"}],
@@ -224,26 +224,26 @@ GROUP_COLORS = {
     "Tree":     "#f28e2b",
     "Deep":     "#59a14f",
 
-    "Embedding-Cox":      "#e15759",
-    "Embedding-DeepHit":  "#76b6b2",
-    "Embedding-MTLR":     "#17becf",
-    "Embedding-PCHazard": "#f1ce63",
+    "Finetune-Cox":      "#e15759",
+    "Finetune-DeepHit":  "#76b6b2",
+    "Finetune-MTLR":     "#17becf",
+    "Finetune-PCHazard": "#f1ce63",
 
-    "Joint-Cox":      "#9467bd",
-    "Joint-DeepHit":  "#c5b0d5",
-    "Joint-MTLR":     "#17becf",
-    "Joint-PCHazard": "#dbdb8d",
-    "Surv-Adapter":   "#8c564b",
+    # "Joint-Cox":      "#9467bd",
+    # "Joint-DeepHit":  "#c5b0d5",
+    # "Joint-MTLR":     "#17becf",
+    # "Joint-PCHazard": "#dbdb8d",
+    # "Surv-Adapter":   "#8c564b",
 
     "Zero-shot":            "#ff9da7",
-    "Zero-shot (Temporal)": "#ff7f0e",
+    # "Zero-shot (Temporal)": "#ff7f0e",
 
-    "Finetune": "#1f77b4",
-    "TabTune":  "#e377c2",
+    "Finetune-CE": "#e377c2",
+    # "TabTune":  "#e377c2",
 
-    "Deep-CR":       "#8c564b",
-    "FM-CR-Cox":     "#76b6b2",
-    "FM-CR-DeepHit": "#6fa8dc",
+    # "Deep-CR":       "#8c564b",
+    # "FM-CR-Cox":     "#76b6b2",
+    # "FM-CR-DeepHit": "#6fa8dc",
 }
 
 
@@ -325,15 +325,23 @@ def load_results(results_dir: Path) -> pd.DataFrame:
             continue
         if dataset not in DATASET_ORDER:
             continue
-
-        with metrics_path.open() as f:
-            metrics = json.load(f)
+        
+        try:
+            with metrics_path.open() as f:
+                metrics = json.load(f)
+        except:
+            print(f"Error loading metrics from {metrics_path}")
+            exit(0)
 
         meta = {}
         meta_path = metrics_path.parent / "metadata.json"
         if meta_path.exists():
-            with meta_path.open() as f:
-                meta = json.load(f)
+            try:
+                with meta_path.open() as f:
+                    meta = json.load(f)
+            except:
+                print(f"Error loading metadata from {meta_path}")
+                exit(0)
 
         record = {"Dataset": dataset, "Model": model, "Fold": fold}
         record.update(metrics)

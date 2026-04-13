@@ -48,7 +48,7 @@ LOG_DIR="logs"
 EPOCHS=50
 LR="1e-4"
 DEVICE="cuda:0"
-BATCH_SIZE=64
+BATCH_SIZE=128
 N_ENSEMBLE=5
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
@@ -64,8 +64,7 @@ EHR_DATASETS="EICU_SURV MIMIC_SURV_B"
 ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 
 # ── Model groups (must match analysis.py groupings) ───────────────────────────
-CLASSICAL_MODELS="km cox"
-TREE_MODELS="rsf gbsa"
+CLASSICAL_MODELS="cox rsf gbsa"
 DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace"
 
 EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox tabicl_embedding_cox"
@@ -82,9 +81,10 @@ FM_JOINT="$JOINT_COX $JOINT_DEEPHIT $JOINT_MTLR $JOINT_PCHAZARD"
 
 ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
 ZEROSHOT_TEMPORAL="tabpfn_zeroshot_perbin_time tabdpt_zeroshot_perbin_time tabicl_zeroshot_perbin_time tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
+BESTSHOT="tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
 FINETUNE="tabpfn_finetune tabdpt_finetune tabicl_finetune"
 
-ALL_SR_MODELS="$CLASSICAL_MODELS $TREE_MODELS $DEEP_MODELS $FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE"
+ALL_SR_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
@@ -125,7 +125,7 @@ esac
 case "$GROUP" in
     all)               MODELS="$ALL_SR_MODELS" ;;
     classical)         MODELS="$CLASSICAL_MODELS" ;;
-    tree)              MODELS="$TREE_MODELS" ;;
+    tree)              MODELS="$CLASSICAL_MODELS" ;;
     deep)              MODELS="$DEEP_MODELS" ;;
     fm)                MODELS="$FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE" ;;
     fm_embedding)      MODELS="$FM_EMBEDDING" ;;
@@ -133,11 +133,12 @@ case "$GROUP" in
     embedding_cox)     MODELS="$EMBEDDING_COX" ;;
     embedding_deephit) MODELS="$EMBEDDING_DEEPHIT" ;;
     embedding_pch)     MODELS="$EMBEDDING_PCHAZARD" ;;
-    embedding_mtlr)     MODELS=("tabdpt_embedding_mtlr") ;;
+    embedding_mtlr)    MODELS="$EMBEDDING_MTLR" ;;
     joint_cox)         MODELS="$JOINT_COX" ;;
     joint_deephit)     MODELS="$JOINT_DEEPHIT" ;;
     zeroshot)          MODELS="$ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL" ;;
     zeroshot_temporal) MODELS="$ZEROSHOT_TEMPORAL" ;;
+    bestshot)          MODELS="$BESTSHOT" ;;
     finetune)          MODELS="$FINETUNE" ;;
     tabpfn)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;
     tabdpt)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabdpt | xargs) ;;
