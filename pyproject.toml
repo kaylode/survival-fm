@@ -23,7 +23,7 @@ dependencies = [
     "scikit-learn>=1.3",
     "scipy>=1.10",              # Wilcoxon test in metrics.py
     # --- hyperparameter optimisation -------------------------------------
-    "optuna>=3.0",
+    "optuna==4.8.0",
     # --- visualisation ---------------------------------------------------
     "matplotlib>=3.7",
     "seaborn>=0.12",
