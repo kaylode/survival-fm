@@ -64,6 +64,8 @@ class FMConfig:
     """Weight for the FM classification loss added to the survival loss."""
     n_ensemble: int = 0
     """Number of random contexts sampled for ensembling during inference (0 = disabled)."""
+    sampling_ratio: Optional[float] = None
+    """Ratio of samples to use for training (None = use all)."""
 
     # ── Task ─────────────────────────────────────────────────────────────────
     task_type: str = "sr"

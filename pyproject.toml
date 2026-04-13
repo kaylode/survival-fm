@@ -45,6 +45,7 @@ dependencies = [
     "torchdiffeq>=0.2.3",
     "pytest>=9.0.2",
     "survivaleval>=0.2.7",
+    "lightgbm>=4.6.0",
 ]
 
 [project.optional-dependencies]
