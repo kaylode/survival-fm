@@ -20,6 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from survpfn.dataloaders.data_utils.utils import (
+    _drop_low_prevalence_binary,
+    _drop_duplicate_columns,
+)
+
 _DEFAULT_PATH_B = Path(os.environ.get(
     "MIMIC_SURV_B_PATH",
     Path(__file__).resolve().parents[3] / "data" / "mimiciv_survival_B.csv",
@@ -27,10 +32,21 @@ _DEFAULT_PATH_B = Path(os.environ.get(
 
 _ID_COLS = {"subject_id", "hadm_id", "stay_id"}
 
+_DURATION_COL = "survival_hours"
+_EVENT_COL    = "mortality"
+
 
 def load_mimiciv_survival_B(path: Path = _DEFAULT_PATH_B) -> tuple[pd.DataFrame, str, str]:
     """
     Load MIMIC-IV in-hospital all-cause mortality survival dataset (Task B).
+
+    Post-load cleaning applied automatically:
+    - Sparse binary features (ICD10 chapters, PROC_* flags) with fewer than
+      5 observations in either class are dropped to prevent CoxPH complete-
+      separation warnings.
+    - Byte-identical columns are deduplicated — handles cases where a lab
+      value was measured only once per patient so min=max=mean are all equal
+      (|r|=1.0 collinearity).
 
     Returns
     -------
@@ -42,4 +58,25 @@ def load_mimiciv_survival_B(path: Path = _DEFAULT_PATH_B) -> tuple[pd.DataFrame,
     df = pd.read_csv(path, low_memory=False)
     drop_cols = [c for c in _ID_COLS if c in df.columns]
     df = df.drop(columns=drop_cols)
-    return df, "survival_hours", "mortality"
+
+    _exclude = [_DURATION_COL, _EVENT_COL]
+
+    # Drop sparse binary features — stratum-aware: also drops ICD10 chapters
+    # with near-zero occurrence in the event=1 stratum
+    df = _drop_low_prevalence_binary(df, exclude_cols=_exclude, min_count=5,
+                                     event_col=_EVENT_COL)
+
+    # Drop _std aggregate columns for labs and vitals.
+    # When a lab is measured only once per patient, std=0 (constant), which
+    # creates spurious |r|=1.0 collinearity with _max/_mean columns of the
+    # same or other sparsely-measured labs.  _min and _mean retain all
+    # clinically meaningful signal.
+    std_cols = [c for c in df.columns
+                if (c.startswith("LAB_") or c.startswith("VITAL_")) and c.endswith("_std")]
+    if std_cols:
+        df = df.drop(columns=std_cols)
+
+    # Drop byte-identical duplicate columns (single-measurement lab aggregates)
+    df = _drop_duplicate_columns(df, exclude_cols=_exclude)
+
+    return df, _DURATION_COL, _EVENT_COL

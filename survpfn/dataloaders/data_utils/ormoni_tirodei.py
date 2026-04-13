@@ -311,23 +311,41 @@ def prepare_stroke_data(df_main):
     return df
 
 
+def _drop_ormoni_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop known duplicate columns in the OrmoniTirodei dataset.
+
+    'AMI' and 'Acute Myocardial Infarction' are the same variable under two
+    names (|r|=1.0).  Keep 'AMI' (shorter key) and drop the verbose form.
+    Also apply general byte-level dedup for safety.
+    """
+    from survpfn.dataloaders.data_utils.utils import _drop_duplicate_columns
+    # Drop the verbose duplicate explicitly first
+    if "Acute Myocardial Infarction" in df.columns and "AMI" in df.columns:
+        df = df.drop(columns=["Acute Myocardial Infarction"])
+    # Catch any remaining byte-identical columns
+    label_cols = [c for c in ["Follow Up Data", "Total mortality", "death",
+                               "MI_date", "events", "Ictus_date"] if c in df.columns]
+    df = _drop_duplicate_columns(df, exclude_cols=label_cols)
+    return df
+
+
 def load_ormoni_tirodei_mortality() -> tuple[pd.DataFrame, str, str]:
     """OrmoniTirodei — total mortality (binary event)."""
-    df = prepare_allcause(_load_ormoni_tirodei_base())
+    df = _drop_ormoni_duplicates(prepare_allcause(_load_ormoni_tirodei_base()))
     return df.dropna().reset_index(drop=True), "Follow Up Data", "Total mortality"
 
 def load_ormoni_tirodei_cv() -> tuple[pd.DataFrame, str, str]:
     """OrmoniTirodei — cardiovascular mortality (competing risks, events in {0,1,2})."""
-    df = prepare_cardiovascular_data(_load_ormoni_tirodei_base())
+    df = _drop_ormoni_duplicates(prepare_cardiovascular_data(_load_ormoni_tirodei_base()))
     return df.dropna().reset_index(drop=True), "Follow Up Data", "death"
 
 
 def load_ormoni_tirodei_mi() -> tuple[pd.DataFrame, str, str]:
     """OrmoniTirodei — myocardial infarction (competing risks, events in {0,1,2})."""
-    df = prepare_mi_data(_load_ormoni_tirodei_base())
+    df = _drop_ormoni_duplicates(prepare_mi_data(_load_ormoni_tirodei_base()))
     return df.dropna().reset_index(drop=True), "MI_date", "events"
 
 def load_ormoni_tirodei_stroke() -> tuple[pd.DataFrame, str, str]:
     """OrmoniTirodei — stroke (competing risks, events in {0,1,2})."""
-    df = prepare_stroke_data(_load_ormoni_tirodei_base())
+    df = _drop_ormoni_duplicates(prepare_stroke_data(_load_ormoni_tirodei_base()))
     return df.dropna().reset_index(drop=True), "Ictus_date", "events"

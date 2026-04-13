@@ -21,6 +21,10 @@ from .sksurv import (
 )
 from .survset import load_survset_dataset, SURVSET_BENCHMARK
 from .urrah import load_urrah_dataset
-from .utils import temporal_split
+from .utils import (
+    temporal_split,
+    _drop_low_prevalence_binary,
+    _drop_duplicate_columns,
+)
 from .eicu_survival import load_eicu_survival
 from .mimic_survival import load_mimiciv_survival_B

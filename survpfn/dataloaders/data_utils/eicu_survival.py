@@ -20,6 +20,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from survpfn.dataloaders.data_utils.utils import (
+    _drop_low_prevalence_binary,
+    _drop_duplicate_columns,
+)
+
 _DEFAULT_PATH = Path(os.environ.get(
     "EICU_SURV_PATH",
     Path(__file__).resolve().parents[3] / "data" / "eicu_survival.csv",
@@ -28,10 +33,20 @@ _DEFAULT_PATH = Path(os.environ.get(
 # Columns that are identifiers, not features
 _ID_COLS = {"patientunitstayid", "patienthealthsystemstayid", "uniquepid", "hospitalid"}
 
+_DURATION_COL = "survival_hours"
+_EVENT_COL    = "mortality"
+
 
 def load_eicu_survival(path: Path = _DEFAULT_PATH) -> tuple[pd.DataFrame, str, str]:
     """
     Load eICU-CRD in-ICU all-cause mortality survival dataset.
+
+    Post-load cleaning applied automatically:
+    - Sparse binary features (ICD10 chapters, TREAT_* flags) with fewer than
+      5 observations in either class are dropped to prevent CoxPH complete-
+      separation warnings (lifelines ConvergenceWarning).
+    - Byte-identical columns are deduplicated (handles single-measurement
+      lab aggregates where min=max=mean).
 
     Returns
     -------
@@ -46,4 +61,15 @@ def load_eicu_survival(path: Path = _DEFAULT_PATH) -> tuple[pd.DataFrame, str, s
     drop_cols = [c for c in _ID_COLS if c in df.columns]
     df = df.drop(columns=drop_cols)
 
-    return df, "survival_hours", "mortality"
+    _exclude = [_DURATION_COL, _EVENT_COL]
+
+    # Drop sparse binary features (prevents CoxPH complete-separation warnings)
+    # event_col enables stratum-aware check: drops ICD10 chapters that appear
+    # in <5 event=1 patients even if overall count is ≥5
+    df = _drop_low_prevalence_binary(df, exclude_cols=_exclude, min_count=5,
+                                     event_col=_EVENT_COL)
+
+    # Drop byte-identical duplicate columns
+    df = _drop_duplicate_columns(df, exclude_cols=_exclude)
+
+    return df, _DURATION_COL, _EVENT_COL
