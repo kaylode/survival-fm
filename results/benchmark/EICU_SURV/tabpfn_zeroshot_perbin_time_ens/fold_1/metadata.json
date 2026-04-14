@@ -1,0 +1,19 @@
+{
+  "dataset": "EICU_SURV",
+  "model": "tabpfn_zeroshot_perbin_time_ens",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 53375,
+  "n_test": 13344,
+  "n_features": 97,
+  "n_events_train": 3627,
+  "n_events_test": 907,
+  "event_rate_train": 0.068,
+  "event_rate_test": 0.068,
+  "fit_time_s": 645.6793,
+  "eval_time_s": 15.017,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-14T16:51:52.392019"
+}

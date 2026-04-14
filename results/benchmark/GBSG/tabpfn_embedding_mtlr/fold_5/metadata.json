@@ -1,0 +1,19 @@
+{
+  "dataset": "GBSG",
+  "model": "tabpfn_embedding_mtlr",
+  "fold": 5,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1786,
+  "n_test": 446,
+  "n_features": 7,
+  "n_events_train": 1014,
+  "n_events_test": 253,
+  "event_rate_train": 0.5677,
+  "event_rate_test": 0.5673,
+  "fit_time_s": 126.0857,
+  "eval_time_s": 1.0121,
+  "hpo_included_in_fit_time": true,
+  "n_params": 178048,
+  "timestamp": "2026-04-14T11:26:22.429063"
+}

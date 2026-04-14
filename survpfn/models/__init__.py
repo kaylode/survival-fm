@@ -279,9 +279,11 @@ ALL_MODELS: dict[str, Callable] = {
     "tabicl_joint_deephit_cr": _fm_joint_wrapper("tabicl", "deephit_cr", freeze_backbone=False, task_type="cr"),
 
     # ── FM Zero-shot ICL (CR) ────────────────────────────────────────────────
-    "tabpfn_zeroshot_cr":  _zeroshot_wrapper("tabpfn"),
-    "tabdpt_zeroshot_cr":  _zeroshot_wrapper("tabdpt"),
-    "tabicl_zeroshot_cr":  _zeroshot_wrapper("tabicl"),
+    # Use per_bin + time-bin encoder for CR: produces a separate FM fit per
+    # time bin, which is more expressive for multi-cause CIF estimation.
+    "tabpfn_zeroshot_cr":  _zeroshot_wrapper("tabpfn", method="per_bin", use_time_bin_encoder=True),
+    "tabdpt_zeroshot_cr":  _zeroshot_wrapper("tabdpt", method="per_bin", use_time_bin_encoder=True),
+    "tabicl_zeroshot_cr":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True),
 }
 
 __all__ = ["ALL_MODELS"]

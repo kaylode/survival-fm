@@ -1,0 +1,19 @@
+{
+  "dataset": "SEER",
+  "model": "dysurv",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3219,
+  "n_test": 805,
+  "n_features": 23,
+  "n_events_train": 493,
+  "n_events_test": 123,
+  "event_rate_train": 0.1532,
+  "event_rate_test": 0.1528,
+  "fit_time_s": 230.2328,
+  "eval_time_s": 1.0285,
+  "hpo_included_in_fit_time": true,
+  "n_params": 222752,
+  "timestamp": "2026-04-14T11:39:00.789536"
+}

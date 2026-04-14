@@ -36,9 +36,11 @@ SEED=42
 OUTPUT_DIR="results/benchmark_cr"
 LOG_DIR="logs"
 
-EPOCHS=500
+EPOCHS=50
 LR="1e-4"
 DEVICE="cuda:0"
+BATCH_SIZE=128
+N_ENSEMBLE=1
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
 CR_DATASETS="FRAMINGHAM PBC2 SUPPORT_CR SYNTHETIC_CR"
@@ -46,12 +48,13 @@ ALL_DATASETS="$CR_DATASETS"
 
 # ── Model groups (must match ALL_MODELS keys in models/__init__.py) ───────────
 # ── Model groups (must match analysis.py) ──────────────────────────────────────
-DEEP_CR="cox_cr aj_cr fine_gray_cr survival_boost_cr deephit_cr"
+CLASSICAL_CR="cox_cr aj_cr fine_gray_cr survival_boost_cr"
+DEEP_CR="$CLASSICAL_CR deephit_cr"
 
-FM_CR_DEEPHIT="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr tabpfn_joint_deephit_cr tabdpt_joint_deephit_cr tabicl_joint_deephit_cr"
+FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr"
 FM_CR_ZEROSHOT="tabpfn_zeroshot_cr tabdpt_zeroshot_cr tabicl_zeroshot_cr"
 
-ALL_CR_MODELS="$DEEP_CR $FM_CR_DEEPHIT $FM_CR_ZEROSHOT"
+ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING $FM_CR_ZEROSHOT"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
@@ -59,9 +62,13 @@ usage() {
 Usage: $0 [group] [dataset | "ds1 ds2 ..."]
 
 Groups (default: all):
-  classical_cr | deep_cr
-  fm_embedding | fm_joint | fm_zeroshot
-  tabpfn_cr | tabdpt_cr | tabicl_cr | all
+  classical_cr              Cox-CR, AJ, Fine-Gray, SurvivalBoost
+  deep_cr                   classical_cr + DeepHit-CR
+  fm_embedding              FM frozen-embedding DeepHit-CR (all 3 backbones)
+  fm_cr_deephit             fm_embedding + fm_joint
+  fm_zeroshot               FM zero-shot CR (all 3 backbones)
+  tabpfn_cr | tabdpt_cr | tabicl_cr
+  all
 
 Datasets (default): $CR_DATASETS
 EOF
@@ -80,7 +87,10 @@ esac
 
 case "$GROUP" in
     all)             MODELS="$ALL_CR_MODELS" ;;
+    classical_cr)    MODELS="$CLASSICAL_CR" ;;
     deep_cr)         MODELS="$DEEP_CR" ;;
+    fm_embedding)    MODELS="$FM_CR_EMBEDDING" ;;
+    fm_joint)        MODELS="$FM_CR_JOINT" ;;
     fm_cr_deephit)   MODELS="$FM_CR_DEEPHIT" ;;
     fm_zeroshot)     MODELS="$FM_CR_ZEROSHOT" ;;
     tabpfn_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;

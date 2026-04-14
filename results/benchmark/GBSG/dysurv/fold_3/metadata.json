@@ -1,0 +1,19 @@
+{
+  "dataset": "GBSG",
+  "model": "dysurv",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1786,
+  "n_test": 446,
+  "n_features": 7,
+  "n_events_train": 1014,
+  "n_events_test": 253,
+  "event_rate_train": 0.5677,
+  "event_rate_test": 0.5673,
+  "fit_time_s": 92.1187,
+  "eval_time_s": 0.9147,
+  "hpo_included_in_fit_time": true,
+  "n_params": 2620532,
+  "timestamp": "2026-04-14T09:01:39.897425"
+}

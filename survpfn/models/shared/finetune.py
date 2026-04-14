@@ -876,6 +876,9 @@ class BaseJointSurvFinetune:
                     torch.cuda.empty_cache()
                     current_bs //= 2
                     if verbose: print(f"  CUDA OOM! Reducing batch_size to {current_bs}", flush=True)
+                elif x_ctx.shape[0] == 0:
+                    print("  Context size is 0! Reducing batch size to accomodate more context", flush=True)
+                    current_bs //= 2
                 else: raise e
 
         # Finalize

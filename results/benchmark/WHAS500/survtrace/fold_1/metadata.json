@@ -1,0 +1,19 @@
+{
+  "dataset": "WHAS500",
+  "model": "survtrace",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 400,
+  "n_test": 100,
+  "n_features": 14,
+  "n_events_train": 172,
+  "n_events_test": 43,
+  "event_rate_train": 0.43,
+  "event_rate_test": 0.43,
+  "fit_time_s": 9.4768,
+  "eval_time_s": 0.4128,
+  "hpo_included_in_fit_time": true,
+  "n_params": 9619,
+  "timestamp": "2026-04-14T09:13:57.381383"
+}

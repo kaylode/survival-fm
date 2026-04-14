@@ -1,0 +1,19 @@
+{
+  "dataset": "FLCHAIN",
+  "model": "gbsa",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 5219,
+  "n_test": 1305,
+  "n_features": 38,
+  "n_events_train": 1570,
+  "n_events_test": 392,
+  "event_rate_train": 0.3008,
+  "event_rate_test": 0.3004,
+  "fit_time_s": 832.0482,
+  "eval_time_s": 1.4056,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-14T10:11:02.216944"
+}

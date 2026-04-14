@@ -1,0 +1,10 @@
+{
+  "best_params": {
+    "lr": 0.00012208556349308235,
+    "encoded_features": 64,
+    "batch_size": 256
+  },
+  "best_value": 0.9262634567654585,
+  "n_completed_trials": 20,
+  "best_trial_number": 5
+}

@@ -1,0 +1,19 @@
+{
+  "dataset": "VETERANS",
+  "model": "dysurv",
+  "fold": 3,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 110,
+  "n_test": 27,
+  "n_features": 8,
+  "n_events_train": 102,
+  "n_events_test": 26,
+  "event_rate_train": 0.9273,
+  "event_rate_test": 0.963,
+  "fit_time_s": 29.627,
+  "eval_time_s": 0.2971,
+  "hpo_included_in_fit_time": true,
+  "n_params": 674468,
+  "timestamp": "2026-04-14T09:27:25.593235"
+}

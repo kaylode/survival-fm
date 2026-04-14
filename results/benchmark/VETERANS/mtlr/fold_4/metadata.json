@@ -1,0 +1,19 @@
+{
+  "dataset": "VETERANS",
+  "model": "mtlr",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 110,
+  "n_test": 27,
+  "n_features": 8,
+  "n_events_train": 103,
+  "n_events_test": 25,
+  "event_rate_train": 0.9364,
+  "event_rate_test": 0.9259,
+  "fit_time_s": 7.143,
+  "eval_time_s": 0.2931,
+  "hpo_included_in_fit_time": true,
+  "n_params": 5642,
+  "timestamp": "2026-04-14T09:27:42.285822"
+}

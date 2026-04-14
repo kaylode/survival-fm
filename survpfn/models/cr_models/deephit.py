@@ -160,6 +160,48 @@ def _predict_absolute_risk_deephit(model, x_test, t_max, n_categories, times, de
     
     return [abs_risks[:, k, :] for k in range(n_events)]
 
+def _train_deephit_cr_once(
+    X_train, T_train, E_train, X_test,
+    epochs, batch_size, lr, device, num_durations,
+):
+    """Train one DeepHit-CR model and return (model, cif_per_cause, grid)."""
+    t_max = float(np.max(T_train))
+    num_Event = int(np.max(E_train))
+
+    dataset = SurvivalDatasetDeepHit(X_train, T_train, E_train, num_durations)
+    current_bs = batch_size
+    model = None
+    while True:
+        try:
+            loader = DataLoader(dataset, batch_size=current_bs, shuffle=True)
+            model = DeepHitCRPattern(
+                x_dim=X_train.shape[1], num_Event=num_Event,
+                num_Category=num_durations,
+            ).to(device)
+            optimizer = optim.Adam(model.parameters(), lr=lr)
+            for _ in range(epochs):
+                model.train()
+                for x, t, e, t_disc in loader:
+                    x, t, e, t_disc = x.to(device), t.to(device), e.to(device), t_disc.to(device)
+                    mask1 = create_fc_mask1_gpu(e, t_disc, num_Event, num_durations, device)
+                    mask2 = create_fc_mask2_gpu(t_disc, num_durations, device)
+                    out, _ = model(x)
+                    loss = model.compute_loss(out, t.view(-1, 1), e.view(-1, 1), mask1, mask2)
+                    optimizer.zero_grad(); loss.backward(); optimizer.step()
+            break
+        except RuntimeError as err:
+            if "CUDA out of memory" in str(err) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ CUDA OOM (DeepHitCR)! Reducing batch_size to {current_bs}{C_RESET}")
+            else:
+                raise
+
+    grid = np.linspace(float(np.min(T_train)) + 1e-6, t_max - 1e-6, 50)
+    cif_per_cause = _predict_absolute_risk_deephit(model, X_test, t_max, num_durations, grid, device)
+    return model, cif_per_cause, grid
+
+
 def train_deephit_cr(
     df_train: pd.DataFrame,
     df_test: pd.DataFrame,
@@ -179,47 +221,48 @@ def train_deephit_cr(
     X_train = df_train[feats].values.astype(np.float32)
     T_train = df_train[duration_col].values.astype(np.float32)
     E_train = df_train[event_col].values.astype(np.int64)
-    
     X_test  = df_test[feats].values.astype(np.float32)
-    t_max = np.max(T_train)
-    num_Event = int(np.max(E_train))
-    
-    dataset = SurvivalDatasetDeepHit(X_train, T_train, E_train, num_durations)
-    success = False
-    current_bs = batch_size
-    while not success:
-        try:
-            loader = DataLoader(dataset, batch_size=current_bs, shuffle=True)
-            model = DeepHitCRPattern(x_dim=X_train.shape[1], num_Event=num_Event, num_Category=num_durations).to(device)
-            optimizer = optim.Adam(model.parameters(), lr=lr)
 
-            for epoch in range(epochs):
-                model.train()
-                for x, t, e, t_disc in loader:
-                    x, t, e, t_disc = x.to(device), t.to(device), e.to(device), t_disc.to(device)
-                    mask1 = create_fc_mask1_gpu(e, t_disc, num_Event, num_durations, device)
-                    mask2 = create_fc_mask2_gpu(t_disc, num_durations, device)
-                    out, _ = model(x)
-                    loss = model.compute_loss(out, t.view(-1, 1), e.view(-1, 1), mask1, mask2)
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-            success = True
-        except RuntimeError as e:
-            if "CUDA out of memory" in str(e) and current_bs > 1:
-                torch.cuda.empty_cache()
-                current_bs = max(1, current_bs // 2)
-                print(f"      {C_YELLOW}→ CUDA OOM (DeepHitCR)! Reducing batch_size to {current_bs} and restarting{C_RESET}")
-            else:
-                raise e
-            
-    # Inference wrapper mapping
-    grid = np.linspace(np.min(T_train) + 1e-6, np.max(T_train) - 1e-6, 50)
-    cif_per_cause = _predict_absolute_risk_deephit(model, X_test, t_max, num_durations, grid, device)
-    
-    # Simple risk estimation (cause 1 risk integrated over time for compatibility)
-    span = grid[-1] - grid[0] + 1e-8
+    # ── Optional Optuna HPO ───────────────────────────────────────────────────
+    if tune and n_trials > 1:
+        try:
+            import optuna
+            optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+            def _objective(trial):
+                _lr   = trial.suggest_float("lr",            1e-4, 1e-2, log=True)
+                _bs   = trial.suggest_categorical("batch_size", [64, 128, 256])
+                _ep   = trial.suggest_int("epochs",           30,  150, step=20)
+                _nd   = trial.suggest_int("num_durations",    10,  40,  step=5)
+                _,  cif_trial, grid_trial = _train_deephit_cr_once(
+                    X_train, T_train, E_train, X_test,
+                    epochs=_ep, batch_size=_bs, lr=_lr, device=device,
+                    num_durations=_nd,
+                )
+                # Proxy objective: mean CIF spread across test set at median time
+                cif0 = cif_trial[0]
+                return float(np.mean(np.std(cif0, axis=0)))  # higher variance → more discriminative
+
+            study = optuna.create_study(direction="maximize")
+            study.optimize(_objective, n_trials=n_trials, show_progress_bar=False)
+            best = study.best_params
+            epochs        = best.get("epochs",        epochs)
+            batch_size    = best.get("batch_size",    batch_size)
+            lr            = best.get("lr",            lr)
+            num_durations = best.get("num_durations", num_durations)
+            print(f"      {C_YELLOW}[DeepHitCR] Best HPO: {best}{C_RESET}")
+        except Exception as hpo_err:
+            print(f"      {C_YELLOW}[DeepHitCR] HPO failed ({hpo_err}), using defaults{C_RESET}")
+
+    # ── Final training ────────────────────────────────────────────────────────
+    model, cif_per_cause, grid = _train_deephit_cr_once(
+        X_train, T_train, E_train, X_test,
+        epochs=epochs, batch_size=batch_size, lr=lr,
+        device=device, num_durations=num_durations,
+    )
+
     _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    span = grid[-1] - grid[0] + 1e-8
     risk_cause1 = _trapz(cif_per_cause[0], grid, axis=1) / span
-    
+
     return model, risk_cause1, cif_per_cause, grid

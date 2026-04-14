@@ -1,0 +1,19 @@
+{
+  "dataset": "METABRIC",
+  "model": "mtlr",
+  "fold": 4,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 1523,
+  "n_test": 381,
+  "n_features": 9,
+  "n_events_train": 882,
+  "n_events_test": 221,
+  "event_rate_train": 0.5791,
+  "event_rate_test": 0.5801,
+  "fit_time_s": 23.9264,
+  "eval_time_s": 0.8685,
+  "hpo_included_in_fit_time": true,
+  "n_params": 10906,
+  "timestamp": "2026-04-14T08:39:01.344585"
+}

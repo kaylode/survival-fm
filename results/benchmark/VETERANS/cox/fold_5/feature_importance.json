@@ -1,0 +1,33 @@
+{
+  "type": "cox_coefficients",
+  "coef": {
+    "Age_in_years": 0.003655456981354568,
+    "Karnofsky_score": -0.5077721084301964,
+    "Months_from_Diagnosis": 0.00442901859516808,
+    "Celltype_large": -0.22780889542340904,
+    "Celltype_smallcell": -0.09555216159211165,
+    "Celltype_squamous": -0.44270555713134807,
+    "Prior_therapy_yes": 0.014264977959120085,
+    "Treatment_test": 0.05436102035178439
+  },
+  "exp_coef": {
+    "Age_in_years": 1.0036621463125965,
+    "Karnofsky_score": 0.6018349092375074,
+    "Months_from_Diagnosis": 1.0044388411941636,
+    "Celltype_large": 0.7962764173635802,
+    "Celltype_smallcell": 0.9088709522613133,
+    "Celltype_squamous": 0.6422962988128211,
+    "Prior_therapy_yes": 1.0143672082832427,
+    "Treatment_test": 1.0558657223693906
+  },
+  "p": {
+    "Age_in_years": 0.971437809731447,
+    "Karnofsky_score": 3.8163751250048856e-06,
+    "Months_from_Diagnosis": 0.9655584759773908,
+    "Celltype_large": 0.05844074439476508,
+    "Celltype_smallcell": 0.45728925445352897,
+    "Celltype_squamous": 0.0006929232817214912,
+    "Prior_therapy_yes": 0.8984616831062777,
+    "Treatment_test": 0.603081476038385
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "type": "impurity",
+  "features": {
+    "Age": 0.06093639213602151,
+    "T Stage": 0.0081826633530946,
+    "N Stage": 0.1422120799188964,
+    "Grade": 0.02372624952489111,
+    "A Stage": 0.0003610289561134825,
+    "Tumor Size": 0.1063067954572038,
+    "Estrogen Status": 0.17429811662029068,
+    "Progesterone Status": 0.04691098219113487,
+    "Regional Node Examined": 0.10130819633131982,
+    "Reginol Node Positive": 0.2049905787767195,
+    "Race_Black": 0.01600669876563247,
+    "Race_Other (American Indian/AK Native, Asian/Pacific Islander)": 0.00961413576078981,
+    "Race_White": 1.169290739327294e-05,
+    "Marital Status_Divorced": 0.004080551564070783,
+    "Marital Status_Married (including common law)": 0.0,
+    "Marital Status_Separated": 0.001127124319143906,
+    "Marital Status_Single (never married)": 4.355591498087859e-07,
+    "Marital Status_Widowed": 0.0,
+    "6th Stage_IIA": 0.003327484571133327,
+    "6th Stage_IIB": 0.0,
+    "6th Stage_IIIA": 0.0005788503695452919,
+    "6th Stage_IIIB": 0.0,
+    "6th Stage_IIIC": 0.09601994291745547
+  }
+}

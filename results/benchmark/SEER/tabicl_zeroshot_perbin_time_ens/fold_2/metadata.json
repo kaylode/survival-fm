@@ -1,0 +1,19 @@
+{
+  "dataset": "SEER",
+  "model": "tabicl_zeroshot_perbin_time_ens",
+  "fold": 2,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 3219,
+  "n_test": 805,
+  "n_features": 23,
+  "n_events_train": 493,
+  "n_events_test": 123,
+  "event_rate_train": 0.1532,
+  "event_rate_test": 0.1528,
+  "fit_time_s": 252.2867,
+  "eval_time_s": 1.6064,
+  "hpo_included_in_fit_time": true,
+  "n_params": null,
+  "timestamp": "2026-04-14T18:03:21.167604"
+}

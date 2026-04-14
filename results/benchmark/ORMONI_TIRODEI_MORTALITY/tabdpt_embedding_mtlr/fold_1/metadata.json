@@ -1,0 +1,19 @@
+{
+  "dataset": "ORMONI_TIRODEI_MORTALITY",
+  "model": "tabdpt_embedding_mtlr",
+  "fold": 1,
+  "tune": true,
+  "n_trials": 20,
+  "n_train": 6452,
+  "n_test": 1613,
+  "n_features": 67,
+  "n_events_train": 1926,
+  "n_events_test": 481,
+  "event_rate_train": 0.2985,
+  "event_rate_test": 0.2982,
+  "fit_time_s": 133.9544,
+  "eval_time_s": 1.554,
+  "hpo_included_in_fit_time": true,
+  "n_params": 244096,
+  "timestamp": "2026-04-13T19:56:11.232753"
+}
