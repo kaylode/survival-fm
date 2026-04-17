@@ -67,9 +67,35 @@ def get_dataset(name):
     else:
         raise ValueError(f"Dataset {name} not found.")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dataset groups — single source of truth, imported by xai scripts
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PUBLIC  = ["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN", "SEER"]
+_EHR     = ["EICU_SURV", "MIMIC_SURV_B"]
+_ORMONI  = [
+    "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI",
+    "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI_MORTALITY",
+]
+_SURVSET = sorted(k for k in BENCHMARK_DATASETS if k.startswith("SS_"))
+_CR_LIST = list(CR_DATASETS.keys())
+
+DATASET_GROUPS: dict[str, list[str]] = {
+    "public":     _PUBLIC,
+    "ehr":        _EHR,
+    "public+ehr": _PUBLIC + _EHR,
+    "ormoni":     _ORMONI,
+    "survset":    _SURVSET,
+    "all":        _PUBLIC + _EHR + _SURVSET,
+    "cr":         _CR_LIST,
+}
+
+
 __all__ = [
     "get_dataset",
     "BENCHMARK_DATASETS",
     "CR_DATASETS",
-    "ALL_DATASETS"
+    "ALL_DATASETS",
+    "DATASET_GROUPS",
 ]

@@ -32,11 +32,19 @@ def _scale_fold(
     df_train = df.iloc[train_idx].reset_index(drop=True).copy()
     df_test  = df.iloc[test_idx].reset_index(drop=True).copy()
 
-    # ── Median imputation (only triggers when NaNs exist) ──
-    if df_train[feat_cols].isnull().any().any():
+    # ── Median imputation (triggers if NaNs exist in either split) ──
+    if df_train[feat_cols].isnull().any().any() or df_test[feat_cols].isnull().any().any():
         imputer = SimpleImputer(strategy="median")
         df_train[feat_cols] = imputer.fit_transform(df_train[feat_cols])
         df_test[feat_cols]  = imputer.transform(df_test[feat_cols])
+
+    # ── Quantile-based outlier clipping (Winsorization) ──
+    # We clip at the 0.1% and 99.9% quantiles to remove extreme numerical outliers
+    # while preserving binary flags and most skewed distributions.
+    lower_limit = df_train[feat_cols].quantile(0.001)
+    upper_limit = df_train[feat_cols].quantile(0.999)
+    df_train[feat_cols] = df_train[feat_cols].clip(lower=lower_limit, upper=upper_limit, axis=1)
+    df_test[feat_cols]  = df_test[feat_cols].clip(lower=lower_limit, upper=upper_limit, axis=1)
 
     # ── Standard scaling ──
     scaler = StandardScaler()
