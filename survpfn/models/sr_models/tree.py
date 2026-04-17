@@ -14,7 +14,7 @@ from survpfn.utils.optuna import get_n_trials_to_run
 from sksurv.functions import StepFunction
 
 _MAX_SURV_TIMES  = 100      # max time-grid points for the returned surv matrix
-_MAX_SAMPLES_FIT = 20_000   # max bootstrap/subsample samples for RSF/GBSA fit
+_MAX_SAMPLES_FIT = 10_000   # max bootstrap/subsample samples for RSF/GBSA fit
 
 
 def _build_surv_matrix(model, X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -86,7 +86,7 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
         def objective(trial):
             p = apply_tuning_params(trial, config["tuning"])
             model = RandomSurvivalForest(
-                **{**params, **p, "n_jobs": -1, "random_state": random_state, "verbose": 1, "max_samples": min(len(X_tr), _MAX_SAMPLES_FIT)}
+                **{**params, **p, "n_jobs": 1, "random_state": random_state, "verbose": 1, "max_samples": min(len(X_tr), _MAX_SAMPLES_FIT)}
             )
             model.fit(X_tr, y_tr)
             return model.score(X_val, y_val)
@@ -102,7 +102,7 @@ def train_rsf(df_train, df_test, duration_col, event_col, tune=False, n_trials=1
         final_params["max_samples"] = _MAX_SAMPLES_FIT
     
     # Ensure n_jobs is set for the final fit
-    final_params["n_jobs"] = -1
+    final_params["n_jobs"] = 1
 
     model = RandomSurvivalForest(**final_params)
     model.fit(X_train, y_train_sksurv)

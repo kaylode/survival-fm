@@ -64,7 +64,7 @@ def run_aalen_johansen(df_train, df_test, duration_col, event_col, **kwargs):
     grid = np.linspace(df_train[duration_col].min() + 1e-6, df_train[duration_col].max() - 1e-6, 50)
     n_samples = len(df_test)
     cif_per_cause = []
-    
+
     # In lifelines 0.30.0, AJFitter calculates one cause's CIF at a time
     for cause in causes:
         aj_c = AalenJohansenFitter(calculate_variance=False)

@@ -268,6 +268,19 @@ def evaluate_cr(
             warnings.warn(f"Cause-{k} C-index failed: {e}", stacklevel=2)
             metrics[f"C-index_cause{k}"] = float("nan")
 
+        # ── Cause-k Time-dependent C-index (Antolini) ─────────────────────────
+        try:
+            import pandas as pd
+            from pycox.evaluation import EvalSurv
+            surv_k = 1.0 - cif_k
+            surv_df = pd.DataFrame(surv_k.T, index=surv_times)
+            eval_pycox = EvalSurv(surv_df, y_test_k["time"], y_test_k["event"].astype(int))
+            c_td_k = eval_pycox.concordance_td('antolini')
+            metrics[f"C_td_cause{k}"] = float(c_td_k)
+        except Exception as e:
+            warnings.warn(f"Cause-{k} C_td failed: {e}", stacklevel=2)
+            metrics[f"C_td_cause{k}"] = float("nan")
+
         # ── Cause-k IBS and AUC ───────────────────────────────────────────────
         from .utils import _filter_ipcw_test
         # _filter_ipcw_test returns (y_filtered, cif_filtered, risk_filtered)
@@ -327,4 +340,7 @@ def evaluate_cr(
     metrics["AUC_mean"]= float(np.nanmean(auc_vals))  if auc_vals  else float("nan")
     metrics["n_causes"]= len(cif_per_cause)
 
+    # Macro-average time-dependent concordance index
+    c_td_vals = [metrics[f"C_td_cause{k}"] for k in range(1, len(cif_per_cause) + 1)]
+    metrics["C_td"] = float(np.nanmean(c_td_vals)) if c_td_vals else float("nan")
     return metrics

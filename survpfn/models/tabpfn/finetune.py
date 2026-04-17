@@ -48,7 +48,7 @@ class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
         # We'll use a standard classifier wrapper for finetuning
         self.clf = FinetunedTabPFNClassifier(
             device=device,
-            epochs=15,
+            epochs=10,
             learning_rate=learning_rate,
             n_estimators_finetune=n_estimators_finetune,
             n_estimators_validation=n_estimators_validation,

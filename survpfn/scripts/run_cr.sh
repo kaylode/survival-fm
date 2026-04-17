@@ -54,7 +54,7 @@ DEEP_CR="$CLASSICAL_CR deephit_cr"
 FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr"
 FM_CR_ZEROSHOT="tabpfn_zeroshot_cr tabdpt_zeroshot_cr tabicl_zeroshot_cr"
 
-ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING $FM_CR_ZEROSHOT"
+ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING" # $FM_CR_ZEROSHOT"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
@@ -96,7 +96,7 @@ case "$GROUP" in
     tabpfn_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;
     tabdpt_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabdpt | xargs) ;;
     tabicl_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabicl | xargs) ;;
-    *) echo "Unknown group: $GROUP"; usage ;;
+    *)               MODELS=($GROUP)
 esac
 
 read -ra EXTRA <<< "$(_extra_args "$MODELS")"

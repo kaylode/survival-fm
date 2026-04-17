@@ -61,8 +61,6 @@ MODEL_ORDER = [
     "tabdpt_joint_cox",
     "tabicl_joint_cox",
 
-    "tabicl_joint_cox",
-
     # ── Strategy 3 — Zero-shot / In-context ────────────────────────────────
     # "tabpfn_zeroshot",
     # "tabdpt_zeroshot",
@@ -126,9 +124,9 @@ MODEL_LABELS = {
     "rsf":            "RSF",
     "gbsa":           "GBSA",
     "deepsurv":       "DeepSurv",
-    "mtlr":           "MTLR",
-    "pchazard":       "PC-Hazard",
-    "deephit_single": "DeepHit",
+    "mtlr":           "MLP-MTLR",
+    # "pchazard":       "MLP-PCHazard",
+    "deephit_single": "MLP-DeepHit",
     "survtrace":      "SurvTrace",
     "soden":          "SODEN",
     "dysurv":         "DySurv",
@@ -163,8 +161,14 @@ MODEL_LABELS = {
     "tabdpt_finetune": "TabDPT-FT-CE",
     "tabicl_finetune": "TabICL-FT-CE",
 
-    "cox_cr":          "Cox-CR",
-    "deephit_cr":      "DeepHit-CR",
+    "cox_cr":              "Cox-CR",
+    "aj_cr":               "Aalen-Johansen",
+    "fine_gray_cr":        "Fine-Gray",
+    "survival_boost_cr":   "SurvBoost-CR",
+    "deephit_cr":          "DeepHit-CR",
+    "tabpfn_zeroshot_cr":  "TabPFN-ZS-CR",
+    "tabdpt_zeroshot_cr":  "TabDPT-ZS-CR",
+    "tabicl_zeroshot_cr":  "TabICL-ZS-CR",
     "tabpfn_zeroshot_cr_multinomial": "TabPFN-ZS-CR-Mul",
     "tabpfn_zeroshot_cr_perevent":    "TabPFN-ZS-CR-PE",
 }
@@ -244,9 +248,9 @@ GROUP_COLORS = {
     "Finetune-CE": "#e377c2",
     # "TabTune":  "#e377c2",
 
-    # "Deep-CR":       "#8c564b",
-    # "FM-CR-Cox":     "#76b6b2",
-    # "FM-CR-DeepHit": "#6fa8dc",
+    "Deep-CR":       "#8c564b",
+    "FM-CR-Cox":     "#76b6b2",
+    "FM-CR-DeepHit": "#6fa8dc",
 }
 
 
@@ -334,7 +338,7 @@ def load_results(results_dir: Path) -> pd.DataFrame:
                 metrics = json.load(f)
         except:
             print(f"Error loading metrics from {metrics_path}")
-            exit(0)
+            continue
 
         meta = {}
         meta_path = metrics_path.parent / "metadata.json"
@@ -1538,7 +1542,7 @@ def main() -> None:
         fi_records_cr = load_feature_importance(results_dir_cr)
         print(f"  {len(fi_records_cr)} feature-importance records (CR)")
 
-        print_summary(df_cr)
+        # print_summary(df_cr)
 
     # Map figure IDs to functions
     fig_map = {

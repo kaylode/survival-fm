@@ -551,6 +551,18 @@ def main() -> None:
         help="Reference models to compare against.",
     )
     parser.add_argument(
+        "--datasets", nargs="+", default=None,
+        help=(
+            "Filter to these datasets only. "
+            "Keywords: public, ehr, survset, ormoni. "
+            "Default: all datasets in the CSV."
+        ),
+    )
+    parser.add_argument(
+        "--models", nargs="+", default=None,
+        help="Filter to these model keys only. Default: all models in CSV.",
+    )
+    parser.add_argument(
         "--alpha", type=float, default=0.05,
         help="Significance threshold.",
     )
@@ -581,6 +593,25 @@ def main() -> None:
 
     # Drop rows missing the target metric
     df = df.dropna(subset=[args.metric])
+
+    # ── Dataset keyword expansion ────────────────────────────────────────────
+    _DS_KEYWORDS = {
+        "public":  ["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN", "SEER"],
+        "ehr":     ["EICU_SURV", "MIMIC_SURV_B"],
+        "survset": [d for d in df["Dataset"].unique() if str(d).startswith("SS_")],
+        "ormoni":  ["ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI",
+                    "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI_MORTALITY"],
+    }
+    if args.datasets:
+        expanded: list[str] = []
+        for tok in args.datasets:
+            expanded.extend(_DS_KEYWORDS.get(tok, [tok]))
+        df = df[df["Dataset"].isin(expanded)]
+        print(f"  Filtered to {df['Dataset'].nunique()} datasets: {expanded}")
+
+    if args.models:
+        df = df[df["Model"].isin(args.models)]
+        print(f"  Filtered to {df['Model'].nunique()} models.")
 
     # ── 1. Pairwise Wilcoxon ──────────────────────────────────────────
     print("\n[1/4] Pairwise Wilcoxon signed-rank tests …")

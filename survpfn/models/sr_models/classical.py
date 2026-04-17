@@ -51,16 +51,32 @@ def run_multivariate_cox(df_train, df_test, duration_col, event_col, penalizer=0
     df_train_sub = df_train[non_const].copy()
     df_test_sub = df_test[[c for c in df_test.columns if c in non_const]].copy()
 
-    cph = CoxPHFitter(penalizer=penalizer)
-    try:
-        cph.fit(df_train_sub, duration_col=duration_col, event_col=event_col)
-    except Exception:
-        # Retry with a larger penalizer if it fails
-        cph = CoxPHFitter(penalizer=max(penalizer * 10, 1.0))
-        cph.fit(df_train_sub, duration_col=duration_col, event_col=event_col)
+    # Try fitting with increasing penalization until coefficients are finite
+    # Many EHR datasets have separation issues that require strong L2 regularization
+    current_penalizer = max(penalizer, 1.0)
+    for i in range(3):
+        cph = CoxPHFitter(penalizer=current_penalizer)
+        try:
+            cph.fit(df_train_sub, duration_col=duration_col, event_col=event_col)
+            if not np.isnan(cph.params_).any() and not np.isinf(cph.params_).any():
+                break
+        except Exception:
+            pass
+        current_penalizer *= 5.0
+    
+    if np.isnan(cph.params_).any() or np.isinf(cph.params_).any():
+        import warnings
+        warnings.warn(f"Cox model fit still invalid after retries (penalizer={current_penalizer}). Check for severe multicollinearity.", stacklevel=2)
+
 
     c_index = cph.score(df_test_sub, scoring_method="concordance_index")
-    print("Concordance Index (test):", c_index)
+    # print("Concordance Index (test):", c_index)
+
+    # Note: lifelines handles survival prediction differently. 
+    # To prevent NaNs in downstream metrics, we ensure the fit is valid.
+    if np.isnan(cph.params_).any():
+        import warnings
+        warnings.warn("Cox model fit resulted in NaN coefficients.", stacklevel=2)
 
     importance = cph.summary.reset_index()
     importance.rename(columns={'index': 'feature'}, inplace=True)
@@ -116,8 +132,13 @@ def train_cox(
 
     T_train = df_train[duration_col].values
     E_train = df_train[event_col].astype(bool).values
-    X_train = df_train.drop(columns=[duration_col, event_col]).values.astype(np.float32)
-    X_test  = df_test.drop(columns=[duration_col, event_col]).values.astype(np.float32)
+    X_train = df_train.drop(columns=[duration_col, event_col]).values.astype(np.float64)
+    X_test  = df_test.drop(columns=[duration_col, event_col]).values.astype(np.float64)
+
+    # Sanity check for NaNs after preprocessing
+    if np.isnan(X_train).any() or np.isnan(X_test).any():
+        import warnings
+        warnings.warn("Cox input contains NaNs even after imputation/scaling. This will likely lead to NaN surv_probs.", stacklevel=2)
 
     # Build structured array expected by sksurv
     y_train = np.array(
@@ -131,15 +152,20 @@ def train_cox(
         idx = rng.choice(len(X_train), _MAX_N_COX, replace=False)
         X_train, y_train = X_train[idx], y_train[idx]
 
-    model = CoxPHSurvivalAnalysis(alpha=0.1, ties="efron", max_iter=100)
+    # Use slightly higher alpha by default (0.5) to prevent coefficient explosion
+    model = CoxPHSurvivalAnalysis(alpha=0.5, ties="efron", max_iter=100)
     try:
         model.fit(X_train, y_train)
     except Exception:
         # Retry with stronger regularisation if convergence fails
-        model = CoxPHSurvivalAnalysis(alpha=1.0, ties="efron", max_iter=200)
+        model = CoxPHSurvivalAnalysis(alpha=5.0, ties="efron", max_iter=200)
         model.fit(X_train, y_train)
 
     risk_scores = model.predict(X_test)
+    
+    # Clip extreme risk scores to prevent overflow/underflow in survival calculation
+    # exp(700) is the limit for float64.
+    risk_scores = np.clip(risk_scores, -500, 500)
 
     surv_funcs = model.predict_survival_function(X_test)
     surv_times = model.unique_times_
@@ -147,6 +173,10 @@ def train_cox(
         idx = np.linspace(0, len(surv_times) - 1, _MAX_SURV_TIMES, dtype=int)
         surv_times = surv_times[idx]
     surv_probs = np.row_stack([fn(surv_times) for fn in surv_funcs])
+
+    if np.isnan(surv_probs).any():
+        import warnings
+        warnings.warn("Cox model returned NaN surv_probs. Check for ill-conditioned data or extreme outliers.", stacklevel=2)
 
     return model, risk_scores, surv_probs, surv_times
 

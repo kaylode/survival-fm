@@ -148,9 +148,44 @@ MODEL_GROUPS["all"] = (
 # Per-fold runner
 # ---------------------------------------------------------------------------
 
+def _save_predictions(
+    pred_dir: str,
+    dataset_name: str,
+    model_tag: str,
+    fold: int,
+    test_idx: np.ndarray,
+    risk_scores: np.ndarray,
+    duration: np.ndarray,
+    event: np.ndarray,
+) -> None:
+    """Save per-fold risk scores indexed by original dataset position.
+
+    Written to: ``<pred_dir>/<dataset_name>/<model_tag>/fold_<fold>.parquet``
+
+    Columns
+    -------
+    original_idx : iloc position in the original (pre-scale) DataFrame.
+                   Use this to join back to raw demographics at eval time.
+    risk_score   : scalar risk score — higher = higher risk of event.
+    duration     : raw (unscaled) event / censoring time.
+    event        : binary event indicator (0 = censored, 1 = event).
+    fold         : fold index (1-based).
+    """
+    out = os.path.join(pred_dir, dataset_name, model_tag)
+    os.makedirs(out, exist_ok=True)
+    pd.DataFrame({
+        "original_idx": test_idx.astype(np.int64),
+        "risk_score":   np.asarray(risk_scores, dtype=np.float64),
+        "duration":     np.asarray(duration,    dtype=np.float64),
+        "event":        np.asarray(event,        dtype=np.int8),
+        "fold":         fold,
+    }).to_parquet(os.path.join(out, f"fold_{fold}.parquet"), index=False)
+
+
 def run_fold_model(
     dataset_name: str,
     model_name: str,
+    model_tag: str,
     df_train: pd.DataFrame,
     df_test: pd.DataFrame,
     duration_col: str,
@@ -159,9 +194,19 @@ def run_fold_model(
     tune: bool,
     n_trials: int,
     output_dir: str,
+    test_idx: np.ndarray | None = None,
+    pred_dir: str | None = None,
     **training_kwargs,
 ) -> dict:
     """Train one model for one fold, save all outputs to a dedicated folder.
+
+    Parameters
+    ----------
+    test_idx : iloc indices of test rows in the original (pre-scale) DataFrame.
+               Required when ``pred_dir`` is set; used to link risk scores back
+               to raw demographic columns for fairness evaluation.
+    pred_dir : When set, saves ``<pred_dir>/<dataset>/<model_tag>/fold_N.parquet``
+               containing original_idx, risk_score, duration, event.
 
     Outputs
     -------
@@ -171,12 +216,19 @@ def run_fold_model(
         optuna.log               (when tune=True and model supports it)
         metadata.json
     """
-    out_dir = os.path.join(output_dir, dataset_name, model_name, f"fold_{fold}")
-    
+    out_dir = os.path.join(output_dir, dataset_name, model_tag, f"fold_{fold}")
+
+    # Determine whether a predictions file is expected (for skip-check logic)
+    pred_path = None
+    if pred_dir is not None and test_idx is not None:
+        pred_path = os.path.join(pred_dir, dataset_name, model_tag, f"fold_{fold}.parquet")
+
     # ── Skip check ────────────────────────────────────────────────────────
+    # Only skip when BOTH metrics are valid AND (no predictions needed OR they
+    # already exist).  If predictions are missing, re-run even if metrics exist.
     metrics_file = os.path.join(out_dir, "metrics.json")
-    # params_file = os.path.join(out_dir, "best_params.json")
-    if os.path.exists(metrics_file):
+    pred_already_saved = (pred_path is None) or os.path.exists(pred_path)
+    if os.path.exists(metrics_file) and pred_already_saved:
         try:
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
@@ -192,7 +244,7 @@ def run_fold_model(
             pass
 
     os.makedirs(out_dir, exist_ok=True)
-
+    print()
     feature_names = [c for c in df_train.columns
                      if c not in {duration_col, event_col}]
 
@@ -211,6 +263,22 @@ def run_fold_model(
         tune=tune, n_trials=n_trials, out_dir=out_dir, **training_kwargs,
     )
     fit_time_s = time.perf_counter() - t_fit
+
+    # ── Save predictions for fairness evaluation ────────────────────────────
+    if pred_path is not None and test_idx is not None:
+        try:
+            _save_predictions(
+                pred_dir=pred_dir,
+                dataset_name=dataset_name,
+                model_tag=model_tag,
+                fold=fold,
+                test_idx=test_idx,
+                risk_scores=risk if not isinstance(risk, list) else risk[0],
+                duration=df_test[duration_col].values,
+                event=(df_test[event_col].values > 0).astype(int),
+            )
+        except Exception as _pred_exc:
+            warnings.warn(f"Could not save predictions for {model_tag}/fold_{fold}: {_pred_exc}")
 
     # ── Evaluate metrics ────────────────────────────────────────────────────
     t_eval = time.perf_counter()
@@ -258,6 +326,7 @@ def run_fold_model(
     meta = {
         "dataset":   dataset_name,
         "model":     model_name,
+        "model_tag": model_tag,
         "fold":      fold,
         "tune":      tune,
         "n_trials":  n_trials,
@@ -289,6 +358,7 @@ def run_fold_model(
     if not np.isnan(c):
         print(f"      {C_GREEN}→ C={c:.4f} IBS={ibs:.4f} AUC={auc:.4f}{C_RESET}  fit={fit_time_s:.1f}s")
     else:
+        breakpoint()
         print(f"      {C_YELLOW}→ FAILED  ({t_total:.1f}s){C_RESET}")
     return metrics
 
@@ -309,6 +379,8 @@ def run_benchmark(
     logger: LoggerObserver | None = None,
     use_temporal_split: bool = False,
     temporal_frac_train: float = 0.70,
+    save_predictions: bool = False,
+    pred_dir: str = "results/predictions",
 ) -> None:
     """Run k-fold CV (or a single temporal split) for one dataset.
 
@@ -375,39 +447,41 @@ def run_benchmark(
         print(f"  Test:  {df_test.shape[0]} samples | {df_test.shape[1] - 2} features "
               f"| event rate={df_test[ev_col].gt(0).mean():.3f}", flush=True)
 
-        for model_name in model_names:
-            # Label-efficiency loop: subsample training set to each fraction
-            fracs = label_fractions if label_fractions else [1.0]
-            for frac in fracs:
-                if frac < 1.0:
-                    n_keep = max(10, int(len(df_train_full) * frac))
-                    # Stratified subsample — use full cause code for CR datasets
-                    strat = df_train_full[ev_col].astype(int)
-                    from sklearn.model_selection import StratifiedShuffleSplit
-                    sss = StratifiedShuffleSplit(n_splits=1, train_size=n_keep, random_state=fold)
-                    sub_idx, _ = next(sss.split(df_train_full, strat))
-                    df_train = df_train_full.iloc[sub_idx].reset_index(drop=True)
-                    frac_tag = f"_frac{frac:.2f}"
-                else:
-                    df_train = df_train_full
-                    frac_tag = ""
+        fracs = label_fractions if label_fractions else [1.0]
+        for frac in fracs:
+            if frac < 1.0:
+                n_keep = max(10, int(len(df_train_full) * frac))
+                strat = df_train_full[ev_col].astype(int)
+                sss = StratifiedShuffleSplit(n_splits=1, train_size=n_keep, random_state=fold)
+                sub_idx, _ = next(sss.split(df_train_full, strat))
+                df_train = df_train_full.iloc[sub_idx].reset_index(drop=True)
+                frac_tag = f"_frac{frac:.2f}"
+            else:
+                df_train = df_train_full
+                frac_tag = ""
 
+            print(f"  Train ({frac*100:g}%): {df_train.shape[0]} samples | "
+                  f"event rate={df_train[ev_col].gt(0).mean():.3f}", flush=True)
+
+            for model_name in model_names:
                 model_tag = model_name + frac_tag
-                print(f"    {C_BOLD}[{model_tag}][{dataset_name}]{C_RESET}", end=" ", flush=True)
-                # try:
-                run_fold_model(
-                    dataset_name, model_tag,
-                    df_train, df_test, dur_col, ev_col,
-                    fold, tune, n_trials, output_dir,
-                    **{k: v for k, v in (extra.items() if extra else {}.items())
-                       if k != "label_fractions"},
-                )
-                # except Exception as exc:
-                #     warnings.warn(
-                #         f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
-                #         stacklevel=2,
-                #     )
-                #     print("      → FAILED (see warning above)")
+                print(f"    {C_BOLD}[Fold {fold}/{n_folds_display}][{model_tag}][{dataset_name}]{C_RESET}", end=" ", flush=True)
+                try:
+                    run_fold_model(
+                        dataset_name, model_name, model_tag,
+                        df_train, df_test, dur_col, ev_col,
+                        fold, tune, n_trials, output_dir,
+                        test_idx=test_idx if save_predictions else None,
+                        pred_dir=pred_dir if save_predictions else None,
+                        **{k: v for k, v in (extra.items() if extra else {}.items())
+                           if k != "label_fractions"},
+                    )
+                except Exception as exc:
+                    warnings.warn(
+                        f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
+                        stacklevel=2,
+                    )
+                    print("      → FAILED (see warning above)")
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +527,18 @@ def main():
         metavar="F",
         help="Label-efficiency experiment: train on each fraction of training data. "
              "E.g. --label-fractions 0.05 0.1 0.25 0.5 1.0",
+    )
+    g3.add_argument(
+        "--save-predictions", action="store_true",
+        help="Save per-fold risk scores for fairness / subgroup evaluation. "
+             "Writes <pred-dir>/<dataset>/<model>/fold_N.parquet. "
+             "Re-runs any fold whose prediction file is missing even if "
+             "metrics.json already exists.",
+    )
+    g3.add_argument(
+        "--pred-dir", default="results/predictions",
+        help="Root directory for prediction parquet files "
+             "(used with --save-predictions, default: results/predictions).",
     )
     g3.add_argument(
         "--temporal-split", action="store_true",
@@ -511,6 +597,8 @@ def main():
             logger=logger,
             use_temporal_split=args.temporal_split,
             temporal_frac_train=args.temporal_frac_train,
+            save_predictions=args.save_predictions,
+            pred_dir=args.pred_dir,
         )
 
 

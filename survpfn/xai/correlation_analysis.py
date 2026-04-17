@@ -191,7 +191,10 @@ def collinearity_analysis(
             if not np.isnan(r) and abs(r) >= threshold:
                 records.append({"feature_a": a, "feature_b": b,
                                  "pearson_r": r, "abs_r": abs(r)})
-    df = pd.DataFrame(records).sort_values("abs_r", ascending=False).reset_index(drop=True)
+    try:
+        df = pd.DataFrame(records).sort_values("abs_r", ascending=False).reset_index(drop=True)
+    except:
+        df = pd.DataFrame()
     return df
 
 
@@ -364,9 +367,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Dataset correlation / leakage / separation audit for SurvPFN."
     )
-    parser.add_argument(
+    grp = parser.add_mutually_exclusive_group()
+    grp.add_argument(
         "--datasets", nargs="*", default=None,
-        help="Dataset name(s) to analyse. Default: all registered datasets.",
+        help="Explicit dataset name(s) to analyse.",
+    )
+    grp.add_argument(
+        "--group", default=None,
+        help="Predefined dataset group (public, ehr, public+ehr, survset, ormoni, all, cr).",
     )
     parser.add_argument(
         "--output-dir", type=Path, default=SAVE_DIR,
@@ -393,9 +401,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    from survpfn.dataloaders import ALL_DATASETS
+    from survpfn.dataloaders import ALL_DATASETS, DATASET_GROUPS
 
-    if args.datasets:
+    if args.group:
+        if args.group not in DATASET_GROUPS:
+            parser.error(f"Unknown group '{args.group}'. "
+                         f"Valid: {list(DATASET_GROUPS)}")
+        names = DATASET_GROUPS[args.group]
+        # Route CR datasets through ALL_DATASETS (which includes CR_DATASETS)
+    elif args.datasets:
         names = args.datasets
     else:
         names = list(ALL_DATASETS.keys())

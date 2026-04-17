@@ -18,6 +18,13 @@ import os
 
 from .utils import _get_survival_array, _safe_time_grid
 
+# ── Color codes ──────────────────────────────────────────────────────────────
+C_GREEN = "\033[92m"
+C_YELLOW = "\033[93m"
+C_BLUE = "\033[96m"
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+
 
 def d_calibration(
     events: np.ndarray,
@@ -365,8 +372,11 @@ def evaluate_sr_survival_eval(
             metrics["AUC_mean"] = np.nan
 
         # 5. D-Calibration (returns p-value and binary details)
-        p_val, dcal_details = evaluator.d_calibration(return_details=True)
-        metrics["D-cal_pval"] = p_val
+        try:
+            p_val, dcal_details = evaluator.d_calibration(return_details=True)
+            metrics["D-cal_pval"] = p_val
+        except Exception:
+            metrics["D-cal_pval"] = np.nan
 
         # 6. MAE (Mean Absolute Error)
         try:
@@ -379,7 +389,8 @@ def evaluate_sr_survival_eval(
         return metrics
         
     except Exception as e:
-        warnings.warn(f"SurvivalEVAL evaluation failed: {e}", stacklevel=2)
+        print(f"      {C_YELLOW}→ FAILED  {e}{C_RESET}")
+        breakpoint()
         return {"C-index": np.nan, "IBS": np.nan}
     finally:
         # Ensure all figures are closed to prevent memory leaks

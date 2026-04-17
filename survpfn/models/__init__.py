@@ -143,8 +143,8 @@ def _finetune_wrapper(fm_name: str) -> Callable:
 
         wrapper = _SurvPH(
             num_durations=num_durations,
-            learning_rate=cfg.learning_rate,
-            epochs=cfg.epochs,
+            learning_rate=1e-5, #cfg.learning_rate,
+            epochs=2,#cfg.epochs,
             batch_size=cfg.batch_size,
             device=cfg.device,
             context_size=cfg.context_size,

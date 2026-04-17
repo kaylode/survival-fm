@@ -51,58 +51,58 @@ MODEL_DISPLAY: dict[str, str] = {
     "gbsa":           "GBSA",
     # Deep DL
     "deepsurv":       "DeepSurv",
-    "mtlr":           "MTLR",
-    "pchazard":       "PCHazard",
-    "deephit_single": "DeepHit",
+    "mtlr":           "MLP-MTLR",
+    # "pchazard":       "PCHazard",
+    "deephit_single": "MLP-DeepHit",
     "survtrace":      "SurvTRACE",
+    "dysurv":        "DySurv",
     "soden":          "SODEN",
     # TabPFN frozen embedding
-    "tabpfn_embedding_cox":      "TabPFN+Cox",
-    "tabpfn_embedding_deephit":  "TabPFN+DeepHit",
-    "tabpfn_embedding_pchazard": "TabPFN+PCHazard",
-    "tabpfn_embedding_mtlr":     "TabPFN+MTLR",
+    "tabpfn_embedding_cox":      "TabPFN-FT-Cox",
+    "tabpfn_embedding_deephit":  "TabPFN-FT-DeepHit",
+    "tabpfn_embedding_pchazard": "TabPFN-FT-PCHazard",
+    "tabpfn_embedding_mtlr":     "TabPFN-FT-MTLR",
     # TabDPT frozen embedding
-    "tabdpt_embedding_cox":      "TabDPT+Cox",
-    "tabdpt_embedding_deephit":  "TabDPT+DeepHit",
-    "tabdpt_embedding_pchazard": "TabDPT+PCHazard",
-    "tabdpt_embedding_mtlr":     "TabDPT+MTLR",
+    "tabdpt_embedding_cox":      "TabDPT-FT-Cox",
+    "tabdpt_embedding_deephit":  "TabDPT-FT-DeepHit",
+    "tabdpt_embedding_pchazard": "TabDPT-FT-PCHazard",
+    "tabdpt_embedding_mtlr":     "TabDPT-FT-MTLR",
     # TabICL frozen embedding
-    "tabicl_embedding_cox":      "TabICL+Cox",
-    "tabicl_embedding_deephit":  "TabICL+DeepHit",
-    "tabicl_embedding_pchazard": "TabICL+PCHazard",
-    "tabicl_embedding_mtlr":     "TabICL+MTLR",
+    "tabicl_embedding_cox":      "TabICL-FT-Cox",
+    "tabicl_embedding_deephit":  "TabICL-FT-DeepHit",
+    "tabicl_embedding_pchazard": "TabICL-FT-PCHazard",
+    "tabicl_embedding_mtlr":     "TabICL-FT-MTLR",
     # TabPFN jointly trained
-    "tabpfn_cox":      "TabPFN-Joint+Cox",
-    "tabpfn_deephit":  "TabPFN-Joint+DeepHit",
-    "tabpfn_pchazard": "TabPFN-Joint+PCHazard",
-    "tabpfn_mtlr":     "TabPFN-Joint+MTLR",
+    "tabpfn_joint_cox":      "TabPFN-Joint-Cox",
+    "tabpfn_joint_deephit":  "TabPFN-Joint-DeepHit",
+    "tabpfn_joint_pchazard": "TabPFN-Joint-PCHaz",
+    "tabpfn_joint_mtlr":     "TabPFN-Joint-MTLR",
     # TabDPT jointly trained
-    "tabdpt_cox":      "TabDPT-Joint+Cox",
-    "tabdpt_deephit":  "TabDPT-Joint+DeepHit",
-    "tabdpt_pchazard": "TabDPT-Joint+PCHazard",
-    "tabdpt_mtlr":     "TabDPT-Joint+MTLR",
+    "tabdpt_joint_cox":      "TabDPT-Joint-Cox",
+    "tabdpt_joint_deephit":  "TabDPT-Joint-DeepHit",
+    "tabdpt_joint_pchazard": "TabDPT-Joint-PCHaz",
+    "tabdpt_joint_mtlr":     "TabDPT-Joint-MTLR",
     # TabICL jointly trained
-    "tabicl_cox":      "TabICL-Joint+Cox",
-    "tabicl_deephit":  "TabICL-Joint+DeepHit",
-    "tabicl_pchazard": "TabICL-Joint+PCHazard",
-    "tabicl_mtlr":     "TabICL-Joint+MTLR",
+    "tabicl_joint_cox":      "TabICL-Joint-Cox",
+    "tabicl_joint_deephit":  "TabICL-Joint-DeepHit",
+    "tabicl_joint_pchazard": "TabICL-Joint-PCHaz",
+    "tabicl_joint_mtlr":     "TabICL-Joint-MTLR",
+    # Finetune CE
+    "tabpfn_finetune":           "TabPFN-FT-CE",
+    "tabdpt_finetune":           "TabDPT-FT-CE",
+    "tabicl_finetune":           "TabICL-FT-CE",
     # Zero-shot
-    "tabpfn_zeroshot":         "TabPFN ZS",
-    "tabdpt_zeroshot":         "TabDPT ZS",
-    "tabicl_zeroshot":         "TabICL ZS",
-    "tabpfn_zeroshot_perbin":  "TabPFN ZS-PB",
-    "tabdpt_zeroshot_perbin":  "TabDPT ZS-PB",
-    "tabicl_zeroshot_perbin":  "TabICL ZS-PB",
-    # BetaSurv
-    "beta_surv":   "BetaSurv",
+    "tabpfn_zeroshot_perbin_time_ens":  "TabPFN-ZS",
+    "tabdpt_zeroshot_perbin_time_ens":  "TabDPT-ZS",
+    "tabicl_zeroshot_perbin_time_ens":  "TabICL-ZS",
 }
 
 #: Ordered model groups for row layout
 MODEL_GROUPS: dict[str, list[str]] = {
     "Classical": ["cox", "km"],
     "Tree Ensemble": ["rsf", "gbsa"],
-    "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden"],
-    "FM Frozen Embedding": [
+    "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv", "survtrace", "soden"],
+    "Finetune-Surv": [
         "tabpfn_embedding_cox", "tabpfn_embedding_deephit",
         "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
         "tabdpt_embedding_cox", "tabdpt_embedding_deephit",
@@ -110,30 +110,81 @@ MODEL_GROUPS: dict[str, list[str]] = {
         "tabicl_embedding_cox", "tabicl_embedding_deephit",
         "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
     ],
-    "FM Jointly Trained": [
-        "tabpfn_cox", "tabpfn_deephit", "tabpfn_pchazard", "tabpfn_mtlr",
-        "tabdpt_cox", "tabdpt_deephit", "tabdpt_pchazard", "tabdpt_mtlr",
-        "tabicl_cox", "tabicl_deephit", "tabicl_pchazard", "tabicl_mtlr",
+    "FM Joint": [
+        "tabpfn_joint_cox", "tabpfn_joint_deephit", "tabpfn_joint_pchazard", "tabpfn_joint_mtlr",
+        "tabdpt_joint_cox", "tabdpt_joint_deephit", "tabdpt_joint_pchazard", "tabdpt_joint_mtlr",
+        "tabicl_joint_cox", "tabicl_joint_deephit", "tabicl_joint_pchazard", "tabicl_joint_mtlr",
     ],
-    "Zero-Shot ICL": [
-        "tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot",
-        "tabpfn_zeroshot_perbin", "tabdpt_zeroshot_perbin", "tabicl_zeroshot_perbin",
-        "beta_surv",
+    "Finetune-CE": [
+        "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+    ],
+    "Zero-Shot": [
+        "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
     ],
 }
 
 #: Short dataset names for column headers (full name → short)
 DATASET_SHORT: dict[str, str] = {
-    "SUPPORT2":  "SUP2",
-    "METABRIC":  "METAB",
-    "GBSG":      "GBSG",
-    "WHAS500":   "WHAS",
-    "VETERANS":  "VET",
-    "FLCHAIN":   "FLC",
+    # Core public
+    "SUPPORT2":                   "SUP2",
+    "METABRIC":                   "METAB",
+    "GBSG":                       "GBSG",
+    "WHAS500":                    "WHAS",
+    "VETERANS":                   "VET",
+    "FLCHAIN":                    "FLC",
+    "SEER":                       "SEER",
+    # EHR
+    "EICU_SURV":                  "eICU",
+    "MIMIC_SURV_B":               "MIMIC-IV",
+    # OrmoniTirodei
+    "ORMONI_TIRODEI_CV":          "OT-CV",
+    "ORMONI_TIRODEI_MI":          "OT-MI",
+    "ORMONI_TIRODEI_STROKE":      "OT-Stk",
+    "ORMONI_TIRODEI_MORTALITY":   "OT-Mort",
+    # SurvSet
+    "SS_CANCER":         "SS-Can",
+    "SS_BREAST":         "SS-Brs",
+    "SS_GBSG2":          "SS-GBSG2",
+    "SS_ROTT2":          "SS-Rott2",
+    "SS_COLON":          "SS-Colon",
+    "SS_PROSTATE":       "SS-Pros",
+    "SS_OVARIAN":        "SS-Ovar",
+    "SS_MELANOMA":       "SS-Mel",
+    "SS_E1684":          "SS-E1684",
+    "SS_PBC":            "SS-PBC",
+    "SS_HEPATOCELLULAR": "SS-HCC",
+    "SS_NWTCO":          "SS-NWTCO",
+    "SS_RETINOPATHY":    "SS-Ret",
+    "SS_HEART":          "SS-Heart",
+    "SS_CGD":            "SS-CGD",
+    "SS_COST":           "SS-Cost",
+    "SS_LEUKSURV":       "SS-Leuk",
+    "SS_DIALYSIS":       "SS-Dial",
+    "SS_ACTG":           "SS-ACTG",
+    "SS_RHC":            "SS-RHC",
+    "SS_VLBW":           "SS-VLBW",
+    "SS_GRACE":          "SS-Grace",
+    "SS_TRACE":          "SS-TRACE",
+    "SS_DLBCL":          "SS-DLBCL",
+    "SS_DIABETES":       "SS-Diab",
+    "SS_FRAMINGHAM":     "SS-Fram",
 }
 
-# Public dataset group order
-PUBLIC_DATASETS = ["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN"]
+# Dataset group lists (matching run_sr.sh)
+PUBLIC_DATASETS = ["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHAIN", "SEER"]
+EHR_DATASETS    = ["EICU_SURV", "MIMIC_SURV_B"]
+ORMONI_DATASETS = [
+    "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI",
+    "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI_MORTALITY",
+]
+SURVSET_DATASETS = [
+    "SS_CANCER", "SS_BREAST", "SS_GBSG2", "SS_ROTT2", "SS_COLON", "SS_PROSTATE",
+    "SS_OVARIAN", "SS_MELANOMA", "SS_E1684", "SS_PBC", "SS_HEPATOCELLULAR", "SS_NWTCO",
+    "SS_RETINOPATHY", "SS_HEART", "SS_CGD", "SS_COST", "SS_LEUKSURV", "SS_DIALYSIS",
+    "SS_ACTG", "SS_RHC", "SS_VLBW", "SS_GRACE", "SS_TRACE", "SS_DLBCL",
+    "SS_DIABETES", "SS_FRAMINGHAM",
+]
+ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +195,6 @@ PUBLIC_DATASETS = ["SUPPORT2", "METABRIC", "GBSG", "WHAS500", "VETERANS", "FLCHA
 METRIC_DISPLAY: dict[str, str] = {
     "C-index": "Concordance Index (C-index)",
     "IBS":     "Integrated Brier Score",
-    "D-cal":   "D-calibration p-value",
 }
 
 
@@ -289,7 +339,7 @@ def build_latex_table(
             ordered_groups.append((grp, grp_models))
             ordered_models.extend(grp_models)
     # Any model not in a group → "Other"
-    extra = [m for m in sorted(all_models_present) if m not in ordered_models]
+    extra = None#[m for m in sorted(all_models_present) if m not in ordered_models]
     if extra:
         ordered_groups.append(("Other", extra))
         ordered_models.extend(extra)
@@ -410,11 +460,10 @@ def build_summary_table(
     """
     if selected_models is None:
         selected_models = [
-            "cox", "rsf", "deephit_single",
-            "tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit",
-            "tabpfn_deephit", "tabdpt_deephit", "tabicl_deephit",
-            "tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot",
-            "soden", "beta_surv",
+            "cox", "rsf", "gbsa", 'mtlr', "deepsurv", "deephit_single", "dysurv", "survtrace",
+            "tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr", "tabicl_embedding_mtlr",
+            "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
+            "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
         ]
 
     present = [m for m in selected_models if m in mean_pivot.index]
@@ -451,12 +500,13 @@ def build_summary_table(
 
     # Group rows with thin separators
     group_ranges = [
-        ("Baselines",           ["cox", "rsf", "deephit_single"]),
-        ("FM Frozen",           ["tabpfn_embedding_deephit", "tabdpt_embedding_deephit",
-                                 "tabicl_embedding_deephit"]),
-        ("FM Joint",            ["tabpfn_deephit", "tabdpt_deephit", "tabicl_deephit"]),
-        ("Zero-Shot / Other",   ["tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot",
-                                 "soden", "beta_surv"]),
+        ("Baselines",     ["cox", "rsf", "gbsa"]),
+        ("Deep Models",     ["deepsurv", "mtlr", "deephit_single", "dysurv", "survtrace"]),
+        ("Zero-Shot",     ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens",
+                           "tabicl_zeroshot_perbin_time_ens"]),
+        ("Finetune-CE",   ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"]),
+        ("Finetune-Surv",     ["tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr",
+                           "tabicl_embedding_mtlr"]),
     ]
 
     for gi, (grp_name, grp_models) in enumerate(group_ranges):
@@ -516,8 +566,21 @@ def main() -> None:
     )
     parser.add_argument(
         "--datasets", nargs="+",
-        default=PUBLIC_DATASETS,
-        help="Ordered list of datasets for columns.",
+        default=None,
+        help="Explicit ordered list of dataset names. Overrides --dataset-group.",
+    )
+    parser.add_argument(
+        "--dataset-group", choices=["public", "ehr", "survset", "ormoni", "public+ehr", "all"],
+        default="public",
+        help=(
+            "Preset dataset group: "
+            "public (7 standard benchmarks incl. SEER), "
+            "ehr (eICU + MIMIC-IV), "
+            "survset (26 SS_ datasets), "
+            "ormoni (4 OrmoniTirodei outcomes), "
+            "public+ehr (public + EHR), "
+            "all (public + ehr + survset)."
+        ),
     )
     parser.add_argument(
         "--lower-is-better-metrics", nargs="+", default=["IBS", "D-cal"],
@@ -533,18 +596,34 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Resolve dataset list
+    _GROUP_MAP = {
+        "public":     PUBLIC_DATASETS,
+        "ehr":        EHR_DATASETS,
+        "survset":    SURVSET_DATASETS,
+        "ormoni":     ORMONI_DATASETS,
+        "public+ehr": PUBLIC_DATASETS + EHR_DATASETS,
+        "all":        ALL_PAPER_DATASETS,
+    }
+    if args.datasets is not None:
+        selected_datasets = args.datasets
+    else:
+        selected_datasets = _GROUP_MAP[args.dataset_group]
+
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_groups: dict | None = None
     if args.group_datasets:
-        pub = [d for d in args.datasets if not d.startswith("SS_")]
-        ss  = [d for d in args.datasets if d.startswith("SS_")]
+        grp_pub    = [d for d in selected_datasets if d in PUBLIC_DATASETS]
+        grp_ehr    = [d for d in selected_datasets if d in EHR_DATASETS]
+        grp_ormoni = [d for d in selected_datasets if d in ORMONI_DATASETS]
+        grp_ss     = [d for d in selected_datasets if d.startswith("SS_")]
         dataset_groups = {}
-        if pub:
-            dataset_groups["Public Benchmarks"] = pub
-        if ss:
-            dataset_groups["SurvSet"] = ss
+        if grp_pub:    dataset_groups["Public Benchmarks"]  = grp_pub
+        if grp_ehr:    dataset_groups["EHR (ICU)"]          = grp_ehr
+        if grp_ormoni: dataset_groups["OrmoniTirodei"]      = grp_ormoni
+        if grp_ss:     dataset_groups["SurvSet"]            = grp_ss
         if not dataset_groups:
             dataset_groups = None
 
@@ -563,15 +642,15 @@ def main() -> None:
             print(f"  SKIP: {e}")
             continue
 
-        mean_pivot, std_pivot = pivot_for_table(summary, args.datasets)
+        mean_pivot, std_pivot = pivot_for_table(summary, selected_datasets)
         lower = col_name in args.lower_is_better_metrics or metric in args.lower_is_better_metrics
 
         # Full table
         print(f"  Building full table for {metric} ({len(mean_pivot.index)} models, "
-              f"{len([d for d in args.datasets if d in mean_pivot.columns])} datasets) …")
+              f"{len([d for d in selected_datasets if d in mean_pivot.columns])} datasets) …")
         tex = build_latex_table(
             mean_pivot, std_pivot,
-            datasets=args.datasets,
+            datasets=selected_datasets,
             metric=metric,
             lower_is_better=lower,
             dataset_groups=dataset_groups,
@@ -585,7 +664,7 @@ def main() -> None:
         if args.summary:
             tex_s = build_summary_table(
                 mean_pivot, std_pivot,
-                datasets=args.datasets,
+                datasets=selected_datasets,
                 metric=metric,
                 lower_is_better=lower,
             )
