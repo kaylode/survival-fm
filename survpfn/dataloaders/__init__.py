@@ -87,7 +87,7 @@ DATASET_GROUPS: dict[str, list[str]] = {
     "public+ehr": _PUBLIC + _EHR,
     "ormoni":     _ORMONI,
     "survset":    _SURVSET,
-    "all":        _PUBLIC + _EHR + _SURVSET,
+    "all":        _PUBLIC + _EHR + _SURVSET + _ORMONI,
     "cr":         _CR_LIST,
 }
 

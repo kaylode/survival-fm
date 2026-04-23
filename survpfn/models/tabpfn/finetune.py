@@ -24,40 +24,32 @@ from survpfn.models.shared.finetune import BaseSurvExpandedFinetune
 class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
     def __init__(
         self,
-        input_dim: Optional[int] = None,
         num_durations: int = 100,
-        learning_rate: float = 2e-5,
-        epochs: int = 30,
         n_estimators_finetune: int = 2,
         n_estimators_validation: int = 2,
         n_estimators_final_inference: int = 2,
-        device: str = "cuda:0",
-        random_state: int = 0,
-        output_dir:str = None,
+        output_dir: str = None,
         **kwargs
     ):
-        self.num_durations = num_durations
-        self.learning_rate = learning_rate
-        self.epochs = epochs
-        self.device = device
-        self.random_state = random_state
+        super().__init__(num_durations=num_durations, **kwargs)
         self.n_estimators_finetune = n_estimators_finetune
         self.n_estimators_validation = n_estimators_validation
         self.n_estimators_final_inference = n_estimators_final_inference
-        self.output_dir=output_dir
+        self.output_dir = output_dir
+        
         # We'll use a standard classifier wrapper for finetuning
         self.clf = FinetunedTabPFNClassifier(
-            device=device,
-            epochs=10,
-            learning_rate=learning_rate,
-            n_estimators_finetune=n_estimators_finetune,
-            n_estimators_validation=n_estimators_validation,
-            n_estimators_final_inference=n_estimators_final_inference,
-            random_state=random_state,
+            device=self.device,
+            epochs=self.epochs,
+            learning_rate=self.learning_rate,
+            n_estimators_finetune=self.n_estimators_finetune,
+            n_estimators_validation=self.n_estimators_validation,
+            n_estimators_final_inference=self.n_estimators_final_inference,
+            random_state=self.random_state,
         )
         
         self.num_expected_features = 2038 # Common TabPFN capacity
-        print(f"TabPFNSurvPH Initialized with FinetunedTabPFNClassifier (device={device})", flush=True)
+        print(f"TabPFNSurvPH Initialized with FinetunedTabPFNClassifier (device={self.device})", flush=True)
         
         # Print parameter summary
         # breakpoint()
@@ -71,12 +63,22 @@ class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
         x: np.ndarray,
         durations: np.ndarray,
         events: np.ndarray,
+        val_data: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None,
+        val_split: float = 0.2,
         verbose: bool = True,
-        sampling_ratio: Optional[float] = None,
         **kwargs
     ):
+        # ── 0. Validation Split ──
+        if val_data is None and val_split > 0:
+            from sklearn.model_selection import train_test_split
+            x, x_val, durations, durations_val, events, events_val = train_test_split(
+                x, durations, events, test_size=val_split, random_state=self.random_state,
+                stratify=events
+            )
+            val_data = (x_val, durations_val, events_val)
+            
         # Time Bins & Encoder
-        self.encoder = SurvivalTimeBinEncoder(n_bins=self.num_durations)
+        self.encoder = SurvivalTimeBinEncoder(n_bins=self.num_durations, scheme=self.binning_scheme)
         self.encoder.fit(durations, events)
         
         self.bin_times = self.encoder.bin_times
@@ -90,14 +92,11 @@ class TabPFNSurvPHFinetune(BaseSurvExpandedFinetune):
         # Dataset Expansion (Survival -> Classification)
         if verbose:
             print("Expanding survival dataset for FinetunedTabPFNClassifier...", flush=True)
-            
-        sampling_ratio = sampling_ratio if sampling_ratio is not None else getattr(self, "sampling_ratio", None)
-        random_state = kwargs.get("random_state", self.random_state if hasattr(self, "random_state") else 42)
 
         x_exp, y_exp = expand_survival_data(
             x_scaled, durations, events, self.bin_times, self.bin_feats,
-            sampling_ratio=sampling_ratio,
-            random_state=random_state
+            sampling_ratio=self.sampling_ratio,
+            random_state=self.random_state
         )
         
         if verbose:

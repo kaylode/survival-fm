@@ -278,35 +278,23 @@ class TabICLSurvPHFinetune(BaseSurvExpandedFinetune):
     def __init__(
         self,
         num_durations: int = 50,
-        learning_rate: float = 1e-4,
-        epochs: int = 30,
-        batch_size: int = 512,
         context_size: int = _DEFAULT_CONTEXT_SIZE,
         hidden_dim: int = 256,
         dropout: float = 0.1,
         freeze_backbone: bool = True,
-        patience: int = 5,
-        device: str = "cuda:0",
-        random_state: int = 0,
         checkpoint_version: str = "tabicl-classifier-v1.1-0506.ckpt",
         model_path: Optional[str] = None,
         **kwargs,
     ) -> None:
-        self.num_durations    = num_durations
-        self.learning_rate    = learning_rate
-        self.epochs           = epochs
-        self.batch_size       = batch_size
+        super().__init__(num_durations=num_durations, **kwargs)
         self.context_size     = context_size
         self.hidden_dim       = hidden_dim
         self.dropout          = dropout
         self.freeze_backbone  = freeze_backbone
-        self.patience         = patience
-        self.device           = device
-        self.random_state     = random_state
         self.backbone_name    = "tabicl"
 
-        np.random.seed(random_state)
-        torch.manual_seed(random_state)
+        np.random.seed(self.random_state)
+        torch.manual_seed(self.random_state)
 
         # ── Load TabICL backbone ──────────────────────────────────────────
         from survpfn.models.tabicl.tabicl.sklearn.classifier import TabICLClassifier
@@ -319,8 +307,8 @@ class TabICLSurvPHFinetune(BaseSurvExpandedFinetune):
             allow_auto_download=True,
             checkpoint_version=checkpoint_version,
             model_path=model_path,
-            device=device,
-            random_state=random_state,
+            device=self.device,
+            random_state=self.random_state,
             verbose=False,
         )
         # Warm-up to trigger checkpoint load
@@ -340,13 +328,13 @@ class TabICLSurvPHFinetune(BaseSurvExpandedFinetune):
             hidden_dim=hidden_dim,
             dropout=dropout,
             freeze_backbone=freeze_backbone,
-        ).to(device)
+        ).to(self.device)
 
         total_params     = sum(p.numel() for p in self.net.parameters())
         trainable_params = sum(p.numel() for p in self.net.parameters() if p.requires_grad)
         print(
             f"TabICLSurvPHFinetune initialised  "
-            f"(device={device}, bins={num_durations}, "
+            f"(device={self.device}, bins={num_durations}, "
             f"freeze_backbone={freeze_backbone})  "
             f"{trainable_params:,} trainable / {total_params:,} total params "
             f"({trainable_params/total_params:.2%})",

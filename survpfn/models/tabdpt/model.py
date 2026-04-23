@@ -127,15 +127,12 @@ class TabDPTSurvPH(BaseJointSurvFinetune):
         head_type: str = "cox",
         num_durations: int = 100,
         head_num_nodes: List[int] = [128, 64],
-        learning_rate: float = 1e-3,
         dropout: float = 0.2,
         context_size: int = _DEFAULT_CONTEXT_SIZE,
         n_out: Optional[int] = None,
         num_events: int = 1,
-        device: str = "cuda:0",
         use_adapter: bool = False,
         input_dim: Optional[int] = None,
-        cr_loss_type: str = "deephit",
         task_type: str = "sr",
         alpha: float = 1.0,
         freeze_backbone: bool = True,
@@ -143,15 +140,12 @@ class TabDPTSurvPH(BaseJointSurvFinetune):
         deephit_sigma: float = 0.1,
         **kwargs
     ):
+        super().__init__(num_durations=num_durations, **kwargs)
         self.task_type = task_type
         self.num_events = num_events
         self.head_type = head_type.lower()
-        self.device = device
         self.context_size = context_size
-        self.num_durations = num_durations
-        self.cr_loss_type = cr_loss_type
         self.alpha = alpha
-        self.learning_rate = learning_rate
         self.deephit_alpha = deephit_alpha
         self.deephit_sigma = deephit_sigma
         self.backbone_name = "tabdpt"
@@ -165,14 +159,14 @@ class TabDPTSurvPH(BaseJointSurvFinetune):
                 n_out = num_durations
 
         self.net = TabDPTSurvModel(
-            device=device, n_out=n_out,
+            device=self.device, n_out=n_out,
             head_num_nodes=head_num_nodes, dropout=dropout,
             task_type=task_type, num_events=num_events,
             use_adapter=use_adapter, input_dim=input_dim,
             batch_norm=(self.head_type == "deepsurv"),
             freeze_tabdpt=freeze_backbone,
-        ).to(device)
+        ).to(self.device)
 
-        self.model, self.labtrans = self._init_pycox_model(self.head_type, num_durations, learning_rate, self.net)
+        self.model, self.labtrans = self._init_pycox_model(self.head_type, num_durations, self.learning_rate, self.net)
 
 

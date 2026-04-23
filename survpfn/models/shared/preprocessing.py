@@ -61,11 +61,12 @@ class SurvivalTimeBinEncoder:
 
     N_TIME_FEATURES: int = 6
 
-    def __init__(self, n_bins: int = -1, scheme:str="quantile") -> None:
+    def __init__(self, n_bins: int = -1, scheme:str="quantile", **hybrid_kw) -> None:
         self.n_bins = n_bins
         self._bin_times: Optional[np.ndarray] = None  # (K,) quantile cuts
         self._bin_feats: Optional[np.ndarray] = None  # (K, 6) raw features
         self.scheme = scheme
+        self.hybrid_kw = hybrid_kw
 
     def fit(self, T: np.ndarray, E: np.ndarray) -> "SurvivalTimeBinEncoder":
         """Compute bin boundaries and KM statistics from training data.
@@ -75,7 +76,7 @@ class SurvivalTimeBinEncoder:
         E = (np.asarray(E) > 0).astype(int)
 
         n_bins = resolve_num_durations(T, E, self.n_bins)
-        cuts = get_cuts(T, E, n_bins, scheme=self.scheme)
+        cuts = get_cuts(T, E, n_bins, scheme=self.scheme, **self.hybrid_kw)
         self._bin_times = np.unique(np.concatenate([[0.0], cuts])).astype(float)
         
         K = len(self._bin_times)

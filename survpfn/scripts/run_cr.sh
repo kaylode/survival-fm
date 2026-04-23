@@ -49,10 +49,10 @@ ALL_DATASETS="$CR_DATASETS"
 # ── Model groups (must match ALL_MODELS keys in models/__init__.py) ───────────
 # ── Model groups (must match analysis.py) ──────────────────────────────────────
 CLASSICAL_CR="cox_cr aj_cr fine_gray_cr survival_boost_cr"
-DEEP_CR="$CLASSICAL_CR deephit_cr"
+DEEP_CR="$CLASSICAL_CR deephit_cr dysurv_cr survtrace_cr"
 
-FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr"
-FM_CR_ZEROSHOT="tabpfn_zeroshot_cr tabdpt_zeroshot_cr tabicl_zeroshot_cr"
+FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr tabpfn_embedding_cox_cr tabdpt_embedding_cox_cr tabicl_embedding_cox_cr"
+FM_CR_ZEROSHOT="tabpfn_zeroshot_cr_ens tabdpt_zeroshot_cr_ens tabicl_zeroshot_cr_ens"
 
 ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING" # $FM_CR_ZEROSHOT"
 

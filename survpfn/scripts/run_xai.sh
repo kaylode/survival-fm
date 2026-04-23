@@ -186,6 +186,14 @@ do_analysis() {
 		--figures fig02 fig10 fig12
 }
 
+do_analysis_mini() {
+    echo "━━━ analysis.py figures …"
+    $PYTHON survpfn/xai/analysis_mini.py \
+        --results-dir  "$RESULTS_SR" \
+        --output-dir   "$FIGURES_SR/analysis" \
+		--figures fig02 # fig10 fig12
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Competing-risks tables + figures
 # ─────────────────────────────────────────────────────────────────────────────

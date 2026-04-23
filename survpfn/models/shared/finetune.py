@@ -27,7 +27,7 @@ from survpfn.models.shared.preprocessing import (
 from survpfn.models.shared.loss import (
     compute_deephit_cr_loss,
     compute_deephit_cr_loss_v2,
-    compute_cox_cr_loss
+    compute_cox_cr_loss,
 )
 
 
@@ -274,6 +274,23 @@ class BaseSurvExpandedFinetune:
     """
 
 
+    def __init__(self, **kwargs):
+        self.learning_rate = kwargs.pop("learning_rate", 1e-4)
+        self.epochs = kwargs.pop("epochs", 30)
+        self.batch_size = kwargs.pop("batch_size", 512)
+        self.device = kwargs.pop("device", "cuda:0")
+        self.random_state = kwargs.pop("random_state", 42)
+        self.sampling_ratio = kwargs.pop("sampling_ratio", None)
+        self.binning_scheme = kwargs.pop("binning_scheme", "quantile")
+        self.patience = kwargs.pop("patience", None)
+        self.early_event_quantile = kwargs.pop("early_event_quantile", 0.5)
+        self.early_bin_frac = kwargs.pop("early_bin_frac", 0.7)
+        
+        
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
     def predict_survival_df(self, x: np.ndarray, n_ensemble: int = 0) -> pd.DataFrame:
         """Return survival probability DataFrame (rows=times, cols=subjects)."""
         x_scaled = self._prep.transform(x)
@@ -335,29 +352,28 @@ class BaseSurvExpandedFinetune:
         events: np.ndarray,
         val_data: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None,
         val_split: float = 0.2,
-        epochs: int = None,
-        batch_size: int = None,
         verbose: bool = True,
-        sampling_ratio: Optional[float] = None,
         **kwargs
     ) -> "BaseSurvExpandedFinetune":
         """Generic training loop for Expanded Survival Models (binary classification)."""
         # ── 0. Validation Split ──
         if val_data is None and val_split > 0:
             x, x_val, durations, durations_val, events, events_val = train_test_split(
-                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42),
+                x, durations, events, test_size=val_split, random_state=self.random_state,
                 stratify=events
             )
             val_data = (x_val, durations_val, events_val)
 
-
-        if epochs is None:
-            epochs = self.epochs
-        if batch_size is None:
-            batch_size = self.batch_size
+        epochs = self.epochs
+        batch_size = self.batch_size
 
         # ── 1. Time bins ──
-        self.encoder = SurvivalTimeBinEncoder(n_bins=self.num_durations)
+        self.encoder = SurvivalTimeBinEncoder(
+            n_bins=self.num_durations,
+            scheme=self.binning_scheme,
+            early_event_quantile=self.early_event_quantile,
+            early_bin_frac=self.early_bin_frac,
+        )
         self.encoder.fit(durations, events)
         self.bin_times, self.bin_feats = self.encoder.bin_times, self.encoder.bin_feats
 
@@ -369,13 +385,10 @@ class BaseSurvExpandedFinetune:
         x_scaled = self._prep.fit_transform(x, max_features=pca_capacity)
 
         # ── 3. Expansion ──
-        sampling_ratio = sampling_ratio if sampling_ratio is not None else getattr(self, "sampling_ratio", None)
-        random_state = kwargs.get("random_state", 42)
-
         X_exp, y_exp = expand_survival_data(
             x_scaled, durations, events, self.bin_times, self.bin_feats,
-            sampling_ratio=sampling_ratio,
-            random_state=random_state
+            sampling_ratio=self.sampling_ratio,
+            random_state=self.random_state
         )
         M = len(X_exp)
         X_pt, y_pt = torch.from_numpy(X_exp).float(), torch.from_numpy(y_exp).long()
@@ -391,8 +404,8 @@ class BaseSurvExpandedFinetune:
              vx_scaled = self._prep.transform(vx)
              VX_exp, vy_exp = expand_survival_data(
                  vx_scaled, vd, ve, self.bin_times, self.bin_feats,
-                 sampling_ratio=sampling_ratio, # Same ratio for val? Or maybe None for val?
-                 random_state=random_state
+                 sampling_ratio=self.sampling_ratio, # Same ratio for val? Or maybe None for val?
+                 random_state=self.random_state
              )
              VX_pt, vy_pt = torch.from_numpy(VX_exp).float(), torch.from_numpy(vy_exp).long()
         else:
@@ -405,7 +418,6 @@ class BaseSurvExpandedFinetune:
 
         # ── 5. Main loop ──
         best_loss, best_state, patience_counter = float('inf'), None, 0
-        patience = kwargs.get("patience", getattr(self, "patience", 5))
         current_bs, success = batch_size, False
 
         while not success:
@@ -417,7 +429,7 @@ class BaseSurvExpandedFinetune:
                 _train_sampler = EventBalancedBatchSampler(
                     events=y_exp,           # numpy, shape (M,), from temporal expansion
                     batch_size=current_bs,
-                    seed=kwargs.get("random_state", 42),
+                    seed=self.random_state,
                 )
 
                 self.net.train()
@@ -496,7 +508,7 @@ class BaseSurvExpandedFinetune:
 
                     if stop_loss < best_loss:
                         best_loss, best_state, patience_counter = stop_loss, copy.deepcopy(self.net.state_dict()), 0
-                    elif (patience_counter := patience_counter + 1) >= patience:
+                    elif (patience_counter := patience_counter + 1) >= self.patience:
                         if verbose: print(f"  Early stopping at epoch {epoch}", flush=True)
                         break
                 if best_state: self.net.load_state_dict(best_state)
@@ -555,6 +567,19 @@ class BaseJointSurvFinetune:
     3. Prediction interpolation
     """
 
+    def __init__(self, **kwargs):
+        self.learning_rate = kwargs.pop("learning_rate", 1e-4)
+        self.epochs = kwargs.pop("epochs", 30)
+        self.batch_size = kwargs.pop("batch_size", 64)
+        self.device = kwargs.pop("device", "cuda:0")
+        self.random_state = kwargs.pop("random_state", 42)
+        self.binning_scheme = kwargs.pop("binning_scheme", "quantile")
+        self.patience = kwargs.pop("patience", 5)
+        
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
     def _init_pycox_model(
         self,
         head_type: str,
@@ -606,6 +631,56 @@ class BaseJointSurvFinetune:
         else:
             raise ValueError(f"Unknown head_type: {head_type}")
 
+    # ------------------------------------------------------------------
+    # Template methods (overridden by BaseCRJointFinetune for CR)
+    # ------------------------------------------------------------------
+
+    def _compute_survival_loss(
+        self,
+        head_out: torch.Tensor,
+        bdur: torch.Tensor,
+        bdur_cont: torch.Tensor,
+        bev: torch.Tensor,
+        bfrac,
+        criterion_surv: nn.Module,
+    ) -> torch.Tensor:
+        """Compute per-batch survival loss.
+
+        SR implementation (default).  Subclasses override this for CR.
+        """
+        if self.task_type == "cr":
+            # Legacy CR path (uses old buggy loss; prefer BaseCRJointFinetune)
+            if self.head_type == "deephit":
+                return compute_deephit_cr_loss_v2(
+                    head_out, bdur_cont, bev, bdur,
+                    self.num_events, self.num_durations, self.device,
+                )
+            elif self.head_type in ("cox", "deepsurv"):
+                return compute_cox_cr_loss(
+                    head_out, bdur_cont, bev, self.num_events, self.device,
+                )
+        if self.head_type == "deephit":
+            rank_mat = torch.from_numpy(
+                pair_rank_mat(bdur_cont.cpu().numpy(), bev.cpu().numpy())
+            ).float().to(self.device)
+            return criterion_surv(head_out, bdur, bev, rank_mat)
+        if self.head_type == "pchazard":
+            return criterion_surv(head_out, bdur, bev, bfrac)
+        return criterion_surv(head_out, bdur, bev)
+
+    def _compute_baseline_hazards(
+        self,
+        x_pt: torch.Tensor,
+        dur_pt: torch.Tensor,
+        ev_pt: torch.Tensor,
+    ) -> None:
+        """Compute and store Cox baseline hazards (SR only).
+
+        No-op for CR — subclasses override to suppress it.
+        """
+        if self.head_type in ("cox", "deepsurv"):
+            self.model.compute_baseline_hazards(input=x_pt, target=(dur_pt, ev_pt))
+
     @staticmethod
     def evaluate(
         surv_df: Union[pd.DataFrame, List[pd.DataFrame]],
@@ -640,8 +715,6 @@ class BaseJointSurvFinetune:
         events: np.ndarray,
         val_data: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None,
         val_split: float = 0.2,
-        epochs: int = 100,
-        batch_size: int = 64,
         verbose: bool = True,
         **kwargs
     ) -> "BaseJointSurvFinetune":
@@ -649,10 +722,13 @@ class BaseJointSurvFinetune:
         # ── 0. Validation Split ──
         if val_data is None and val_split > 0:
             x, x_val, durations, durations_val, events, events_val = train_test_split(
-                x, durations, events, test_size=val_split, random_state=kwargs.get("random_state", 42),
+                x, durations, events, test_size=val_split, random_state=self.random_state,
                 stratify=events
             )
             val_data = (x_val, durations_val, events_val)
+
+        epochs = self.epochs
+        batch_size = self.batch_size
 
         N = len(x)
         
@@ -689,7 +765,7 @@ class BaseJointSurvFinetune:
         if self.labtrans is not None and hasattr(self.model, 'duration_index'):
              cuts = self.labtrans.cuts
              expected_len = self.num_durations + (1 if self.head_type == "pchazard" else 0)
-             if len(cuts) != expected_len:
+             if cuts is not None and len(cuts) != expected_len:
                   # Interpolate cuts to match the expected number of time points to avoid pandas shape mismatch
                   new_cuts = np.interp(
                       np.linspace(0, len(cuts)-1, expected_len),
@@ -739,7 +815,6 @@ class BaseJointSurvFinetune:
         best_loss = float('inf')
         best_state = None
         patience_counter = 0
-        patience = kwargs.get("patience", 5)
         
         current_bs = batch_size
         success = False
@@ -751,7 +826,7 @@ class BaseJointSurvFinetune:
                 _batch_sampler = EventBalancedBatchSampler(
                     events=events,          # original numpy array, pre-transform
                     batch_size=current_bs,
-                    seed=kwargs.get("random_state", 42),
+                    seed=self.random_state,
                 )
                 if verbose:
                     print(
@@ -787,22 +862,10 @@ class BaseJointSurvFinetune:
                         optimizer.zero_grad()
                         head_out, cls_logits = self.net(bx, x_context=x_ctx, y_context=y_ctx, return_logits=True)
 
-                        # Survival Loss
-                        if self.task_type == "cr":
-                            if self.cr_loss_type == "deephit":
-                                loss = compute_deephit_cr_loss(head_out, bdur_cont, bev, bdur, self.num_events, self.num_durations, self.device)
-                            elif self.cr_loss_type == "deephit_v2":
-                                loss = compute_deephit_cr_loss_v2(head_out, bdur_cont, bev, bdur, self.num_events, self.num_durations, self.device)
-                            elif self.cr_loss_type == "cox":
-                                loss = compute_cox_cr_loss(head_out, bdur_cont, bev, self.num_events, self.device)
-                        elif self.head_type == "deephit":
-                            # Use continuous durations for ranking to avoid ties
-                            rank_mat = torch.from_numpy(pair_rank_mat(bdur_cont.cpu().numpy(), bev.cpu().numpy())).float().to(self.device)
-                            loss = criterion_surv(head_out, bdur, bev, rank_mat)
-                        elif self.head_type == "pchazard":
-                            loss = criterion_surv(head_out, bdur, bev, bfrac)
-                        else:
-                            loss = criterion_surv(head_out, bdur, bev)
+                        # Survival Loss (dispatched through template method)
+                        loss = self._compute_survival_loss(
+                            head_out, bdur, bdur_cont, bev, bfrac, criterion_surv
+                        )
 
                         # Joint loss
                         total_loss = loss #+ self.alpha * criterion_cls(cls_logits, by_bin.long())
@@ -839,8 +902,7 @@ class BaseJointSurvFinetune:
                         self.net.set_context(vx_ctx, vy_ctx)
 
                         with torch.no_grad():
-                            if self.head_type in ("cox", "deepsurv"):
-                                self.model.compute_baseline_hazards(input=x_pt, target=(dur_pt, ev_pt))
+                            self._compute_baseline_hazards(x_pt, dur_pt, ev_pt)
 
                             # Actual inference method
                             surv_result = self.predict_survival_df(vx_v, n_ensemble=0)
@@ -859,13 +921,9 @@ class BaseJointSurvFinetune:
 
                     if stop_loss < best_loss:
                         best_loss, best_state, patience_counter = stop_loss, copy.deepcopy(self.net.state_dict()), 0
-                    elif (patience_counter := patience_counter + 1) >= patience:
+                    elif (patience_counter := patience_counter + 1) >= self.patience:
                         if verbose: print(f"  Early stopping at epoch {epoch}", flush=True)
                         break
-                    
-                    if torch.isnan(total_loss):
-                        print("  NaN loss detected!", flush=True)
-                        continue
 
                 if best_state: self.net.load_state_dict(best_state)
                 success = True
@@ -892,10 +950,9 @@ class BaseJointSurvFinetune:
         self._train_x = x_pt
         self._train_y = y_bin_pt
 
-        if self.head_type in ("cox", "deepsurv"):
-            self.net.eval()
-            with torch.no_grad():
-                self.model.compute_baseline_hazards(input=x_pt, target=(dur_pt, ev_pt))
+        self.net.eval()
+        with torch.no_grad():
+            self._compute_baseline_hazards(x_pt, dur_pt, ev_pt)
 
         return self
 

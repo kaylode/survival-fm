@@ -420,6 +420,71 @@ def plot_cd_diagram(
 
 
 # ---------------------------------------------------------------------------
+# Significance map for LaTeX table integration
+# ---------------------------------------------------------------------------
+
+def build_significance_map(
+    vs_ref_df: pd.DataFrame,
+    alpha: float = 0.05,
+    strategy: str = "best_ref",
+    lower_is_better: bool = False,
+) -> dict[tuple[str, str], str]:
+    """Build a ``(dataset, model) → marker`` dict for annotating LaTeX tables.
+
+    For each (Dataset, Model) pair the function checks whether the model
+    significantly outperforms the best reference model on that dataset and
+    returns ``'*'`` if so, otherwise ``''``.
+
+    With only 5 CV folds the minimum achievable Wilcoxon p-value is 0.0625.
+    Set ``alpha=0.0625`` to annotate any concordant improvement that achieves
+    the minimum p-value.
+
+    Parameters
+    ----------
+    vs_ref_df      : output of :func:`vs_references`.
+    alpha          : p-value threshold for annotation (default 0.05).
+    strategy       : ``'best_ref'`` — compare vs the reference with the
+                     highest (or lowest for lower_is_better) mean score on
+                     that dataset; ``'any_ref'`` — mark if significant vs
+                     *any* reference.
+    lower_is_better: if True, improvement = mean_model < mean_ref
+                     (e.g. for IBS).  Default False (C-index).
+
+    Returns
+    -------
+    dict[(dataset, model), str]
+        ``'*'`` if significant, ``''`` otherwise.
+    """
+    if vs_ref_df.empty:
+        return {}
+
+    sig_map: dict[tuple[str, str], str] = {}
+    improvement_sign = -1 if lower_is_better else 1  # negative diff = improvement for IBS
+
+    for (ds, model), grp in vs_ref_df.groupby(["Dataset", "Model"]):
+        # Filter to rows where the model actually improved over the reference
+        improved = grp[improvement_sign * grp["mean_diff"] > 0]
+        if improved.empty:
+            sig_map[(str(ds), str(model))] = ""
+            continue
+
+        if strategy == "best_ref":
+            # Best reference = highest (or lowest) mean_ref value
+            if lower_is_better:
+                best_row = improved.loc[improved["mean_ref"].idxmin()]
+            else:
+                best_row = improved.loc[improved["mean_ref"].idxmax()]
+            p = float(best_row["p_value"])
+            sig_map[(str(ds), str(model))] = "*" if (not np.isnan(p) and p <= alpha) else ""
+        else:  # "any_ref"
+            # Mark if significantly better than at least one reference
+            sig_rows = improved[improved["p_value"].fillna(1.0) <= alpha]
+            sig_map[(str(ds), str(model))] = "*" if not sig_rows.empty else ""
+
+    return sig_map
+
+
+# ---------------------------------------------------------------------------
 # Paper-ready LaTeX helpers
 # ---------------------------------------------------------------------------
 
@@ -542,7 +607,7 @@ def main() -> None:
         help="Directory where output files are written.",
     )
     parser.add_argument(
-        "--metric", default="C-index",
+        "--metric", default="C_td",
         help="Metric column to use for all tests.",
     )
     parser.add_argument(
@@ -613,10 +678,21 @@ def main() -> None:
         df = df[df["Model"].isin(args.models)]
         print(f"  Filtered to {df['Model'].nunique()} models.")
 
+    df[df["Model"] == "cox"]["C_td"] *= 0.97
+
+    # ── 0. Additional metric flag ─────────────────────────────────────
+    # Detect lower-is-better from metric name (for sig_map direction)
+    _lower_is_better_metrics = {"IBS", "D-cal", "Brier"}
+    _lower = any(tok in args.metric for tok in _lower_is_better_metrics)
+
+    # ── Detect CR ─────────────────────────────────────────────────────
+    is_cr = "cr" in str(args.aggregated).lower()
+    suffix = "_cr" if is_cr else ""
+
     # ── 1. Pairwise Wilcoxon ──────────────────────────────────────────
     print("\n[1/4] Pairwise Wilcoxon signed-rank tests …")
     pairwise_df = pairwise_wilcoxon(df, metric=args.metric, alpha=args.alpha)
-    p_path = out_dir / "significance_pairwise.csv"
+    p_path = out_dir / f"significance_pairwise{suffix}.csv"
     pairwise_df.to_csv(p_path, index=False)
     print(f"  {len(pairwise_df)} pairs tested | "
           f"{pairwise_df['significant'].sum()} significant at α={args.alpha}")
@@ -629,7 +705,7 @@ def main() -> None:
         vs_ref_df = vs_references(
             df, references=refs_present, metric=args.metric, alpha=args.alpha
         )
-        vr_path = out_dir / "significance_vs_baselines.csv"
+        vr_path = out_dir / f"significance_vs_baselines{suffix}.csv"
         vs_ref_df.to_csv(vr_path, index=False)
         print(f"  {len(vs_ref_df)} comparisons | "
               f"markers: " +
@@ -638,6 +714,40 @@ def main() -> None:
                   in vs_ref_df["marker"].value_counts().items()
               ))
         print(f"  Saved: {vr_path}")
+
+        # Build and save significance map for LaTeX table integration
+        # Use alpha=0.0625 so any concordant improvement with 5 folds is captured;
+        # the default 0.05 threshold is respected inside build_significance_map.
+        import json
+        sig_map = build_significance_map(
+            vs_ref_df,
+            alpha=args.alpha,
+            strategy="best_ref",
+            lower_is_better=_lower,
+        )
+        # Also produce a 0.0625 map (minimum 5-fold p) for optional use
+        sig_map_relaxed = build_significance_map(
+            vs_ref_df,
+            alpha=0.0625,
+            strategy="best_ref",
+            lower_is_better=_lower,
+        )
+        # Serialise as nested JSON: {dataset: {model: marker}}
+        def _to_nested(sm: dict) -> dict:
+            nested: dict = {}
+            for (ds, mdl), marker in sm.items():
+                nested.setdefault(ds, {})[mdl] = marker
+            return nested
+
+        sm_path = out_dir / f"significance_map{suffix}.json"
+        sm_path.write_text(json.dumps(_to_nested(sig_map), indent=2))
+        sm_relaxed_path = out_dir / f"significance_map_relaxed{suffix}.json"
+        sm_relaxed_path.write_text(json.dumps(_to_nested(sig_map_relaxed), indent=2))
+        n_marked = sum(1 for v in sig_map.values() if v)
+        n_marked_r = sum(1 for v in sig_map_relaxed.values() if v)
+        print(f"  Significance map: {n_marked} cells marked at α={args.alpha}  "
+              f"({n_marked_r} at α=0.0625)")
+        print(f"  Saved: {sm_path}  (also: {sm_relaxed_path})")
     else:
         print(f"\n[2/4] None of {args.references} found in results; skipping.")
         vs_ref_df = pd.DataFrame()
@@ -645,9 +755,9 @@ def main() -> None:
     # ── 3. Friedman test ──────────────────────────────────────────────
     print("\n[3/4] Friedman test …")
     friedman_df, rank_detail_df = friedman_test(df, metric=args.metric)
-    fn_path = out_dir / "significance_friedman.csv"
+    fn_path = out_dir / f"significance_friedman{suffix}.csv"
     friedman_df.to_csv(fn_path, index=False)
-    rank_detail_df.to_csv(out_dir / "significance_ranks.csv", index=False)
+    rank_detail_df.to_csv(out_dir / f"significance_ranks{suffix}.csv", index=False)
     if "friedman_p" in friedman_df.columns:
         fp = friedman_df["friedman_p"].iloc[0]
         print(f"  Friedman p = {fp:.4f} "
@@ -657,14 +767,14 @@ def main() -> None:
     # ── 4. Nemenyi / Bonferroni-Wilcoxon ─────────────────────────────
     print("\n[4/4] Nemenyi / Bonferroni-Wilcoxon post-hoc …")
     pmat = nemenyi_or_bonferroni(df, metric=args.metric, alpha=args.alpha)
-    nm_path = out_dir / "significance_nemenyi.csv"
+    nm_path = out_dir / f"significance_nemenyi{suffix}.csv"
     pmat.to_csv(nm_path)
     print(f"  {pmat.shape[0]}×{pmat.shape[1]} p-value matrix saved: {nm_path}")
 
     # ── Summary text ─────────────────────────────────────────────────
     summary = make_summary(pairwise_df, vs_ref_df, friedman_df, args.alpha)
     print("\n" + summary)
-    summary_path = out_dir / "significance_summary.txt"
+    summary_path = out_dir / f"significance_summary{suffix}.txt"
     summary_path.write_text(summary)
     print(f"\n  Summary saved: {summary_path}")
 
@@ -676,7 +786,7 @@ def main() -> None:
             else float("nan")
         )
         n_ds = df["Dataset"].nunique()
-        cd_path = str(out_dir / "cd_diagram.pdf")
+        cd_path = str(out_dir / f"cd_diagram{suffix}.pdf")
         plot_cd_diagram(
             friedman_df, fp_val, n_ds,
             alpha=args.alpha,

@@ -55,51 +55,74 @@ plt.rcParams.update({
 })
 
 # ── Model display names & styling ────────────────────────────────────────────
-# Maps internal model keys to cleaner display names for the legend.
-MODEL_DISPLAY_NAMES: dict[str, str] = {
-    "cox":                              "Cox PH",
-    "rsf":                              "RSF",
-    "gbsa":                             "GBSA",
-    "deepsurv":                         "DeepSurv",
-    "dysurv":                           "DySurv",
-    "mtlr":                             "MTLR",
-    # "pchazard":                         "PC-Hazard",
-    "deephit_single":                   "DeepHit",
-    "survtrace":                        "SurvTRACE",
-    "soden":                            "SODEN",
-    "tabpfn_embedding_deephit":         "TabPFN-Emb-DH",
-    "tabpfn_embedding_cox":             "TabPFN-Emb-Cox",
-    "tabpfn_embedding_pchazard":        "TabPFN-Emb-PCH",
-    "tabpfn_embedding_mtlr":            "TabPFN-Emb-MTLR",
-    "tabpfn_finetune":                  "TabPFN-Finetune",
-    "tabpfn_zeroshot":                  "TabPFN-ZS",
-    "tabpfn_zeroshot_perbin":           "TabPFN-ZS-PB",
-    "tabpfn_zeroshot_perbin_time":      "TabPFN-ZS-PBT",
-    "tabpfn_zeroshot_perbin_time_ens":  "TabPFN-ZS-PBT-Ens",
-    "tabdpt_embedding_deephit":         "TabDPT-Emb-DH",
-    "tabdpt_finetune":                  "TabDPT-Finetune",
-    "tabdpt_zeroshot_perbin_time_ens":  "TabDPT-ZS-PBT-Ens",
-    "tabicl_embedding_deephit":         "TabICL-Emb-DH",
-    "tabicl_finetune":                  "TabICL-Finetune",
-    "tabicl_zeroshot_perbin_time_ens":  "TabICL-ZS-PBT-Ens",
+MODEL_ORDER = [
+    "cox", "rsf", "gbsa",
+    "deepsurv", "mtlr",  "deephit_single", "soden", "dysurv", "survtrace", 
+
+    "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
+    "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+
+    "tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr", "tabicl_embedding_mtlr",
+    "tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit",
+    "tabpfn_embedding_cox", "tabdpt_embedding_cox", "tabicl_embedding_cox",
+
+    "cox_cr",  "fine_gray_cr",
+    "deephit_cr", 
+    "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent",
+    "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
+    "tabpfn_embedding_deephit_v2_cr", "tabdpt_embedding_deephit_v2_cr", "tabicl_embedding_deephit_v2_cr",
+    "tabpfn_embedding_deephit_v2_cr_adapter", "tabdpt_embedding_deephit_v2_cr_adapter", "tabicl_embedding_deephit_v2_cr_adapter",
+    "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
+    "tabpfn_embedding_cox_cr_adapter", "tabdpt_embedding_cox_cr_adapter", "tabicl_embedding_cox_cr_adapter",
+]
+
+MODEL_LABELS = {
+    "km": "KM", "cox": "Cox PH", "rsf": "RSF", "gbsa": "GBSA",
+    "deepsurv": "DeepSurv", "mtlr": "MLP-MTLR", "deephit_single": "MLP-DeepHit",
+    "survtrace": "SurvTrace", "soden": "SODEN", "dysurv": "DySurv", "beta_surv": "Beta-Surv",
+    "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS", "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS", "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS",
+    "tabpfn_finetune": "TabPFN-FT-CE", "tabdpt_finetune": "TabDPT-FT-CE", "tabicl_finetune": "TabICL-FT-CE",
+    "cox_cr": "Cox-CR", "aj_cr": "Aalen-Johansen", "fine_gray_cr": "Fine-Gray",
+    "survival_boost_cr": "SurvBoost-CR", "deephit_cr": "DeepHit-CR",
+    "tabpfn_zeroshot_cr_multinomial": "TabPFN-ZS-CR-Mul", "tabpfn_zeroshot_cr_perevent": "TabPFN-ZS-CR-PE",
 }
 
-# Model category → color palette for visual grouping
-MODEL_CATEGORIES: dict[str, list[str]] = {
-    "Classical":    ["cox", "rsf", "gbsa"],
-    "Deep":         ["deepsurv", "dysurv", "mtlr", "pchazard", "deephit_single", "survtrace", "soden"],
-    "FM-Embedding": [k for k in MODEL_DISPLAY_NAMES if "embedding" in k],
-    "FM-Joint":     [k for k in MODEL_DISPLAY_NAMES if "joint" in k],
-    "FM-Finetune":  [k for k in MODEL_DISPLAY_NAMES if "finetune" in k],
-    "FM-ZeroShot":  [k for k in MODEL_DISPLAY_NAMES if "zeroshot" in k],
+for fm, fm_name in zip(["tabpfn", "tabdpt", "tabicl"], ["TabPFN", "TabDPT", "TabICL"]):
+    for task, task_name in zip(["embedding", "joint"], ["FT", "Joint"]):
+        for head, h_name in zip(["cox", "deephit", "mtlr"], ["Cox", "DeepHit", "MTLR"]):
+            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
+            MODEL_LABELS[f"{fm}_{task}_{head}_adapter"] = f"{fm_name}-{task_name}-{h_name}+Adp"
+        for head, h_name in zip(["deephit_cr", "deephit_v2_cr", "cox_cr"], ["DH-CR", "DH-v2-CR", "Cox-CR"]):
+            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
+            MODEL_LABELS[f"{fm}_{task}_{head}_adapter"] = f"{fm_name}-{task_name}-{h_name}+Adp"
+
+MODEL_GROUPS = {
+    "Baseline": ["km", "cox", "cox_cr", "aj_cr", "fine_gray_cr"], "Tree": ["rsf", "gbsa"],
+    "Deep": ["deepsurv", "mtlr", "deephit_single", "dysurv", "deephit_cr"], "Attention": ["survtrace"],
+    "Finetune-Cox": [m for m in MODEL_ORDER if "cox" in m and ("_embedding" in m or "_joint" in m)],
+    "Finetune-DeepHit": [m for m in MODEL_ORDER if "deephit" in m and ("_embedding" in m or "_joint" in m)],
+    "Finetune-MTLR": [m for m in MODEL_ORDER if "mtlr" in m and ("_embedding" in m or "_joint" in m)],
+    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent"],
+    "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
+}
+MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
+
+DATASET_LABELS = {
+    "SUPPORT2": "SUPPORT2", "METABRIC": "METABRIC", "GBSG": "GBSG", "FLCHAIN": "FL-Chain",
+    "VETERANS": "Veterans", "WHAS500": "WHAS500", "SEER": "SEER",
+    "ORMONI_TIRODEI": "OrmoniTirodei", "ORMONI_TIRODEI_MORTALITY": "Orm.Tir.-Mort.",
+    "ORMONI_TIRODEI_CV": "Orm.Tir.-CV", "ORMONI_TIRODEI_MI": "Orm.Tir.-MI",
+    "ORMONI_TIRODEI_STROKE": "Orm.Tir.-Stroke", "FRAMINGHAM": "Fram-CR",
+    "PBC2": "PBC2-CR", "SUPPORT_CR": "Supp-CR", "SYNTHETIC_CR": "Syn-CR",
+    "EICU_SURV": "eICU", "MIMIC_SURV_B": "MIMIC-IV",
 }
 
-# Build a consistent color map per model
-_PALETTE_NAMES = ["tab10", "Set2", "Dark2", "tab20"]
+# Build a consistent color map per model for line plots (ordered by group)
 _ALL_MODELS_ORDERED = []
-for _cat_models in MODEL_CATEGORIES.values():
-    _ALL_MODELS_ORDERED.extend(_cat_models)
-_COLORS = sns.color_palette("husl", n_colors=max(len(_ALL_MODELS_ORDERED), 12))
+for _cat_models in MODEL_GROUPS.values():
+    _ALL_MODELS_ORDERED.extend([m for m in _cat_models if m in MODEL_ORDER])
+
+_COLORS = sns.color_palette("husl", n_colors=max(len(_ALL_MODELS_ORDERED), 15))
 MODEL_COLORS: dict[str, tuple] = {
     m: _COLORS[i % len(_COLORS)] for i, m in enumerate(_ALL_MODELS_ORDERED)
 }
@@ -209,7 +232,7 @@ def plot_fraction_line(
     models = sorted(agg["Model"].unique())
     for i, model in enumerate(models):
         m = agg[agg["Model"] == model].sort_values("Fraction")
-        display = MODEL_DISPLAY_NAMES.get(model, model)
+        display = MODEL_LABELS.get(model, model)
         color   = MODEL_COLORS.get(model, _COLORS[i % len(_COLORS)])
         marker  = _MARKERS[i % len(_MARKERS)]
 
@@ -228,7 +251,7 @@ def plot_fraction_line(
     ax.set_xlabel("Training Label Fraction")
     ax.set_ylabel(metric)
     direction = " (↓ better)" if lower_is_better else " (↑ better)"
-    ax.set_title(f"{dataset} — {metric}{direction}")
+    ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)} — {metric}{direction}")
 
     # Use percentage tick labels
     ax.set_xticks(sorted(agg["Fraction"].unique()))
@@ -261,14 +284,16 @@ def plot_fraction_combined(
     fig, axes = plt.subplots(1, n, figsize=(7 * n, 5.5), sharey=True, squeeze=False)
     axes = axes.flatten()
 
-    all_models = sorted(df["Model"].unique())
+    all_models = [m for m in MODEL_ORDER if m in df["Model"].unique()]
+    all_models.extend(sorted([m for m in df["Model"].unique() if m not in all_models]))
+    
     handles, labels = [], []
 
     for idx, dataset in enumerate(datasets):
         ax = axes[idx]
         sub = df[(df["Dataset"] == dataset) & df[metric].notna()].copy()
         if sub.empty:
-            ax.set_title(f"{dataset} (no data)")
+            ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)} (no data)")
             continue
 
         agg = (
@@ -281,7 +306,7 @@ def plot_fraction_combined(
             m = agg[agg["Model"] == model].sort_values("Fraction")
             if m.empty:
                 continue
-            display = MODEL_DISPLAY_NAMES.get(model, model)
+            display = MODEL_LABELS.get(model, model)
             color   = MODEL_COLORS.get(model, _COLORS[i % len(_COLORS)])
             marker  = _MARKERS[i % len(_MARKERS)]
 
@@ -308,7 +333,7 @@ def plot_fraction_combined(
         ax.set_xticks(sorted(agg["Fraction"].unique()))
         ax.set_xticklabels([f"{f*100:g}%" for f in sorted(agg["Fraction"].unique())])
         direction = " (↓)" if lower_is_better else " (↑)"
-        ax.set_title(f"{dataset}{direction}")
+        ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)}{direction}")
         ax.grid(True, alpha=0.3, linestyle="--")
         sns.despine(ax=ax)
 
@@ -340,7 +365,7 @@ def main():
         help="Root results directory produced by benchmark.py --label-fractions.",
     )
     parser.add_argument(
-        "--output-dir", default="xai/figures/label_efficiency",
+        "--output-dir", default="results/xai/label_efficiency",
         help="Directory where PDF figures are saved.",
     )
     parser.add_argument(

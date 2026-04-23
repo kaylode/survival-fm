@@ -33,6 +33,7 @@ from tqdm import tqdm
 from sklearn.isotonic import IsotonicRegression
 from sklearn.decomposition import PCA
 from survpfn.models.shared.binning import get_cuts, resolve_num_durations
+from survpfn.models.shared.preprocessing import SurvivalTimeBinEncoder
 
 # ---------------------------------------------------------------------------
 # Helper: monotone clipping
@@ -78,6 +79,9 @@ class ZeroShotSurvivalPredictor:
         self.use_time_bin_encoder = use_time_bin_encoder
         self.n_estimators = n_estimators
         self.verbose = kwargs.get("verbose", True)
+        self.binning_scheme = kwargs.get("binning_scheme", "quantile")
+        self.early_event_quantile = kwargs.get("early_event_quantile", 0.5)
+        self.early_bin_frac = kwargs.get("early_bin_frac", 0.7)
 
         self._bin_times = None
         self._X_train = None
@@ -132,14 +136,21 @@ class ZeroShotSurvivalPredictor:
 
         n_bins = resolve_num_durations(self._durations, self._events, self.n_bins)
         if self.use_time_bin_encoder:
-            from survpfn.models.shared.preprocessing import SurvivalTimeBinEncoder
-            self._time_encoder = SurvivalTimeBinEncoder(n_bins=n_bins)
+            self._time_encoder = SurvivalTimeBinEncoder(
+                n_bins=n_bins, scheme=self.binning_scheme,
+                early_event_quantile=self.early_event_quantile,
+                early_bin_frac=self.early_bin_frac,
+            )
             self._time_encoder.fit(self._durations, self._events)
             self._bin_times = self._time_encoder.bin_times
         else:
             self._time_encoder = None
             # Right edges of quantile bins (prediction time points)
-            self._bin_times = get_cuts(self._durations, self._events, n_bins)#[1:]
+            self._bin_times = get_cuts(
+                self._durations, self._events, n_bins, scheme=self.binning_scheme,
+                early_event_quantile=self.early_event_quantile,
+                early_bin_frac=self.early_bin_frac,
+            )#[1:]
 
         if self.verbose:
             print(f"  [{self.backbone}/ZeroShot] Method: {self.method}, Bins: {len(self._bin_times)}, Estimators: {self.n_estimators}", flush=True)
@@ -332,7 +343,12 @@ class ZeroShotSurvivalPredictor:
         # Final clip
         surv_matrix_interp = np.clip(surv_matrix_interp, 0.0, 1.0)
 
-        return pd.DataFrame(surv_matrix_interp, columns=grid_times)
+        # pycox convention: rows = times, cols = patients
+        return pd.DataFrame(
+            surv_matrix_interp.T,
+            index=grid_times,
+            columns=np.arange(n_test),
+        )
 
     def _predict_cr_multinomial(self, X_test) -> List[pd.DataFrame]:
         K = len(self._bin_times)
@@ -380,7 +396,8 @@ class ZeroShotSurvivalPredictor:
             # Interpolate CIF starting at 0
             f = interp1d(t_unique, cif_m_unique, kind='linear', axis=1, fill_value="extrapolate")
             cif_m_interp = np.clip(f(grid_times), 0.0, 1.0)
-            cifs.append(pd.DataFrame(cif_m_interp, columns=grid_times))
+            # pycox convention: rows = times, cols = patients
+            cifs.append(pd.DataFrame(cif_m_interp.T, index=grid_times, columns=np.arange(n_test)))
         return cifs
 
     def _predict_cr_per_event(self, X_test) -> List[pd.DataFrame]:
@@ -425,8 +442,8 @@ class ZeroShotSurvivalPredictor:
             from scipy.interpolate import interp1d
             f = interp1d(t_unique, cif_m_unique, kind='linear', axis=1, fill_value="extrapolate")
             cif_m_interp = np.clip(f(grid_times), 0.0, 1.0)
-                
-            cifs.append(pd.DataFrame(cif_m_interp, columns=grid_times))
+            # pycox convention: rows = times, cols = patients
+            cifs.append(pd.DataFrame(cif_m_interp.T, index=grid_times, columns=np.arange(n_test)))
         return cifs
 
     @staticmethod
@@ -471,19 +488,31 @@ def train_zeroshot_surv(
     event_col: str,
     **kwargs
 ) -> tuple:
+    """Fit and predict with ZeroShotSurvivalPredictor.
+
+    Returns
+    -------
+    (predictor, risk, surv_arrays, grid_times)
+        ``risk``        — ``(n_test,)`` risk scores.
+        ``surv_arrays`` — SR: ``(n_test, n_times)`` survival matrix.
+                          CR: ``List[np.ndarray]``, each ``(n_test, n_times)``.
+        ``grid_times``  — ``(n_times,)`` shared time grid.
+
+    DataFrame convention (pycox): rows = times, cols = patients.
+    """
     predictor = ZeroShotSurvivalPredictor(**kwargs)
     predictor.fit(df_train, duration_col, event_col)
-    
+
     out = predictor.predict_survival(df_test)
-    
+
     if isinstance(out, list):
-        # Competing risks
+        # Competing risks — rows = times, cols = patients
         cifs = out
-        # risk = cause 1 probability at last time bin
-        risk = cifs[0].iloc[:, -1].values
-        return predictor, risk, [c.values for c in cifs], cifs[0].columns.values
+        # CIF_1 at last time = max cumulative incidence = risk score
+        risk = cifs[0].iloc[-1].values                          # (n_test,)
+        return predictor, risk, [c.values.T for c in cifs], cifs[0].index.values
     else:
-        # Single risk
+        # Single risk — rows = times, cols = patients
         surv_df = out
-        risk = 1.0 - surv_df.iloc[:, -1].values
-        return predictor, risk, surv_df.values, surv_df.columns.values
+        risk = 1.0 - surv_df.iloc[-1].values                   # (n_test,)
+        return predictor, risk, surv_df.values.T, surv_df.index.values

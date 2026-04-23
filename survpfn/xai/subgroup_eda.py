@@ -535,6 +535,80 @@ def plot_standalone_km(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Risk Stratification by Model Predictions
+# ─────────────────────────────────────────────────────────────────────────────
+
+def make_risk_groups(df_preds: pd.DataFrame) -> Optional[pd.Series]:
+    if "risk_score" not in df_preds.columns:
+        return None
+    try:
+        return pd.qcut(
+            df_preds["risk_score"], 
+            q=[0.0, 0.2, 0.8, 1.0], 
+            labels=["Low risk (bottom 20%)", "Medium risk (middle 60%)", "High risk (top 20%)"]
+        )
+    except ValueError:
+        # In case of too many duplicate risk scores preventing quantile binning
+        return None
+
+def plot_risk_stratification_km(
+    df_preds: pd.DataFrame,
+    out_path: Path,
+    dataset_name: str,
+    model_name: str,
+) -> None:
+    if "duration" not in df_preds.columns or "event" not in df_preds.columns:
+        return
+        
+    risk_groups = make_risk_groups(df_preds)
+    if risk_groups is None:
+        return
+        
+    fig, ax = plt.subplots(figsize=(7, 5))
+    
+    palette = {
+        "Low risk (bottom 20%)": "#4dac26", 
+        "Medium risk (middle 60%)": "#fdae61", 
+        "High risk (top 20%)": "#d7191c"
+    }
+    
+    plot_km_axis(
+        ax, 
+        df=df_preds, 
+        dur_col="duration", 
+        ev_col="event", 
+        groups=risk_groups, 
+        axis_label="Predicted Risk", 
+        palette=palette, 
+        title="temp",
+    )
+    
+    # Drop title
+    ax.set_title("")
+    
+    # Larger fonts
+    ax.set_xlabel(ax.get_xlabel(), fontsize=16)
+    ax.set_ylabel(ax.get_ylabel(), fontsize=16)
+    ax.tick_params(axis='both', labelsize=14)
+    ax.legend(fontsize=14, loc="lower left", framealpha=0.8)
+    
+    for text in ax.texts:
+        if "log-rank" in text.get_text():
+            text.set_fontsize(14)
+            
+    # Denser lines
+    for line in ax.get_lines():
+        line.set_linewidth(2.5)
+        
+    # Plot from 24 hours to 720 hours
+    ax.set_xlim(left=24, right=720)
+        
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    KM Risk Stratification → {out_path}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main per-dataset runner
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -542,6 +616,8 @@ def analyse_dataset(
     name: str,
     out_dir: Path,
     include_insurance: bool = True,
+    predictions_dir: Optional[Path] = None,
+    predictions_model: Optional[str] = None,
 ) -> None:
     """Run full subgroup EDA for one EHR dataset."""
     from survpfn.dataloaders import ALL_DATASETS
@@ -662,6 +738,34 @@ def analyse_dataset(
             out_path=standalone_path,
         )
 
+    # ── Risk Stratification KM (if predictions provided) ──────────────────
+    if predictions_dir is not None:
+        dataset_pred_dir = predictions_dir / name
+        if dataset_pred_dir.exists():
+            models_to_check = [predictions_model] if predictions_model else [d.name for d in dataset_pred_dir.iterdir() if d.is_dir()]
+            
+            for m_name in models_to_check:
+                model_pred_dir = dataset_pred_dir / m_name
+                if not model_pred_dir.exists():
+                    if predictions_model:
+                        print(f"  [WARN] Prediction directory {model_pred_dir} does not exist.")
+                    continue
+                    
+                pred_files = list(model_pred_dir.glob("*.parquet"))
+                if pred_files:
+                    try:
+                        df_preds_list = [pd.read_parquet(pf) for pf in pred_files]
+                        df_preds = pd.concat(df_preds_list, ignore_index=True)
+                        risk_km_path = out_dir / f"subgroup_km_risk_{m_name}.pdf"
+                        plot_risk_stratification_km(df_preds, risk_km_path, name, m_name)
+                    except Exception as e:
+                        print(f"  [WARN] Failed processing risk for {m_name}: {e}")
+                else:
+                    if predictions_model:
+                        print(f"  [WARN] No parquet files found in {model_pred_dir}")
+        else:
+            print(f"  [WARN] Dataset prediction directory {dataset_pred_dir} does not exist.")
+
     print(f"  Done → {out_dir}")
 
 
@@ -693,6 +797,14 @@ def main() -> None:
         "--no-insurance", action="store_true",
         help="Skip insurance-type stratification for MIMIC-IV.",
     )
+    parser.add_argument(
+        "--predictions-dir", type=Path, default=None,
+        help="Path to directory containing predictions (e.g. results/predictions)",
+    )
+    parser.add_argument(
+        "--predictions-model", type=str, default=None,
+        help="Name of the model to use for risk stratification (e.g. tabpfn_embedding_cox). If not specified, loops over all models in the predictions directory.",
+    )
     args = parser.parse_args()
 
     print(f"\nSubgroup EDA — datasets: {args.datasets}")
@@ -703,6 +815,8 @@ def main() -> None:
             name=name,
             out_dir=args.output_dir / name,
             include_insurance=not args.no_insurance,
+            predictions_dir=args.predictions_dir,
+            predictions_model=args.predictions_model,
         )
 
     print("\nAll done.")

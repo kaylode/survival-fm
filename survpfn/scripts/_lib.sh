@@ -41,6 +41,7 @@ run_models() {
         --output-dir "$OUTPUT_DIR" \
         --batch-size "$BATCH_SIZE" \
         --n-ensemble "$N_ENSEMBLE" \
+        --save-predictions \
         "${extra[@]}" \
         2>&1 | tee "$logfile"
 }

@@ -58,6 +58,7 @@ class FMConfig:
     # ── Training ─────────────────────────────────────────────────────────────
     epochs: int = 100
     batch_size: int = 64
+    patience: int = 5
     learning_rate: float = 1e-3
     """Learning rate for the survival head (and backbone if freeze_backbone=False)."""
     alpha: float = 0.5
@@ -66,11 +67,17 @@ class FMConfig:
     """Number of random contexts sampled for ensembling during inference (0 = disabled)."""
     sampling_ratio: Optional[float] = None
     """Ratio of samples to use for training (None = use all)."""
+    binning_scheme: str = "quantile"
+    """Binning scheme for time discretization: quantile | uniform | hybrid."""
+    early_event_quantile: float = 0.5
+    """For hybrid scheme: Quantile of event times used as the early/late split."""
+    early_bin_frac: float = 0.7
+    """For hybrid scheme: Fraction of bins to allocate to the early period."""
 
     # ── Task ─────────────────────────────────────────────────────────────────
     task_type: str = "sr"
     """Task type: sr (single-risk) | cr (competing-risks)."""
-    cr_loss_type: str = "deephit"
+    cr_loss_type: str = "deephit_v2"
     """Competing-risks loss: deephit | deephit_v2 | cox."""
 
     # ── Zero-shot specific ───────────────────────────────────────────────────

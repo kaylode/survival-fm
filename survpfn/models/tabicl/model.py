@@ -147,28 +147,22 @@ class TabICLSurvPH(BaseJointSurvFinetune):
         head_type: str = "cox",
         num_durations: int = 100,
         head_num_nodes: List[int] = [128, 64],
-        learning_rate: float = 1e-3,
         dropout: float = 0.2,
         context_size: int = 512,
-        device: str = "cuda:0",
         task_type: str = "sr",
         num_events: int = 1,
         use_adapter: bool = False,
         input_dim: Optional[int] = None,
-        cr_loss_type: str = "deephit",
         alpha: float = 1.0,
         freeze_backbone: bool = True,
         deephit_alpha: float = 0.2,
         deephit_sigma: float = 0.1,
         **kwargs
     ):
+        super().__init__(num_durations=num_durations, **kwargs)
         self.task_type = task_type
         self.num_events = num_events
         self.head_type = head_type.lower()
-        self.device = device
-        self.num_durations = num_durations
-        self.cr_loss_type = cr_loss_type
-        self.learning_rate = learning_rate
         self.backbone_name = "tabicl"
         self.context_size = context_size
         self.alpha = alpha
@@ -179,12 +173,10 @@ class TabICLSurvPH(BaseJointSurvFinetune):
 
         self.net = TabICLSurvModel(
             n_out=n_out, head_num_nodes=head_num_nodes, dropout=dropout,
-            device=device, task_type=task_type, num_events=num_events,
+            device=self.device, task_type=task_type, num_events=num_events,
             use_adapter=use_adapter, input_dim=input_dim,
             batch_norm=(self.head_type == "deepsurv"),
             freeze_backbone=freeze_backbone,
-        ).to(device)
+        ).to(self.device)
 
-        self.model, self.labtrans = self._init_pycox_model(self.head_type, num_durations, learning_rate, self.net)
-
-
+        self.model, self.labtrans = self._init_pycox_model(self.head_type, num_durations, self.learning_rate, self.net)

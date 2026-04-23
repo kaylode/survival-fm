@@ -466,22 +466,22 @@ def run_benchmark(
             for model_name in model_names:
                 model_tag = model_name + frac_tag
                 print(f"    {C_BOLD}[Fold {fold}/{n_folds_display}][{model_tag}][{dataset_name}]{C_RESET}", end=" ", flush=True)
-                try:
-                    run_fold_model(
-                        dataset_name, model_name, model_tag,
-                        df_train, df_test, dur_col, ev_col,
-                        fold, tune, n_trials, output_dir,
-                        test_idx=test_idx if save_predictions else None,
-                        pred_dir=pred_dir if save_predictions else None,
-                        **{k: v for k, v in (extra.items() if extra else {}.items())
-                           if k != "label_fractions"},
-                    )
-                except Exception as exc:
-                    warnings.warn(
-                        f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
-                        stacklevel=2,
-                    )
-                    print("      → FAILED (see warning above)")
+                # try:
+                run_fold_model(
+                    dataset_name, model_name, model_tag,
+                    df_train, df_test, dur_col, ev_col,
+                    fold, tune, n_trials, output_dir,
+                    test_idx=test_idx if save_predictions else None,
+                    pred_dir=pred_dir if save_predictions else None,
+                    **{k: v for k, v in (extra.items() if extra else {}.items())
+                        if k != "label_fractions"},
+                )
+                # except Exception as exc:
+                #     warnings.warn(
+                #         f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
+                #         stacklevel=2,
+                #     )
+                #     print("      → FAILED (see warning above)")
 
 
 # ---------------------------------------------------------------------------

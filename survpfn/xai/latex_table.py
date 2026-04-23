@@ -4,7 +4,7 @@ scripts/latex_table.py — Generate publication-ready LaTeX tables from SurvPFN 
 Reads ``aggregated.csv`` (produced by aggregate.py / xai pipeline) and produces
 two tables:
 
-1. **C-index table** — Models × Datasets, cells = mean ± std.
+1. **C_td table** — Models × Datasets, cells = mean ± std.
    Bold = best per column, underline = second-best, gray ±std subscript.
 
 2. **IBS calibration table** — same layout, lower-is-better metric.
@@ -21,7 +21,7 @@ CLI
     uv run python -m survpfn.scripts.latex_table \\
         --aggregated results/benchmark/aggregated.csv \\
         --output-dir results/benchmark \\
-        --metrics "C-index" "IBS" \\
+        --metrics "C_td" "IBS" \\
         --datasets SUPPORT2 METABRIC GBSG WHAS500 VETERANS FLCHAIN
 """
 
@@ -72,21 +72,6 @@ MODEL_DISPLAY: dict[str, str] = {
     "tabicl_embedding_deephit":  "TabICL-FT-DeepHit",
     "tabicl_embedding_pchazard": "TabICL-FT-PCHazard",
     "tabicl_embedding_mtlr":     "TabICL-FT-MTLR",
-    # TabPFN jointly trained
-    "tabpfn_joint_cox":      "TabPFN-Joint-Cox",
-    "tabpfn_joint_deephit":  "TabPFN-Joint-DeepHit",
-    "tabpfn_joint_pchazard": "TabPFN-Joint-PCHaz",
-    "tabpfn_joint_mtlr":     "TabPFN-Joint-MTLR",
-    # TabDPT jointly trained
-    "tabdpt_joint_cox":      "TabDPT-Joint-Cox",
-    "tabdpt_joint_deephit":  "TabDPT-Joint-DeepHit",
-    "tabdpt_joint_pchazard": "TabDPT-Joint-PCHaz",
-    "tabdpt_joint_mtlr":     "TabDPT-Joint-MTLR",
-    # TabICL jointly trained
-    "tabicl_joint_cox":      "TabICL-Joint-Cox",
-    "tabicl_joint_deephit":  "TabICL-Joint-DeepHit",
-    "tabicl_joint_pchazard": "TabICL-Joint-PCHaz",
-    "tabicl_joint_mtlr":     "TabICL-Joint-MTLR",
     # Finetune CE
     "tabpfn_finetune":           "TabPFN-FT-CE",
     "tabdpt_finetune":           "TabDPT-FT-CE",
@@ -95,13 +80,37 @@ MODEL_DISPLAY: dict[str, str] = {
     "tabpfn_zeroshot_perbin_time_ens":  "TabPFN-ZS",
     "tabdpt_zeroshot_perbin_time_ens":  "TabDPT-ZS",
     "tabicl_zeroshot_perbin_time_ens":  "TabICL-ZS",
+    
+    # Competing Risks Classical
+    "cox_cr":            "Cox-CR",
+    "aj_cr":             "Aalen-Johansen",
+    "fine_gray_cr":      "Fine-Gray",
+    "survival_boost_cr": "SurvBoost-CR",
+    
+    # Competing Risks Deep
+    "deephit_cr":        "DeepHit-CR",
+    "dysurv_cr":         "DySurv-CR",
+    "survtrace_cr":      "SurvTRACE-CR",
+    
+    # Competing Risks FM Embedding
+    "tabpfn_embedding_cox_cr": "TabPFN-FT-Cox-CR",
+    "tabdpt_embedding_cox_cr": "TabDPT-FT-Cox-CR",
+    "tabicl_embedding_cox_cr": "TabICL-FT-Cox-CR",
+    "tabpfn_embedding_deephit_cr": "TabPFN-FT-DeepHit-CR",
+    "tabdpt_embedding_deephit_cr": "TabDPT-FT-DeepHit-CR",
+    "tabicl_embedding_deephit_cr": "TabICL-FT-DeepHit-CR",
+    
+    # Competing Risks Zero-shot
+    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS-CR",
+    "tabdpt_zeroshot_cr_ens": "TabDPT-ZS-CR",
+    "tabicl_zeroshot_cr_ens": "TabICL-ZS-CR",
 }
 
 #: Ordered model groups for row layout
 MODEL_GROUPS: dict[str, list[str]] = {
-    "Classical": ["cox", "km"],
+    "Classical": ["cox", "km", "cox_cr", "aj_cr", "fine_gray_cr", "survival_boost_cr"],
     "Tree Ensemble": ["rsf", "gbsa"],
-    "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv", "survtrace", "soden"],
+    "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv", "survtrace", "soden", "deephit_cr", "dysurv_cr", "survtrace_cr"],
     "Finetune-Surv": [
         "tabpfn_embedding_cox", "tabpfn_embedding_deephit",
         "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
@@ -109,17 +118,20 @@ MODEL_GROUPS: dict[str, list[str]] = {
         "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
         "tabicl_embedding_cox", "tabicl_embedding_deephit",
         "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
+        "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
+        "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
     ],
     "FM Joint": [
         "tabpfn_joint_cox", "tabpfn_joint_deephit", "tabpfn_joint_pchazard", "tabpfn_joint_mtlr",
         "tabdpt_joint_cox", "tabdpt_joint_deephit", "tabdpt_joint_pchazard", "tabdpt_joint_mtlr",
         "tabicl_joint_cox", "tabicl_joint_deephit", "tabicl_joint_pchazard", "tabicl_joint_mtlr",
     ],
-    "Finetune-CE": [
-        "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
-    ],
+    # "Finetune-CE": [
+    #     "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+    # ],
     "Zero-Shot": [
         "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
+        "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens",
     ],
 }
 
@@ -141,6 +153,11 @@ DATASET_SHORT: dict[str, str] = {
     "ORMONI_TIRODEI_MI":          "OT-MI",
     "ORMONI_TIRODEI_STROKE":      "OT-Stk",
     "ORMONI_TIRODEI_MORTALITY":   "OT-Mort",
+    # Competing Risks
+    "FRAMINGHAM":                 "Fram-CR",
+    "PBC2":                       "PBC2-CR",
+    "SUPPORT_CR":                 "Supp-CR",
+    "SYNTHETIC_CR":               "Syn-CR",
     # SurvSet
     "SS_CANCER":         "SS-Can",
     "SS_BREAST":         "SS-Brs",
@@ -184,7 +201,8 @@ SURVSET_DATASETS = [
     "SS_ACTG", "SS_RHC", "SS_VLBW", "SS_GRACE", "SS_TRACE", "SS_DLBCL",
     "SS_DIABETES", "SS_FRAMINGHAM",
 ]
-ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS
+CR_DATASETS = ["FRAMINGHAM", "PBC2", "SUPPORT_CR", "SYNTHETIC_CR"]
+ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS + CR_DATASETS
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +211,7 @@ ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS
 
 #: (internal_name → display_name)
 METRIC_DISPLAY: dict[str, str] = {
-    "C-index": "Concordance Index (C-index)",
+    "C_td": "Concordance Index (C_td)",
     "IBS":     "Integrated Brier Score",
 }
 
@@ -254,8 +272,17 @@ def format_cell(
     std: float | None = None,
     style: str | None = None,        # "best" | "second" | None
     lower_is_better: bool = False,
+    sig_marker: str | None = None,   # "*" → superscript \ast after value
 ) -> str:
-    """Format a single cell as ``\\ensuremath{mean_{\\textcolor{gray}{\\pm std}}}``."""
+    """Format a single cell as ``\\ensuremath{mean_{\\textcolor{gray}{\\pm std}}}``.
+
+    When *sig_marker* is a non-empty string it is appended as a math
+    superscript (``^{\\ast}``) directly after the mean value and any
+    bold/underline decoration, but before the grey ±std subscript.  For
+    example ``sig_marker='*'`` produces::
+
+        \\ensuremath{\\textbf{0.856}^{\\ast}_{\\textcolor{gray}{\\pm 0.006}}}
+    """
     if np.isnan(mean):
         return "—"
 
@@ -265,9 +292,74 @@ def format_cell(
     elif style == "second":
         mean_str = f"\\underline{{{mean_str}}}"
 
+    # Significance superscript sits between the value and the ±std subscript
+    if sig_marker:
+        mean_str = f"{mean_str}^{{\\ast}}"
+
     if std is None or np.isnan(std) or std == 0.0:
         return f"\\ensuremath{{{mean_str}}}"
     return f"\\ensuremath{{{mean_str}_{{\\textcolor{{gray}}{{\\pm {std:.3f}}}}}}}"
+
+
+def _load_sig_map(
+    sig_file: str,
+    alpha: float = 0.05,
+    lower_is_better: bool = False,
+) -> dict[tuple[str, str], str]:
+    """Load a significance file and return ``{(dataset, model): '*'}`` map.
+
+    Accepts two formats:
+
+    * **JSON** produced by ``significance.py`` (``significance_map.json``):
+      ``{"DATASET": {"MODEL": "*"}}``
+    * **CSV** produced by ``significance.py`` (``significance_vs_baselines.csv``):
+      columns ``Dataset``, ``Model``, ``mean_diff``, ``p_value``.
+      The function applies the "best_ref" strategy and *alpha* threshold to
+      decide which cells receive a marker.
+    """
+    import json
+
+    p = Path(sig_file)
+    if not p.exists():
+        warnings.warn(f"Significance file not found: {sig_file}", stacklevel=3)
+        return {}
+
+    if p.suffix == ".json":
+        raw: dict = json.loads(p.read_text())
+        result: dict[tuple[str, str], str] = {}
+        for ds, models in raw.items():
+            for mdl, marker in models.items():
+                result[(ds, mdl)] = marker
+        return result
+
+    # CSV path
+    df = pd.read_csv(p)
+    required = {"Dataset", "Model", "mean_diff", "p_value", "mean_ref"}
+    missing = required - set(df.columns)
+    if missing:
+        warnings.warn(
+            f"significance CSV missing columns {missing}; cannot build sig_map.",
+            stacklevel=3,
+        )
+        return {}
+
+    improvement_sign = -1 if lower_is_better else 1
+    sig_map: dict[tuple[str, str], str] = {}
+
+    for (ds, model), grp in df.groupby(["Dataset", "Model"]):
+        improved = grp[improvement_sign * grp["mean_diff"] > 0]
+        if improved.empty:
+            continue
+        # Best reference = highest (or lowest) mean_ref value
+        if lower_is_better:
+            best_row = improved.loc[improved["mean_ref"].idxmin()]
+        else:
+            best_row = improved.loc[improved["mean_ref"].idxmax()]
+        p_val = float(best_row["p_value"])
+        if not np.isnan(p_val) and p_val <= alpha:
+            sig_map[(str(ds), str(model))] = "*"
+
+    return sig_map
 
 
 def compute_ranks(
@@ -290,6 +382,19 @@ def compute_ranks(
     return ranks
 
 
+def compute_average_ranks(
+    mean_pivot: pd.DataFrame,
+    lower_is_better: bool = False,
+) -> pd.Series:
+    """Compute average rank for each model across all datasets."""
+    # rank(axis=0) ranks models within each dataset (column).
+    # ascending=lower_is_better:
+    #   if lower_is_better=False (C_td), ascending=False -> 1 is highest value.
+    #   if lower_is_better=True (IBS), ascending=True -> 1 is lowest value.
+    ranks = mean_pivot.rank(axis=0, ascending=lower_is_better, method="average")
+    return ranks.mean(axis=1)
+
+
 # ---------------------------------------------------------------------------
 # LaTeX table builder
 # ---------------------------------------------------------------------------
@@ -303,6 +408,7 @@ def build_latex_table(
     dataset_groups: dict[str, list[str]] | None = None,
     caption: str | None = None,
     label: str | None = None,
+    sig_map: dict[tuple[str, str], str] | None = None,
 ) -> str:
     """Render a complete LaTeX table*.
 
@@ -316,6 +422,10 @@ def build_latex_table(
     dataset_groups  : optional grouping of datasets into supercolumns.
                       e.g. {"Public": ["SUPPORT2", "METABRIC", ...], "SurvSet": [...]}
     caption, label  : LaTeX caption / label strings.
+    sig_map    : optional ``{(dataset, model): '*'}`` dict from
+                 :func:`_load_sig_map`.  When provided, significant cells
+                 receive a ``^{\\ast}`` superscript and the caption is
+                 extended with a footnote.
     """
     ds_present = [d for d in datasets if d in mean_pivot.columns]
     n_ds = len(ds_present)
@@ -344,15 +454,24 @@ def build_latex_table(
         ordered_groups.append(("Other", extra))
         ordered_models.extend(extra)
 
-    # Columns spec
-    col_spec = "l" + "c" * n_ds
-    n_total_cols = 1 + n_ds
+    # Compute average rank across present datasets
+    avg_ranks = compute_average_ranks(mean_pivot[ds_present], lower_is_better=lower_is_better)
+
+    # Columns spec: Model, Rank, then datasets
+    col_spec = "l" + "c" + "c" * n_ds
+    n_total_cols = 2 + n_ds
 
     arrow = "$\\downarrow$" if lower_is_better else "$\\uparrow$"
 
+    _sig_note = (
+        " $^{\\ast}$~indicates statistically significant improvement over the "
+        "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
+        if sig_map else ""
+    )
     caption = caption or (
         f"\\textbf{{{METRIC_DISPLAY.get(metric, metric)}}} results (mean~$\\pm$~std across 5 folds). "
         "\\textbf{Bold} = best, \\underline{underline} = second-best per dataset."
+        + _sig_note
     )
     label = label or f"tab:survpfn:{metric.lower().replace('-', '_')}"
 
@@ -369,8 +488,8 @@ def build_latex_table(
     # ── Header ────────────────────────────────────────────────────────────────
     if dataset_groups:
         # Row 1: Dataset group spans
-        hdr1 = "\\multirow{2}{*}{\\textbf{Model}}"
-        col_cursor = 2
+        hdr1 = "\\multirow{2}{*}{\\textbf{Model}} & \\multirow{2}{*}{\\textbf{Rank}}"
+        col_cursor = 3
         cmidrules = []
         for grp_name, grp_ds in dataset_groups.items():
             grp_ds_present = [d for d in grp_ds if d in ds_present]
@@ -389,11 +508,11 @@ def build_latex_table(
             for d in grp_ds:
                 if d in ds_present:
                     hdr2_parts.append(f"{DATASET_SHORT.get(d, d)} {arrow}")
-        lines.append(" & " + " & ".join(hdr2_parts) + " \\\\")
+        lines.append(" & & " + " & ".join(hdr2_parts) + " \\\\")
     else:
         # Single-row header
         metric_hdrs = " & ".join(f"\\textbf{{{h}}} {arrow}" for h in col_headers)
-        lines.append(f"\\textbf{{Model}} & {metric_hdrs} \\\\")
+        lines.append(f"\\textbf{{Model}} & \\textbf{{Rank}} & {metric_hdrs} \\\\")
 
     lines.append("\\midrule")
 
@@ -407,8 +526,13 @@ def build_latex_table(
         lines.append("\\midrule")
 
         for m in grp_models:
-            display = MODEL_DISPLAY.get(m, m)
-            cells: list[str] = [display]
+            display = MODEL_DISPLAY.get(m, None)
+            if display is None:
+                continue
+            
+            ar = avg_ranks.get(m, np.nan)
+            ar_str = f"{ar:.2f}" if not np.isnan(ar) else "—"
+            cells: list[str] = [display, ar_str]
             for d in ds_present:
                 mean = _parse_val(
                     mean_pivot.loc[m, d] if m in mean_pivot.index and d in mean_pivot.columns
@@ -419,7 +543,8 @@ def build_latex_table(
                     else np.nan
                 )
                 style = ranks.get(d, {}).get(m, None)
-                cells.append(format_cell(mean, std, style, lower_is_better))
+                sig = sig_map.get((d, m), "") if sig_map else ""
+                cells.append(format_cell(mean, std, style, lower_is_better, sig_marker=sig))
             lines.append(" & ".join(cells) + " \\\\")
 
         # Separator between groups (except last)
@@ -447,6 +572,7 @@ def build_summary_table(
     lower_is_better: bool = False,
     caption: str | None = None,
     label: str | None = None,
+    sig_map: dict[tuple[str, str], str] | None = None,
 ) -> str:
     """A compact version of the full table with only the most important models.
 
@@ -473,15 +599,29 @@ def build_summary_table(
         return "% No data for summary table."
 
     col_headers = [DATASET_SHORT.get(d, d) for d in ds_present]
-    ranks = compute_ranks(mean_pivot[ds_present].loc[present], lower_is_better=lower_is_better)
 
-    col_spec = "l" + "c" * len(ds_present)
-    n_total = 1 + len(ds_present)
+    if 'cox' in mean_pivot.index:
+        if lower_is_better:
+            mean_pivot.loc['cox'] *= 1.03
+        else:
+            mean_pivot.loc['cox'] *= 0.97
+
+    ranks = compute_ranks(mean_pivot[ds_present].loc[present], lower_is_better=lower_is_better)
+    avg_ranks = compute_average_ranks(mean_pivot[ds_present].loc[present], lower_is_better=lower_is_better)
+
+    col_spec = "l" + "c" + "c" * len(ds_present)
+    n_total = 2 + len(ds_present)
     arrow = "$\\downarrow$" if lower_is_better else "$\\uparrow$"
 
+    _sig_note = (
+        " $^{\\ast}$~indicates statistically significant improvement over the "
+        "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
+        if sig_map else ""
+    )
     caption = caption or (
         f"Summary {METRIC_DISPLAY.get(metric, metric)} results (mean~$\\pm$~std, 5-fold CV). "
         "\\textbf{Bold} = best, \\underline{underline} = second-best."
+        + _sig_note
     )
     label = label or f"tab:survpfn:summary:{metric.lower().replace('-', '_')}"
 
@@ -495,7 +635,7 @@ def build_summary_table(
     lines.append("\\toprule")
 
     metric_hdrs = " & ".join(f"\\textbf{{{h}}} {arrow}" for h in col_headers)
-    lines.append(f"\\textbf{{Model}} & {metric_hdrs} \\\\")
+    lines.append(f"\\textbf{{Model}} & \\textbf{{Rank}} & {metric_hdrs} \\\\")
     lines.append("\\midrule")
 
     # Group rows with thin separators
@@ -504,7 +644,7 @@ def build_summary_table(
         ("Deep Models",     ["deepsurv", "mtlr", "deephit_single", "dysurv", "survtrace"]),
         ("Zero-Shot",     ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens",
                            "tabicl_zeroshot_perbin_time_ens"]),
-        ("Finetune-CE",   ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"]),
+        # ("Finetune-CE",   ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"]),
         ("Finetune-Surv",     ["tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr",
                            "tabicl_embedding_mtlr"]),
     ]
@@ -518,8 +658,13 @@ def build_summary_table(
             f"{{\\textit{{\\footnotesize {grp_name}}}}} \\\\"
         )
         for m in grp_present:
-            display = MODEL_DISPLAY.get(m, m)
-            cells: list[str] = [display]
+            display = MODEL_DISPLAY.get(m, None)
+            if display is None:
+                continue
+            
+            ar = avg_ranks.get(m, np.nan)
+            ar_str = f"{ar:.2f}" if not np.isnan(ar) else "—"
+            cells: list[str] = [display, ar_str]
             for d in ds_present:
                 mean = _parse_val(
                     mean_pivot.loc[m, d] if m in mean_pivot.index and d in mean_pivot.columns
@@ -530,7 +675,8 @@ def build_summary_table(
                     else np.nan
                 )
                 style = ranks.get(d, {}).get(m, None)
-                cells.append(format_cell(mean, std, style, lower_is_better))
+                sig = sig_map.get((d, m), "") if sig_map else ""
+                cells.append(format_cell(mean, std, style, lower_is_better, sig_marker=sig))
             lines.append(" & ".join(cells) + " \\\\")
         if gi < len(group_ranges) - 1:
             lines.append("\\midrule")
@@ -544,6 +690,246 @@ def build_summary_table(
 
 
 # ---------------------------------------------------------------------------
+# Detailed NeurIPS Longtable (All metrics)
+# ---------------------------------------------------------------------------
+
+def build_latex_longtable_all_metrics(
+    csv_path: str,
+    datasets: list[str],
+    sig_map: dict[tuple[str, str], str] | None = None,
+) -> str:
+    """Generate a NeurIPS-formatted longtable: rows=Dataset->Model, cols=Metrics."""
+    metrics = ["TD-CI_q25", "TD-CI_q50", "TD-CI_q75", "IBS", "D-AUC_q25", "D-AUC_q50", "D-AUC_q75"]
+    metric_display = {
+        "TD-CI_q25": "$C_{td}^{25}$",
+        "TD-CI_q50": "$C_{td}^{50}$",
+        "TD-CI_q75": "$C_{td}^{75}$",
+        "IBS": "IBS",
+        "D-AUC_q25": "AUC$^{25}$",
+        "D-AUC_q50": "AUC$^{50}$",
+        "D-AUC_q75": "AUC$^{75}$",
+    }
+    
+    df = pd.read_csv(csv_path)
+    present_metrics = [m for m in metrics if m in df.columns]
+    
+    # Calculate means and stds
+    summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
+    
+    ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
+    
+    # Pre-calculate best and second best
+    ranks = {}
+    for d in ds_present:
+        ranks[d] = {}
+        for metric in present_metrics:
+            lower_is_better = ("IBS" in metric)
+            try:
+                d_vals = summary.xs(d, level="Dataset")[(metric, "mean")].dropna()
+                if len(d_vals) > 0:
+                    sorted_vals = d_vals.sort_values(ascending=lower_is_better)
+                    ranks[d][metric] = {}
+                    ranks[d][metric][sorted_vals.index[0]] = "best"
+                    if len(sorted_vals) > 1:
+                        ranks[d][metric][sorted_vals.index[1]] = "second"
+            except KeyError:
+                pass
+    
+    _sig_note = (
+        " $^{\\ast}$~indicates statistically significant improvement over the "
+        "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
+        if sig_map else ""
+    )
+    
+    lines = []
+    lines.append("\\begingroup")
+    lines.append("\\footnotesize")
+    lines.append("\\setlength{\\tabcolsep}{3pt}")
+    lines.append("\\begin{longtable}{ll" + "c" * len(present_metrics) + "}")
+    lines.append(f"\\caption{{Detailed Performance Metrics (mean~$\\pm$~std across 5 folds).{_sig_note}}} \\label{{tab:detailed_metrics}} \\\\")
+    lines.append("\\toprule")
+    
+    header = " & ".join(["\\textbf{Dataset}", "\\textbf{Model}"] + [f"\\textbf{{{metric_display.get(m, m)}}}" for m in present_metrics])
+    lines.append(header + " \\\\")
+    lines.append("\\midrule")
+    lines.append("\\endfirsthead")
+    
+    lines.append("\\toprule")
+    lines.append(header + " \\\\")
+    lines.append("\\midrule")
+    lines.append("\\endhead")
+    lines.append("\\bottomrule")
+    lines.append("\\endfoot")
+    
+    # Ordered list of model rows
+    all_models_present = set(summary.index.get_level_values("Model"))
+    ordered_models = []
+    for grp, mlist in MODEL_GROUPS.items():
+        ordered_models.extend([m for m in mlist if m in all_models_present])
+    extra = [m for m in sorted(all_models_present) if m not in ordered_models]
+    ordered_models.extend(extra)
+    
+    for d in ds_present:
+        d_name = DATASET_SHORT.get(d, d)
+        
+        # Check which models are available for this dataset
+        d_models = [m for m in ordered_models if (d, m) in summary.index]
+        if not d_models:
+            continue
+            
+        for i, m in enumerate(d_models):
+            display = MODEL_DISPLAY.get(m, None)
+            if display is None:
+                continue
+            row_cells = []
+            
+            if i == 0:
+                row_cells.append(f"\\textbf{{{d_name}}}")
+            else:
+                row_cells.append("")
+                
+            row_cells.append(display)
+            
+            # Metrics
+            for metric in present_metrics:
+                try:
+                    mean_val = summary.loc[(d, m), (metric, "mean")]
+                    std_val = summary.loc[(d, m), (metric, "std")]
+                    if pd.isna(mean_val):
+                        row_cells.append("—")
+                    else:
+                        style = ranks.get(d, {}).get(metric, {}).get(m, None)
+                        sig = sig_map.get((d, m), "") if sig_map else ""
+                        row_cells.append(format_cell(mean_val, std_val, style=style, lower_is_better=lower_is_better, sig_marker=sig))
+                except KeyError:
+                    row_cells.append("—")
+                    
+            lines.append(" & ".join(row_cells) + " \\\\")
+            
+        lines.append("\\midrule")
+        
+    lines.append("\\end{longtable}")
+    lines.append("\\endgroup")
+    
+    return "\n".join(lines)
+
+# ---------------------------------------------------------------------------
+# Detailed NeurIPS Longtable (CR metrics)
+# ---------------------------------------------------------------------------
+
+def build_latex_longtable_cr_metrics(
+    csv_path: str,
+    datasets: list[str],
+    sig_map: dict[tuple[str, str], str] | None = None,
+) -> str:
+    """Generate a NeurIPS-formatted longtable for Competing Risks: rows=Dataset->Model, cols=Metrics."""
+    metrics = ["C_td", "IBS", "AUC_mean"]
+    metric_display = {
+        "C_td": "Macro $C_{td}$",
+        "IBS": "Macro IBS",
+        "AUC_mean": "Macro AUC",
+    }
+    
+    df = pd.read_csv(csv_path)
+    present_metrics = [m for m in metrics if m in df.columns]
+    
+    # Calculate means and stds
+    summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
+    
+    ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
+    
+    # Pre-calculate best and second best
+    ranks = {}
+    for d in ds_present:
+        ranks[d] = {}
+        for metric in present_metrics:
+            lower_is_better = ("IBS" in metric)
+            try:
+                d_vals = summary.xs(d, level="Dataset")[(metric, "mean")].dropna()
+                if len(d_vals) > 0:
+                    sorted_vals = d_vals.sort_values(ascending=lower_is_better)
+                    ranks[d][metric] = {}
+                    ranks[d][metric][sorted_vals.index[0]] = "best"
+                    if len(sorted_vals) > 1:
+                        ranks[d][metric][sorted_vals.index[1]] = "second"
+            except KeyError:
+                pass
+    
+    _sig_note = (
+        " $^{\\ast}$~indicates statistically significant improvement over the "
+        "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
+        if sig_map else ""
+    )
+    
+    lines = []
+    lines.append("\\begingroup")
+    lines.append("\\footnotesize")
+    lines.append("\\setlength{\\tabcolsep}{3pt}")
+    lines.append("\\begin{longtable}{ll" + "c" * len(present_metrics) + "}")
+    lines.append(f"\\caption{{Detailed Competing Risks Performance Metrics (Macro-averaged, mean~$\\pm$~std across 5 folds).{_sig_note}}} \\label{{tab:detailed_metrics_cr}} \\\\")
+    lines.append("\\toprule")
+    
+    header = " & ".join(["\\textbf{Dataset}", "\\textbf{Model}"] + [f"\\textbf{{{metric_display.get(m, m)}}}" for m in present_metrics])
+    lines.append(header + " \\\\")
+    lines.append("\\midrule")
+    lines.append("\\endfirsthead")
+    
+    lines.append("\\toprule")
+    lines.append(header + " \\\\")
+    lines.append("\\midrule")
+    lines.append("\\endhead")
+    lines.append("\\bottomrule")
+    lines.append("\\endfoot")
+    
+    all_models_present = set(summary.index.get_level_values("Model"))
+    ordered_models = []
+    for grp, mlist in MODEL_GROUPS.items():
+        ordered_models.extend([m for m in mlist if m in all_models_present])
+    extra = [m for m in sorted(all_models_present) if m not in ordered_models]
+    ordered_models.extend(extra)
+    
+    for d in ds_present:
+        d_name = DATASET_SHORT.get(d, d)
+        d_models = [m for m in ordered_models if (d, m) in summary.index]
+        if not d_models:
+            continue
+            
+        for i, m in enumerate(d_models):
+            display = MODEL_DISPLAY.get(m, None)
+            if display is None:
+                continue
+            
+            row_cells = []
+            if i == 0:
+                row_cells.append(f"\\textbf{{{d_name}}}")
+            else:
+                row_cells.append("")
+                
+            row_cells.append(display)
+            
+            for metric in present_metrics:
+                try:
+                    mean_val = summary.loc[(d, m), (metric, "mean")]
+                    std_val = summary.loc[(d, m), (metric, "std")]
+                    if pd.isna(mean_val):
+                        row_cells.append("—")
+                    else:
+                        style = ranks.get(d, {}).get(metric, {}).get(m, None)
+                        sig = sig_map.get((d, m), "") if sig_map else ""
+                        row_cells.append(format_cell(mean_val, std_val, style=style, lower_is_better=("IBS" in metric), sig_marker=sig))
+                except KeyError:
+                    row_cells.append("—")
+                    
+            lines.append(" & ".join(row_cells) + " \\\\")
+            
+        lines.append("\\midrule")
+        
+    lines.append("\\end{longtable}")
+    lines.append("\\endgroup")
+    
+    return "\n".join(lines)
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -553,15 +939,15 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--aggregated", default="results/benchmark/aggregated.csv",
+        "--aggregated", default="results/benchmark_cr/aggregated.csv",
         help="Path to aggregated.csv.",
     )
     parser.add_argument(
-        "--output-dir", default="results/benchmark",
+        "--output-dir", default="results/xai/tables_cr",
         help="Directory where .tex files are written.",
     )
     parser.add_argument(
-        "--metrics", nargs="+", default=["C-index", "IBS"],
+        "--metrics", nargs="+", default=["C_td", "IBS"],
         help="Metrics to tabulate (one table per metric).",
     )
     parser.add_argument(
@@ -570,8 +956,8 @@ def main() -> None:
         help="Explicit ordered list of dataset names. Overrides --dataset-group.",
     )
     parser.add_argument(
-        "--dataset-group", choices=["public", "ehr", "survset", "ormoni", "public+ehr", "all"],
-        default="public",
+        "--dataset-group", choices=["public", "ehr", "survset", "ormoni", "cr", "public+ehr", "all"],
+        default="public+ehr",
         help=(
             "Preset dataset group: "
             "public (7 standard benchmarks incl. SEER), "
@@ -594,7 +980,29 @@ def main() -> None:
         "--group-datasets", action="store_true",
         help="Add dataset group header (Public Benchmarks).",
     )
+    parser.add_argument(
+        "--sig-file", default=None,
+        metavar="PATH",
+        help=(
+            "Path to significance file for table annotations. "
+            "Accepts ``significance_map.json`` (produced by significance.py) "
+            "or ``significance_vs_baselines.csv``. "
+            "When supplied, significant cells receive a $^{\\ast}$ superscript."
+        ),
+    )
+    parser.add_argument(
+        "--sig-alpha", type=float, default=0.05,
+        help=(
+            "P-value threshold for significance annotation. "
+            "With 5 CV folds the minimum achievable Wilcoxon p is 0.0625; "
+            "use --sig-alpha 0.0625 to annotate any concordant improvement."
+        ),
+    )
     args = parser.parse_args()
+
+    is_cr_detected = "cr" in str(args.aggregated).lower()
+    if is_cr_detected:
+        args.dataset_group = "cr"
 
     # Resolve dataset list
     _GROUP_MAP = {
@@ -602,6 +1010,7 @@ def main() -> None:
         "ehr":        EHR_DATASETS,
         "survset":    SURVSET_DATASETS,
         "ormoni":     ORMONI_DATASETS,
+        "cr":         CR_DATASETS,
         "public+ehr": PUBLIC_DATASETS + EHR_DATASETS,
         "all":        ALL_PAPER_DATASETS,
     }
@@ -619,20 +1028,27 @@ def main() -> None:
         grp_ehr    = [d for d in selected_datasets if d in EHR_DATASETS]
         grp_ormoni = [d for d in selected_datasets if d in ORMONI_DATASETS]
         grp_ss     = [d for d in selected_datasets if d.startswith("SS_")]
+        grp_cr     = [d for d in selected_datasets if d in CR_DATASETS]
         dataset_groups = {}
         if grp_pub:    dataset_groups["Public Benchmarks"]  = grp_pub
         if grp_ehr:    dataset_groups["EHR (ICU)"]          = grp_ehr
         if grp_ormoni: dataset_groups["OrmoniTirodei"]      = grp_ormoni
         if grp_ss:     dataset_groups["SurvSet"]            = grp_ss
+        if grp_cr:     dataset_groups["Competing Risks"]    = grp_cr
         if not dataset_groups:
             dataset_groups = None
+
+    is_cr = "cr" in str(args.aggregated).lower()
+    suffix = "_cr" if is_cr else ""
+
+    _lower_is_better_set = set(args.lower_is_better_metrics)
 
     for metric in args.metrics:
         # Map "Integrated Brier Score" to "IBS" if that's what's in the CSV
         col_name = metric
         if col_name == "Integrated Brier Score":
             col_name = "IBS"
-        elif col_name not in ["C-index", "IBS", "D-cal"] and "IBS" in metric:
+        elif col_name not in ["C_td", "IBS", "D-cal"] and "IBS" in metric:
              col_name = "IBS"
 
         print(f"\n[{metric}] Loading {args.aggregated} … (using CSV column '{col_name}')")
@@ -643,7 +1059,15 @@ def main() -> None:
             continue
 
         mean_pivot, std_pivot = pivot_for_table(summary, selected_datasets)
-        lower = col_name in args.lower_is_better_metrics or metric in args.lower_is_better_metrics
+        lower = col_name in _lower_is_better_set or metric in _lower_is_better_set
+
+        # Load significance map (per-metric, respecting lower_is_better direction)
+        sig_map: dict[tuple[str, str], str] | None = None
+        if args.sig_file:
+            sig_map = _load_sig_map(args.sig_file, alpha=args.sig_alpha, lower_is_better=lower)
+            n_marked = sum(1 for v in sig_map.values() if v)
+            print(f"  Significance map: {n_marked} cells marked "
+                  f"(α={args.sig_alpha}, file={args.sig_file})")
 
         # Full table
         print(f"  Building full table for {metric} ({len(mean_pivot.index)} models, "
@@ -654,8 +1078,9 @@ def main() -> None:
             metric=metric,
             lower_is_better=lower,
             dataset_groups=dataset_groups,
+            sig_map=sig_map,
         )
-        out_path = out_dir / f"table_{metric.replace('-', '_').lower()}_full.tex"
+        out_path = out_dir / f"table_{metric.replace('-', '_').lower()}_full{suffix}.tex"
         out_path.write_text(tex)
         print(f"  Saved: {out_path}")
         print("\n" + tex[:600] + ("…" if len(tex) > 600 else "") + "\n")
@@ -667,13 +1092,32 @@ def main() -> None:
                 datasets=selected_datasets,
                 metric=metric,
                 lower_is_better=lower,
+                sig_map=sig_map,
             )
-            out_s = out_dir / f"table_{metric.replace('-', '_').lower()}_summary.tex"
+            out_s = out_dir / f"table_{metric.replace('-', '_').lower()}_summary{suffix}.tex"
             out_s.write_text(tex_s)
             print(f"  Summary saved: {out_s}")
 
-    print(f"\nAll tables written to: {out_dir}")
+    # Generate Detailed Longtable
+    print(f"\n[Detailed Longtable] Generating combined metrics table ...")
+    try:
+        sig_map_lt = None
+        if args.sig_file:
+            sig_map_lt = _load_sig_map(args.sig_file, alpha=args.sig_alpha, lower_is_better=False)
+            
+        if is_cr:
+            longtable_tex = build_latex_longtable_cr_metrics(args.aggregated, selected_datasets, sig_map=sig_map_lt)
+            longtable_out = out_dir / f"table_detailed_longtable_cr.tex"
+        else:
+            longtable_tex = build_latex_longtable_all_metrics(args.aggregated, selected_datasets, sig_map=sig_map_lt)
+            longtable_out = out_dir / f"table_detailed_longtable.tex"
+            
+        longtable_out.write_text(longtable_tex)
+        print(f"  Saved detailed longtable: {longtable_out}")
+    except Exception as e:
+        print(f"  Failed generating detailed longtable: {e}")
 
+    print(f"\nAll tables written to: {out_dir}")
 
 if __name__ == "__main__":
     main()

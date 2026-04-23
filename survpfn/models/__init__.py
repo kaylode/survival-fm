@@ -21,6 +21,9 @@ import torch
 
 from survpfn.utils.config import FMConfig
 
+# ── Valid Binning Schemes ─────────────────────────────────────────────────────
+AVAILABLE_BINNING_SCHEMES = ["quantile", "uniform", "hybrid"]
+
 # ── shared helpers ────────────────────────────────────────────────────────────
 from .shared.zeroshot import train_zeroshot_surv
 from .shared.binning import resolve_num_durations
@@ -36,27 +39,42 @@ from .sr_models.dysurv import train_dysurv
 
 # ── CR models ─────────────────────────────────────────────────────────────────
 from .cr_models.classical import run_competing_risks_cox, run_aalen_johansen, run_fine_gray, run_survival_boost_cr
-from .cr_models.deephit import train_deephit_cr
+from .cr_models.deep_cr import train_deephit_cr
+from .cr_models.dysurv.survival import train_dysurv_cr
+from .cr_models.survtrace.survival import train_survtrace_cr
 
 # ── FM entry points ───────────────────────────────────────────────────────────
 from .tabpfn import TabPFNSurvPH, TabPFNSurvPHFinetune
 from .tabdpt import TabDPTSurvPH, TabDPTSurvPHFinetune
 from .tabicl import TabICLSurvPH, TabICLSurvPHFinetune
 
+# ── CR fine-tuning wrappers ──────────────────────────────────────────────────
+from .shared.cr import TabPFNCRPH, TabDPTCRPH, TabICLCRPH, CRZeroShotPredictor
+from .shared.cr.zeroshot import train_cr_zeroshot
+
 # ---------------------------------------------------------------------------
 # Internal wrapper factories
 # ---------------------------------------------------------------------------
 
-def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_type: str = "sr") -> Callable:
+def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_type: str = "sr", binning_scheme: str = "quantile") -> Callable:
     """Unified factory for both Joint and Frozen-Backbone survival models.
-    
-    Replaces both _embedding_wrapper and _joint_wrapper.
+
+    For ``task_type="cr"`` the factory uses the ``BaseCRJointFinetune``
+    subclasses (``TabPFNCRPH``, etc.) which carry fixed loss functions and
+    correct output orientation.  SR models use the original ``SurvPH`` classes.
     """
-    _SurvPH = {
-        "tabpfn": TabPFNSurvPH, 
-        "tabdpt": TabDPTSurvPH, 
-        "tabicl": TabICLSurvPH, 
-    }[fm_name]
+    if task_type == "cr":
+        _SurvPH = {
+            "tabpfn": TabPFNCRPH,
+            "tabdpt": TabDPTCRPH,
+            "tabicl": TabICLCRPH,
+        }[fm_name]
+    else:
+        _SurvPH = {
+            "tabpfn": TabPFNSurvPH,
+            "tabdpt": TabDPTSurvPH,
+            "tabicl": TabICLSurvPH,
+        }[fm_name]
 
     def _fn(df_train, df_test, dur_col, ev_col,
             tune=False, n_trials=10, out_dir="results",
@@ -81,21 +99,26 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
             num_durations=num_durations,
             head_num_nodes=cfg.head_hidden_dims,
             dropout=cfg.dropout,
+            patience=cfg.patience,
+            random_state=cfg.random_state,
             learning_rate=cfg.learning_rate,
-            cr_loss_type=cfg.cr_loss_type,
             use_adapter=cfg.use_adapter,
             input_dim=len(feat_cols),
             context_size=cfg.context_size,
             device=cfg.device,
             freeze_backbone=freeze_backbone,
+            binning_scheme=binning_scheme,
+            early_event_quantile=cfg.early_event_quantile,
+            early_bin_frac=cfg.early_bin_frac,
+            epochs=cfg.epochs,
+            batch_size=cfg.batch_size,
+            sampling_ratio=cfg.sampling_ratio,
         )
 
         wrapper.fit(
             df_train[feat_cols].values.astype(np.float32),
             df_train[dur_col].values,
             df_train[ev_col].values,
-            epochs=cfg.epochs,
-            batch_size=cfg.batch_size,
             verbose=cfg.verbose,
         )
 
@@ -103,8 +126,9 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
         surv_out = wrapper.predict_survival_df(x_test, n_ensemble=cfg.n_ensemble)
 
         if task_type == "cr":
-            cifs = surv_out  # List[pd.DataFrame]
-            risk = 1.0 - cifs[0].iloc[-1].values
+            cifs = surv_out  # List[pd.DataFrame] — rows=times, cols=patients
+            # CIF_1 at last time is a valid risk score (higher = more likely event)
+            risk = cifs[0].iloc[-1].values
             return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
         else:
             if head_type != 'cox':
@@ -118,7 +142,7 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
     return _fn
 
 
-def _finetune_wrapper(fm_name: str) -> Callable:
+def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile") -> Callable:
     """Factory for temporally expanded survival finetuning."""
     _SurvPH = {
         "tabpfn": TabPFNSurvPHFinetune,
@@ -148,13 +172,18 @@ def _finetune_wrapper(fm_name: str) -> Callable:
             batch_size=cfg.batch_size,
             device=cfg.device,
             context_size=cfg.context_size,
+            binning_scheme=binning_scheme,
+            early_event_quantile=cfg.early_event_quantile,
+            early_bin_frac=cfg.early_bin_frac,
+            patience=cfg.patience,
+            sampling_ratio=cfg.sampling_ratio,
+            random_state=cfg.random_state,
         )
 
         wrapper.fit(
             df_train[feat_cols].values.astype(np.float32),
             df_train[dur_col].values,
             df_train[ev_col].values,
-            sampling_ratio=cfg.sampling_ratio,
             verbose=cfg.verbose,
         )
 
@@ -168,26 +197,46 @@ def _finetune_wrapper(fm_name: str) -> Callable:
     return _fn
 
 
-def _zeroshot_wrapper(backbone: str, method: str = "single_context", use_time_bin_encoder: bool = False, n_estimators: int = 1) -> Callable:
-    """Strategy 3 — zero-shot ICL, no head training."""
+def _zeroshot_wrapper(backbone: str, method: str = "single_context", use_time_bin_encoder: bool = False, n_estimators: int = 1, binning_scheme: str = "quantile") -> Callable:
+    """Strategy 3 — zero-shot ICL, no head training.
+
+    For single-risk data (max event code == 1) delegates to
+    ``train_zeroshot_surv`` (``ZeroShotSurvivalPredictor``).
+    For competing-risks data (max event code > 1) delegates to
+    ``train_cr_zeroshot`` (``CRZeroShotPredictor``).
+    """
     def _fn(df_train, df_test, dur_col, ev_col,
             tune=False, n_trials=10, out_dir="results",
             cfg: Optional[FMConfig] = None, **kw):
         cfg = cfg or FMConfig.from_kwargs(**kw)
         num_events = int(df_train[ev_col].max())
-        return train_zeroshot_surv(
-            df_train, df_test, dur_col, ev_col,
+
+        common_kw = dict(
             backbone=backbone,
             method=method,
             n_bins=cfg.zeroshot_n_bins,
             context_size=cfg.context_size,
             device=cfg.device,
-            cr_method=cfg.zeroshot_cr_method if num_events > 1 else "multinomial",
             max_context_size=cfg.context_size,
             use_time_bin_encoder=use_time_bin_encoder,
             n_estimators=n_estimators,
-            output_dir=out_dir,
+            binning_scheme=binning_scheme,
+            early_event_quantile=cfg.early_event_quantile,
+            early_bin_frac=cfg.early_bin_frac,
         )
+
+        if num_events > 1:
+            # Competing risks: use CRZeroShotPredictor
+            return train_cr_zeroshot(
+                df_train, df_test, dur_col, ev_col,
+                cr_method=getattr(cfg, "zeroshot_cr_method", "per_event"),
+                **common_kw,
+            )
+        else:
+            return train_zeroshot_surv(
+                df_train, df_test, dur_col, ev_col,
+                **common_kw,
+            )
 
     _fn.__name__ = f"train_{backbone}_zeroshot_{method}"
     return _fn
@@ -261,22 +310,41 @@ ALL_MODELS: dict[str, Callable] = {
     "tabicl_zeroshot_perbin_time":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True),
     "tabicl_zeroshot_perbin_time_ens":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True, n_estimators=5),
 
+    # ---- Binning Schemes -----
+    "tabpfn_finetune_hybrid":       _finetune_wrapper("tabpfn", binning_scheme="hybrid"),
+    "tabdpt_finetune_hybrid":       _finetune_wrapper("tabdpt", binning_scheme="hybrid"),
+    "tabicl_finetune_hybrid":       _finetune_wrapper("tabicl", binning_scheme="hybrid"),
+
+    "tabpfn_zeroshot_hybrid":  _zeroshot_wrapper("tabpfn", method="per_bin", use_time_bin_encoder=True, n_estimators=5, binning_scheme="hybrid"),
+    "tabdpt_zeroshot_hybrid":  _zeroshot_wrapper("tabdpt", method="per_bin", use_time_bin_encoder=True, n_estimators=5, binning_scheme="hybrid"),
+    "tabicl_zeroshot_hybrid":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True, n_estimators=5, binning_scheme="hybrid"),
+
+    "tabpfn_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabpfn", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
+    "tabdpt_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabdpt", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
+    "tabicl_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabicl", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
+    
+    
+
+
     # ── Competing Risks (CR) ────────────────────────────────────────────────
     "cox_cr":             lambda df_tr, df_ts, dur, ev, **kw: run_competing_risks_cox(df_tr, df_ts, dur, ev, **kw),
     "aj_cr":              lambda df_tr, df_ts, dur, ev, **kw: run_aalen_johansen(df_tr, df_ts, dur, ev),
     "fine_gray_cr":       lambda df_tr, df_ts, dur, ev, **kw: run_fine_gray(df_tr, df_ts, dur, ev, **kw),
     "survival_boost_cr":  lambda df_tr, df_ts, dur, ev, **kw: run_survival_boost_cr(df_tr, df_ts, dur, ev, **kw),
     "deephit_cr":         lambda df_tr, df_ts, dur, ev, **kw: train_deephit_cr(df_tr, df_ts, dur, ev, **kw),
+    "dysurv_cr":          lambda df_tr, df_ts, dur, ev, **kw: train_dysurv_cr(df_tr, df_ts, dur, ev, **kw),
+    "survtrace_cr":       lambda df_tr, df_ts, dur, ev, **kw: train_survtrace_cr(df_tr, df_ts, dur, ev, **kw),
 
     # ── FM Fixed Embedding Models (CR) ──────────────────────────────────────
-    "tabpfn_embedding_deephit_cr": _fm_joint_wrapper("tabpfn", "deephit_cr", freeze_backbone=True, task_type="cr"),
-    "tabdpt_embedding_deephit_cr": _fm_joint_wrapper("tabdpt", "deephit_cr", freeze_backbone=True, task_type="cr"),
-    "tabicl_embedding_deephit_cr": _fm_joint_wrapper("tabicl", "deephit_cr", freeze_backbone=True, task_type="cr"),
+    "tabpfn_embedding_deephit_cr": _fm_joint_wrapper("tabpfn", "deephit", freeze_backbone=True, task_type="cr"),
+    "tabdpt_embedding_deephit_cr": _fm_joint_wrapper("tabdpt", "deephit", freeze_backbone=True, task_type="cr"),
+    "tabicl_embedding_deephit_cr": _fm_joint_wrapper("tabicl", "deephit", freeze_backbone=True, task_type="cr"),
 
-    # ── FM Joint Adaptation Models (CR) ─────────────────────────────────────
-    "tabpfn_joint_deephit_cr": _fm_joint_wrapper("tabpfn", "deephit_cr", freeze_backbone=False, task_type="cr"),
-    "tabdpt_joint_deephit_cr": _fm_joint_wrapper("tabdpt", "deephit_cr", freeze_backbone=False, task_type="cr"),
-    "tabicl_joint_deephit_cr": _fm_joint_wrapper("tabicl", "deephit_cr", freeze_backbone=False, task_type="cr"),
+
+    "tabpfn_embedding_cox_cr": _fm_joint_wrapper("tabpfn", "cox", freeze_backbone=True, task_type="cr"),
+    "tabdpt_embedding_cox_cr": _fm_joint_wrapper("tabdpt", "cox", freeze_backbone=True, task_type="cr"),
+    "tabicl_embedding_cox_cr": _fm_joint_wrapper("tabicl", "cox", freeze_backbone=True, task_type="cr"),
+
 
     # ── FM Zero-shot ICL (CR) ────────────────────────────────────────────────
     # Use per_bin + time-bin encoder for CR: produces a separate FM fit per
@@ -284,6 +352,9 @@ ALL_MODELS: dict[str, Callable] = {
     "tabpfn_zeroshot_cr":  _zeroshot_wrapper("tabpfn", method="per_bin", use_time_bin_encoder=True),
     "tabdpt_zeroshot_cr":  _zeroshot_wrapper("tabdpt", method="per_bin", use_time_bin_encoder=True),
     "tabicl_zeroshot_cr":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True),
+    "tabpfn_zeroshot_cr_ens":  _zeroshot_wrapper("tabpfn", method="per_bin", use_time_bin_encoder=True, n_estimators=5),
+    "tabdpt_zeroshot_cr_ens":  _zeroshot_wrapper("tabdpt", method="per_bin", use_time_bin_encoder=True, n_estimators=5),
+    "tabicl_zeroshot_cr_ens":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True, n_estimators=5),
 }
 
 __all__ = ["ALL_MODELS"]

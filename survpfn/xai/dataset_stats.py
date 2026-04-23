@@ -133,7 +133,7 @@ DISPLAY_NAME = {
     "ORMONI_TIRODEI_CV":        "OT-CV",
     "ORMONI_TIRODEI_MI":        "OT-MI",
     "ORMONI_TIRODEI_STROKE":    "OT-Stroke",
-    "ORMONI_TIRODEI_MORTALITY": "OT-Mortality",
+    "ORMONI_TIRODEI_MORTALITY": "IHD Dataset",
     "FRAMINGHAM":               "Framingham",
     "PBC2":                     "PBC2",
     "SUPPORT_CR":               "SUPPORT (CR)",
@@ -684,10 +684,10 @@ def generate_latex_table(df: pd.DataFrame, out_dir: Path, group: str) -> None:
     if group == "all":
         # Multi-section: public, ehr, survset
         sections = [
-            ("(a)~Standard Public Benchmarks",
-             ["VETERANS", "WHAS500", "METABRIC", "GBSG", "FLCHAIN", "SUPPORT2", "SEER"]),
-            ("(b)~Large-Scale EHR Datasets",
-             ["EICU_SURV", "MIMIC_SURV_B"]),
+            ("(a)~Private EHR Benchmark",
+             ["ORMONI_TIRODEI_MORTALITY"]),
+            ("(b)~Public EHR Benchmarks",
+             ["VETERANS", "WHAS500", "METABRIC", "GBSG", "FLCHAIN", "SUPPORT2", "SEER", "EICU_SURV", "MIMIC_SURV_B"]),
             (r"(c)~SurvSet Benchmark Subset~\cite{drysdale2022survset}",
              df[df["Dataset"].str.startswith("SS_")]["Dataset"].tolist()),
         ]
