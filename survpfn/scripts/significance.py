@@ -603,7 +603,7 @@ def main() -> None:
         help="Path to aggregated.csv produced by scripts/aggregate.py.",
     )
     parser.add_argument(
-        "--output-dir", default="results/benchmark",
+        "--output-dir", default="results/xai/significance",
         help="Directory where output files are written.",
     )
     parser.add_argument(

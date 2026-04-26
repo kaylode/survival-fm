@@ -14,12 +14,13 @@ N_ENSEMBLE=5
 
 uv run survpfn/scripts/benchmark.py \
     --datasets EICU_SURV MIMIC_SURV_B \
-    --models cox rsf gbsa deepsurv dysurv mtlr pchazard deephit_single tabpfn_zeroshot_perbin_time_ens tabpfn_embedding_deephit tabpfn_finetune  \
+    --models cox rsf gbsa deepsurv dysurv mtlr pchazard deephit_single tabpfn_zeroshot_perbin_time_ens tabpfn_embedding_deephit tabpfn_finetune tabdpt_zeroshot_perbin_time_ens tabdpt_embedding_deephit tabdpt_finetune tabicl_zeroshot_perbin_time_ens tabicl_embedding_deephit tabicl_finetune \
     --label-fractions 0.01 0.02 0.05 0.1 \
 	--n-ensemble "$N_ENSEMBLE" \
 	--folds    "$FOLDS" \
 	--seed     "$SEED" \
 	--output-dir "$OUTPUT_DIR" \
-	--batch-size "$BATCH_SIZE"
+	--batch-size "$BATCH_SIZE" \
+	--tuned-dir "results/benchmark"
 	# --tune --trials "$TRIALS" \
 

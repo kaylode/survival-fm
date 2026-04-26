@@ -211,7 +211,7 @@ def train_survtrace(
                             train_set=(df_x_tr_hpo, df_y_tr_hpo),
                             val_set=(df_x_val_hpo, df_y_val_hpo),
                             batch_size=current_bs,
-                            epochs=2, # reduced for speed
+                            epochs=max(20, p["epochs"] // 5),  # enough to see convergence trends
                             learning_rate=p["learning_rate"],
                         )
                         success = True

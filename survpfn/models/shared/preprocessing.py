@@ -195,7 +195,7 @@ def expand_survival_data(
     feat_rep = np.tile(bin_feats, (N, 1))
     t_rep = np.tile(bin_times, N)
 
-    mask = (E_rep == 1) | (T_rep > t_rep)
+    mask = (E_rep > 0) | (T_rep > t_rep)
 
     X_filt = X_rep[mask]
     feat_filt = feat_rep[mask]

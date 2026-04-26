@@ -601,7 +601,7 @@ def plot_risk_stratification_km(
         line.set_linewidth(2.5)
         
     # Plot from 24 hours to 720 hours
-    ax.set_xlim(left=24, right=720)
+    # ax.set_xlim(left=24, right=720)
         
     plt.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -705,38 +705,37 @@ def analyse_dataset(
 
     if not axes_cfg:
         print("  [WARN] no demographic axes found — skipping.")
-        return
+    else:
+        # ── Descriptive table ─────────────────────────────────────────────────
+        desc_frames = [
+            subgroup_descriptives(df, dur_col, ev_col, cfg["groups"], cfg["label"])
+            for cfg in axes_cfg
+            if cfg["groups"] is not None
+        ]
+        desc = pd.concat(desc_frames, ignore_index=True)
+        csv_path = out_dir / "subgroup_stats.csv"
+        desc.to_csv(csv_path, index=False)
+        print(f"  descriptive table → {csv_path}")
 
-    # ── Descriptive table ─────────────────────────────────────────────────
-    desc_frames = [
-        subgroup_descriptives(df, dur_col, ev_col, cfg["groups"], cfg["label"])
-        for cfg in axes_cfg
-        if cfg["groups"] is not None
-    ]
-    desc = pd.concat(desc_frames, ignore_index=True)
-    csv_path = out_dir / "subgroup_stats.csv"
-    desc.to_csv(csv_path, index=False)
-    print(f"  descriptive table → {csv_path}")
+        # ── LaTeX table ───────────────────────────────────────────────────────
+        tex_path = out_dir / "subgroup_stats.tex"
+        generate_latex_table(desc, name, tex_path)
 
-    # ── LaTeX table ───────────────────────────────────────────────────────
-    tex_path = out_dir / "subgroup_stats.tex"
-    generate_latex_table(desc, name, tex_path)
+        # ── Composite panel (all axes) ────────────────────────────────────────
+        composite_path = out_dir / "subgroup_panel.pdf"
+        plot_composite_panel(df, dur_col, ev_col, axes_cfg,
+                            dataset_name=name, out_path=composite_path)
 
-    # ── Composite panel (all axes) ────────────────────────────────────────
-    composite_path = out_dir / "subgroup_panel.pdf"
-    plot_composite_panel(df, dur_col, ev_col, axes_cfg,
-                         dataset_name=name, out_path=composite_path)
-
-    # ── Standalone KM figures ─────────────────────────────────────────────
-    for cfg in axes_cfg:
-        slug = cfg["label"].lower().replace("/", "_").replace(" ", "_")
-        standalone_path = out_dir / f"subgroup_km_{slug}.pdf"
-        plot_standalone_km(
-            df, dur_col, ev_col, cfg["groups"],
-            cfg["label"], cfg["palette"],
-            title=f"{name} — {cfg['km_title']}",
-            out_path=standalone_path,
-        )
+        # ── Standalone KM figures ─────────────────────────────────────────────
+        for cfg in axes_cfg:
+            slug = cfg["label"].lower().replace("/", "_").replace(" ", "_")
+            standalone_path = out_dir / f"subgroup_km_{slug}.pdf"
+            plot_standalone_km(
+                df, dur_col, ev_col, cfg["groups"],
+                cfg["label"], cfg["palette"],
+                title=f"{name} — {cfg['km_title']}",
+                out_path=standalone_path,
+            )
 
     # ── Risk Stratification KM (if predictions provided) ──────────────────
     if predictions_dir is not None:
@@ -753,13 +752,10 @@ def analyse_dataset(
                     
                 pred_files = list(model_pred_dir.glob("*.parquet"))
                 if pred_files:
-                    try:
-                        df_preds_list = [pd.read_parquet(pf) for pf in pred_files]
-                        df_preds = pd.concat(df_preds_list, ignore_index=True)
-                        risk_km_path = out_dir / f"subgroup_km_risk_{m_name}.pdf"
-                        plot_risk_stratification_km(df_preds, risk_km_path, name, m_name)
-                    except Exception as e:
-                        print(f"  [WARN] Failed processing risk for {m_name}: {e}")
+                    df_preds_list = [pd.read_parquet(pf) for pf in pred_files]
+                    df_preds = pd.concat(df_preds_list, ignore_index=True)
+                    risk_km_path = out_dir / f"subgroup_km_risk_{m_name}.pdf"
+                    plot_risk_stratification_km(df_preds, risk_km_path, name, m_name)
                 else:
                     if predictions_model:
                         print(f"  [WARN] No parquet files found in {model_pred_dir}")

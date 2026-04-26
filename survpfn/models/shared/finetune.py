@@ -29,6 +29,12 @@ from survpfn.models.shared.loss import (
     compute_deephit_cr_loss_v2,
     compute_cox_cr_loss,
 )
+from survpfn.models.shared.calibration import (
+    choose_calibration_horizons,
+    fit_survival_calibrators,
+    fit_isotonic_survival_calibrators,   # backward-compat alias
+    predict_calibrated_horizon_risks,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +185,7 @@ class BaseBackboneSurvModel(nn.Module):
         input_dim: Optional[int] = None,
         batch_norm: bool = False,
         adapter_output_dim: Optional[int] = None,
+        head_type: str = "deephit",
     ):
         super().__init__()
         self.ninp = ninp
@@ -186,6 +193,9 @@ class BaseBackboneSurvModel(nn.Module):
         self.task_type = task_type
         self.num_events = num_events
         self.adapter_output_dim = adapter_output_dim
+        # Used by forward() to decide whether to apply joint softmax (DeepHit) or
+        # pass raw logits (Cox) in CR mode.
+        self.head_type = head_type
 
         # --- (1) Input Adapter ---
         if use_adapter:
@@ -221,7 +231,7 @@ class BaseBackboneSurvModel(nn.Module):
                 layers.append(nn.ReLU())
                 layers.append(nn.Dropout(p=dropout))
                 prev_dim = h_dim
-            layers.append(nn.Linear(prev_dim, n_out, bias=False))
+            layers.append(nn.Linear(prev_dim, n_out))
             self.survival_head = nn.Sequential(*layers)
 
         self._ctx_x: Optional[torch.Tensor] = None
@@ -285,7 +295,12 @@ class BaseSurvExpandedFinetune:
         self.patience = kwargs.pop("patience", None)
         self.early_event_quantile = kwargs.pop("early_event_quantile", 0.5)
         self.early_bin_frac = kwargs.pop("early_bin_frac", 0.7)
-        
+        self.task_type = kwargs.pop("task_type", "sr")
+
+        self.use_isotonic_calibration = kwargs.pop("use_isotonic_calibration", False)
+        self.calibration_quantiles = kwargs.pop("calibration_quantiles", (0.25, 0.50, 0.75))
+        self.calibration_horizons = kwargs.pop("calibration_horizons", None)
+        self._calibrators = None
         
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -298,16 +313,22 @@ class BaseSurvExpandedFinetune:
         K = len(self.bin_times)
 
         def _get_surv_matrix():
-            surv_m = np.zeros((n_test, K), dtype=np.float32)
+            f_0 = np.repeat(self.bin_feats[0 : 1], n_test, axis=0)
+            x_bin_0 = np.concatenate([x_scaled, f_0], axis=1)
+            probs_0 = self._predict_proba_internal(x_bin_0)
+            num_classes = probs_0.shape[1]
+            
+            surv_m_list = [np.zeros((n_test, K), dtype=np.float32) for _ in range(num_classes)]
             for k in range(K):
                 f_k = np.repeat(self.bin_feats[k : k + 1], n_test, axis=0)
                 x_bin = np.concatenate([x_scaled, f_k], axis=1)
                 probs = self._predict_proba_internal(x_bin)
-                surv_m[:, k] = probs[:, 0]  # P(survived)
-            return surv_m
+                for c in range(num_classes):
+                    surv_m_list[c][:, k] = probs[:, c]
+            return surv_m_list
 
         if n_ensemble > 0 and hasattr(self, "_train_x") and hasattr(self.net, "set_context"):
-            matrices = []
+            matrices_list = []
             orig_ctx_x, orig_ctx_y = self.net._ctx_x, self.net._ctx_y
             N_tr = len(self._train_x)
             for _ in range(n_ensemble):
@@ -316,30 +337,53 @@ class BaseSurvExpandedFinetune:
                 if hasattr(self.net, "_to_padded"): x_ctx = self.net._to_padded(x_ctx)
                 y_ctx = self._train_y[ctx_idx].float().to(self.device)
                 self.net.set_context(x_ctx, y_ctx)
-                matrices.append(_get_surv_matrix())
+                matrices_list.append(_get_surv_matrix())
             self.net.set_context(orig_ctx_x, orig_ctx_y)
-            surv_matrix = np.mean(matrices, axis=0)
+            
+            num_classes = len(matrices_list[0])
+            surv_matrix_list = []
+            for c in range(num_classes):
+                surv_matrix_list.append(np.mean([m[c] for m in matrices_list], axis=0))
         else:
-            surv_matrix = _get_surv_matrix()
+            surv_matrix_list = _get_surv_matrix()
+            num_classes = len(surv_matrix_list)
 
         # ── Interpolation (Unique times only) ──
         times = np.concatenate([[0], self.bin_times])
-        surv = np.concatenate([np.ones((n_test, 1)), surv_matrix], axis=1)
-
-        # Remove duplicate zeros if present
         times, unique_idx = np.unique(times, return_index=True)
-        surv = surv[:, unique_idx]
-
         grid_times = np.linspace(0, self.bin_times.max(), 1000)
         from scipy.interpolate import interp1d
-        f = interp1d(times, surv, kind='linear', axis=1, fill_value="extrapolate")
-        surv_matrix_interp = np.clip(f(grid_times), 0.0, 1.0)
+        
+        result_dfs = []
+        for c in range(num_classes):
+            surv_m = surv_matrix_list[c]
+            if c == 0:
+                surv = np.concatenate([np.ones((n_test, 1)), surv_m], axis=1)
+            else:
+                surv = np.concatenate([np.zeros((n_test, 1)), surv_m], axis=1)
+                
+            surv = surv[:, unique_idx]
+            f = interp1d(times, surv, kind='linear', axis=1, fill_value="extrapolate")
+            surv_matrix_interp = np.clip(f(grid_times), 0.0, 1.0)
 
-        return pd.DataFrame(
-            surv_matrix_interp.T,
-            index=grid_times,
-            columns=np.arange(n_test),
-        )
+            surv_df = pd.DataFrame(
+                surv_matrix_interp.T,
+                index=grid_times,
+                columns=np.arange(n_test),
+            )
+            result_dfs.append(surv_df)
+
+        # NOTE: Calibrators are fitted and stored in self._calibrators for
+        # horizon-level calibration *reporting* only.  They are NOT applied to
+        # the returned survival curve here — patching the curve with few horizons
+        # distorts rank ordering, C-index, and IBS.  Call
+        # predict_calibrated_horizon_risks(surv_df, self._calibrators) separately
+        # when you need calibrated horizon probabilities for a calibration plot.
+
+        if self.task_type == "sr":
+            return result_dfs[0]
+        else:
+            return result_dfs[1:]
 
     def _predict_proba_internal(self, x_bin: np.ndarray) -> np.ndarray:
         """Internal helper to be implemented by child. Should return (N, 2)."""
@@ -413,7 +457,7 @@ class BaseSurvExpandedFinetune:
 
         # ── 4. Trainer setup ──
         criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, self.net.parameters()), lr=self.learning_rate, weight_decay=1e-4)
+        optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, self.net.parameters()), lr=self.learning_rate, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=self.learning_rate * 0.01)
 
         # ── 5. Main loop ──
@@ -492,18 +536,32 @@ class BaseSurvExpandedFinetune:
                             surv_df = self.predict_survival_df(vx_v, n_ensemble=0)
                             val_metrics = self.evaluate(surv_df, vd_v, ve_v, durations, events)
                             val_cindex = val_metrics["c_index"]
+                            
+                            # Compute validation loss
+                            val_loss_total = 0.0
+                            val_batches = 0
+                            for i in range(0, len(VX_pt), current_bs):
+                                bvx = VX_pt[i:i+current_bs].to(self.device)
+                                bvy = vy_pt[i:i+current_bs].to(self.device)
+                                v_logits = self.net(bvx, x_context=vx_ctx, y_context=vy_ctx, return_backbone_logits=False)
+                                v_loss = criterion(v_logits, bvy)
+                                val_loss_total += v_loss.item()
+                                val_batches += 1
+                            val_loss = val_loss_total / max(1, val_batches)
                         
                         # For early stopping, we use 1 - c_index (so lower is better)
-                        stop_loss = 1.0 - val_cindex
+                        # stop_loss = 1.0 - val_cindex
+                        stop_loss = val_loss
                     else:
                         stop_loss = avg_loss
                         val_cindex = None
+                        val_loss = None
 
                     
 
                     if verbose:
                         msg = f"  [{self.backbone_name}/Expanded] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}"
-                        if val_data is not None: msg += f" val_cindex={val_cindex:.4f}"
+                        if val_data is not None: msg += f" val_loss={val_loss:.4f} val_cindex={val_cindex:.4f}"
                         print(msg, flush=True)
 
                     if stop_loss < best_loss:
@@ -530,6 +588,29 @@ class BaseSurvExpandedFinetune:
         self._train_x = X_pt
         self._train_y = y_pt
 
+        if self.use_isotonic_calibration and val_data is not None:
+            vx_cal, vd_cal, ve_cal = val_data
+
+            # choose horizons from training events only unless user provides fixed horizons
+            if self.calibration_horizons is None:
+                self._calibration_horizons = choose_calibration_horizons(
+                    durations, events, self.calibration_quantiles
+                )
+            else:
+                self._calibration_horizons = np.asarray(self.calibration_horizons, dtype=float)
+
+            with torch.no_grad():
+                surv_val = self.predict_survival_df(vx_cal, n_ensemble=0)
+
+            # only single-event version here; calibrators stored for reporting only
+            if isinstance(surv_val, list):
+                warnings.warn("Survival calibration for competing risks not yet supported.")
+            else:
+                self._calibrators = fit_survival_calibrators(
+                    surv_val, vd_cal, ve_cal, self._calibration_horizons,
+                    method="platt", use_ipcw=True,
+                )
+
         return self
 
     @staticmethod
@@ -542,6 +623,10 @@ class BaseSurvExpandedFinetune:
     ) -> dict:
         """Compute survival evaluation metrics via pycox EvalSurv."""
         from pycox.evaluation import EvalSurv
+
+        if isinstance(surv_df, list):
+            events_test = (events_test == 1).astype(int)
+            surv_df = 1.0 - surv_df[0]
 
         ev = EvalSurv(
             surv_df,
@@ -573,8 +658,12 @@ class BaseJointSurvFinetune:
         self.batch_size = kwargs.pop("batch_size", 64)
         self.device = kwargs.pop("device", "cuda:0")
         self.random_state = kwargs.pop("random_state", 42)
-        self.binning_scheme = kwargs.pop("binning_scheme", "quantile")
         self.patience = kwargs.pop("patience", 5)
+
+        self.use_isotonic_calibration = kwargs.pop("use_isotonic_calibration", False)
+        self.calibration_quantiles = kwargs.pop("calibration_quantiles", (0.25, 0.50, 0.75))
+        self.calibration_horizons = kwargs.pop("calibration_horizons", None)
+        self._calibrators = None
         
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -797,7 +886,7 @@ class BaseJointSurvFinetune:
         criterion_cls = nn.CrossEntropyLoss()
 
         # Weight decay for regularization
-        weight_decay = kwargs.get("weight_decay", 1e-4)
+        weight_decay = kwargs.get("weight_decay", 1e-3)
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.net.parameters()), 
             lr=self.learning_rate, 
@@ -902,21 +991,44 @@ class BaseJointSurvFinetune:
                         self.net.set_context(vx_ctx, vy_ctx)
 
                         with torch.no_grad():
+                            self._dur_pt_cont = dur_pt_cont
+                            self._ev_pt = ev_pt
                             self._compute_baseline_hazards(x_pt, dur_pt, ev_pt)
 
                             # Actual inference method
                             surv_result = self.predict_survival_df(vx_v, n_ensemble=0)
                             val_metrics = self.evaluate(surv_result, vd_v, ve_v, durations, events)
                             val_cindex = val_metrics["c_index"]
+
+                            # Compute validation loss
+                            val_loss_total = 0.0
+                            val_batches = 0
+                            for i in range(0, len(vx_pt_val), current_bs):
+                                bvx = vx_pt_val[i:i+current_bs]
+                                bdur = vdur_pt_val[i:i+current_bs]
+                                bdur_cont = vdur_pt_cont_val[i:i+current_bs]
+                                bev = vev_pt_val[i:i+current_bs]
+                                bfrac = vfrac_pt_val[i:i+current_bs] if vfrac_pt_val is not None else None
+                                
+                                head_out, _ = self.net(bvx, x_context=vx_ctx, y_context=vy_ctx, return_logits=True)
+                                
+                                v_loss = self._compute_survival_loss(
+                                    head_out, bdur, bdur_cont, bev, bfrac, criterion_surv
+                                )
+                                val_loss_total += v_loss.item()
+                                val_batches += 1
+                            val_loss = val_loss_total / max(1, val_batches)
                         
-                        stop_loss = 1.0 - val_cindex
+                        # stop_loss = 1.0 - val_cindex
+                        stop_loss = val_loss
                     else:
                         stop_loss = avg_loss
                         val_cindex = None
+                        val_loss = None
 
                     if verbose:
                         msg = f"  [{self.backbone_name}/{self.head_type}] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}"
-                        if val_data is not None: msg += f" val_cindex={val_cindex:.4f}"
+                        if val_data is not None: msg += f" val_loss={val_loss:.4f} val_cindex={val_cindex:.4f}"
                         print(msg, flush=True)
 
                     if stop_loss < best_loss:
@@ -952,7 +1064,33 @@ class BaseJointSurvFinetune:
 
         self.net.eval()
         with torch.no_grad():
+            # Store continuous durations so CR Cox Breslow override can use them
+            self._dur_pt_cont = dur_pt_cont
+            self._ev_pt = ev_pt
             self._compute_baseline_hazards(x_pt, dur_pt, ev_pt)
+
+        if self.use_isotonic_calibration and val_data is not None:
+            vx_cal, vd_cal, ve_cal = val_data
+
+            # choose horizons from training events only unless user provides fixed horizons
+            if self.calibration_horizons is None:
+                self._calibration_horizons = choose_calibration_horizons(
+                    durations, events, self.calibration_quantiles
+                )
+            else:
+                self._calibration_horizons = np.asarray(self.calibration_horizons, dtype=float)
+
+            with torch.no_grad():
+                surv_val = self.predict_survival_df(vx_cal, n_ensemble=0)
+
+            # only single-event version here; calibrators stored for reporting only
+            if isinstance(surv_val, list):
+                warnings.warn("Survival calibration for competing risks not yet supported.")
+            else:
+                self._calibrators = fit_survival_calibrators(
+                    surv_val, vd_cal, ve_cal, self._calibration_horizons,
+                    method="platt", use_ipcw=True,
+                )
 
         return self
 
@@ -989,7 +1127,7 @@ class BaseJointSurvFinetune:
                     
                 return surv_df
 
-        if n_ensemble > 0 and hasattr(self, "_train_x"):
+        if n_ensemble > 1 and hasattr(self, "_train_x"):
             ensemble_results = []
             orig_ctx_x, orig_ctx_y = self.net._ctx_x, self.net._ctx_y
             N_tr = len(self._train_x)
@@ -1014,8 +1152,15 @@ class BaseJointSurvFinetune:
                 return avg_cifs
             else:
                 avg_vals = np.mean([res.values for res in ensemble_results], axis=0)
-                return pd.DataFrame(avg_vals, index=ensemble_results[0].index, columns=ensemble_results[0].columns)
+                result = pd.DataFrame(avg_vals, index=ensemble_results[0].index, columns=ensemble_results[0].columns)
         else:
-            return _predict_single()
+            result = _predict_single()
+
+        # NOTE: Calibrators are NOT applied to the returned survival curve.
+        # Use predict_calibrated_horizon_risks(result, self._calibrators) separately
+        # for calibration reporting at specific horizons.
+
+        return result
+
 
 

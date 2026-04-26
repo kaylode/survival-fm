@@ -3,7 +3,6 @@ modeling_bert.py
 """
 import torch
 from torch import Tensor, device, dtype, nn
-import pdb
 import math, os
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import inspect
@@ -226,8 +225,12 @@ class BertEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         num_embeddings =  torch.unsqueeze(input_x_num, 2) * self.num_embeddings
         embeddings = torch.cat([num_embeddings, inputs_embeds], axis=1)
+        # NOTE: LayerNorm intentionally omitted here (matches original SurvTRACE design).
+        # The numerical embedding is x_i * embed_i — feature VALUE scales the embedding
+        # vector, so magnitude carries information. LayerNorm would erase that signal.
+        # The transformer's own residual LayerNorms (BertSelfOutput, BertOutput) still
+        # normalise representations at every attention and FFN block.
         embeddings = self.dropout(embeddings)
-        # embeddings = self.LayerNorm(embeddings)
         return embeddings
 
 class BertSelfAttention(nn.Module):
@@ -492,9 +495,10 @@ class DenseVanillaBlock(nn.Module):
         self.dropout = nn.Dropout(dropout) if dropout else None
 
     def forward(self, input):
-        input = self.activation(self.linear(input))
+        input = self.linear(input)
         if self.batch_norm:
-            input = self.batch_norm(input)
+            input = self.batch_norm(input)    # BN before activation (standard order)
+        input = self.activation(input)
         if self.dropout:
             input = self.dropout(input)
         return input

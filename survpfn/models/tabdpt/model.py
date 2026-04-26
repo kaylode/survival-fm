@@ -43,6 +43,7 @@ class TabDPTSurvModel(BaseBackboneSurvModel):
         input_dim: Optional[int] = None,
         batch_norm: bool = False,
         freeze_tabdpt: bool = False,
+        head_type: str = "deephit",
     ):
         checkpoint = torch.load(TABDPT_CHECKPOINT_PATH, map_location=device, weights_only=False)
         loaded_model = TabDPTModel.load(
@@ -55,8 +56,9 @@ class TabDPTSurvModel(BaseBackboneSurvModel):
         super().__init__(
             ninp=ninp, n_out=n_out, head_num_nodes=head_num_nodes, dropout=dropout,
             task_type=task_type, num_events=num_events, use_adapter=use_adapter,
-            input_dim=input_dim, batch_norm=batch_norm, 
-            adapter_output_dim=max_features
+            input_dim=input_dim, batch_norm=batch_norm,
+            adapter_output_dim=max_features,
+            head_type=head_type,
         )
         
         self.tabdpt = loaded_model
@@ -102,10 +104,14 @@ class TabDPTSurvModel(BaseBackboneSurvModel):
 
         if self.task_type == "cr":
             cs_outs = [head(query_flat) for head in self.cs_heads]
-            head_out = torch.stack(cs_outs, dim=1)
-            head_out = F.softmax(head_out.view(head_out.size(0), -1), dim=1).view(
-                head_out.size(0), self.num_events, -1
-            )
+            head_out = torch.stack(cs_outs, dim=1)  # (B, K, D_per_head)
+            if self.head_type not in ("cox", "deepsurv"):
+                # Joint softmax over (cause × time) produces a valid PMF for DeepHit.
+                # Skip for Cox: the raw logits are summed per-cause to get risk scores;
+                # a joint softmax would flatten all per-patient discrimination.
+                head_out = F.softmax(head_out.view(head_out.size(0), -1), dim=1).view(
+                    head_out.size(0), self.num_events, -1
+                )
         else:
             head_out = self.survival_head(query_flat)
             if head_out.size(-1) == 1:

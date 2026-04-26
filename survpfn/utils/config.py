@@ -73,6 +73,8 @@ class FMConfig:
     """For hybrid scheme: Quantile of event times used as the early/late split."""
     early_bin_frac: float = 0.7
     """For hybrid scheme: Fraction of bins to allocate to the early period."""
+    use_isotonic_calibration: bool = False
+    """Use isotonic calibration on the survival head predictions."""
 
     # ── Task ─────────────────────────────────────────────────────────────────
     task_type: str = "sr"

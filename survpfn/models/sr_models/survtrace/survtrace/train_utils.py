@@ -1,7 +1,6 @@
-'''training utils for trainign survtrace model.
+'''training utils for training survtrace model.
 '''
 from collections import defaultdict
-import pdb
 import os
 import math
 import numpy as np
@@ -133,14 +132,11 @@ class BERTAdam(Optimizer):
 
     def get_lr(self):
         lr = []
-        print("l_total=",len(self.param_groups), flush=True)
         for group in self.param_groups:
-            print("l_p=",len(group['params']), flush=True)
             for p in group['params']:
                 state = self.state[p]
                 if len(state) == 0:
                     return [0]
-                pdb.set_trace()
                 if group['t_total'] != -1:
                     schedule_fct = SCHEDULES[group['schedule']]
                     lr_scheduled = group['lr'] * schedule_fct(state['step']/group['t_total'], group['warmup'])
@@ -200,10 +196,6 @@ class BERTAdam(Optimizer):
 
                 next_m, next_v = state['next_m'], state['next_v']
                 beta1, beta2 = group['b1'], group['b2']
-
-                # Add grad clipping
-                if group['max_grad_norm'] > 0:
-                    clip_grad_norm_(p, group['max_grad_norm'])
 
                 # Decay the first and second moment running average coefficient
                 # In-place operations to update the averages at the same time
@@ -285,10 +277,9 @@ class Trainer:
             durations_val, events_val = self.get_target(df_y_val)
             tensor_val = torch.tensor(val_set[0].values)
             tensor_y_val = torch.tensor(val_set[1].values)
-        
-        if self.use_gpu:
-            tensor_val = tensor_val.cuda()
-            tensor_y_val = tensor_y_val.cuda()
+            if self.use_gpu:
+                tensor_val = tensor_val.cuda()
+                tensor_y_val = tensor_y_val.cuda()
 
         # assign no weight decay on these parameters
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -297,16 +288,20 @@ class Trainer:
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        optimizer = BERTAdam(optimizer_grouped_parameters, 
-            learning_rate, 
-            weight_decay_rate=weight_decay, 
-            )
+        num_train_batch = int(np.ceil(len(df_y_train) / batch_size))
+        t_total = num_train_batch * epochs   # total optimiser steps → enables LR schedule
+        optimizer = BERTAdam(optimizer_grouped_parameters,
+            learning_rate,
+            weight_decay_rate=weight_decay,
+            t_total=t_total,
+            warmup=0.1,           # 10 % linear warm-up, then linear decay
+            schedule='warmup_linear',
+        )
 
         if val_set is not None:
             # take early stopping
             self.early_stopping = EarlyStopping(patience=self.model.config['early_stop_patience'])
 
-        num_train_batch = int(np.ceil(len(df_y_train) / batch_size))
         train_loss_list, val_loss_list = [], []
         for epoch in range(epochs):
             epoch_loss = 0
@@ -325,7 +320,7 @@ class Trainer:
 
                 batch_train = tensor_train[batch_idx*batch_size:(batch_idx+1)*batch_size]
                 batch_y_train = tensor_y_train[batch_idx*batch_size:(batch_idx+1)*batch_size]
-                
+
                 batch_x_cat = batch_train[:, :self.model.config.num_categorical_feature].long()
                 batch_x_num = batch_train[:, self.model.config.num_categorical_feature:].float()
 
@@ -363,6 +358,13 @@ class Trainer:
                 avg_loss = epoch_loss / num_train_batch
                 print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}", flush=True)
 
+        # If early stopping never triggered, still load the best checkpoint saved
+        # during training (early stopping only reloads on trigger, not on completion).
+        if val_set is not None and self.early_stopping is not None and os.path.exists(self.ckpt):
+            self.model.load_state_dict(torch.load(self.ckpt, map_location='cpu'))
+            if self.use_gpu:
+                self.model.cuda()
+
         return train_loss_list, val_loss_list
 
     def train_multi_event(self,
@@ -394,17 +396,21 @@ class Trainer:
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        optimizer = BERTAdam(optimizer_grouped_parameters, 
-            learning_rate, 
-            weight_decay_rate=weight_decay, 
-            )
+        num_train_batch = int(np.ceil(len(train_set[0]) / batch_size))
+        t_total = num_train_batch * epochs   # total optimiser steps → enables LR schedule
+        optimizer = BERTAdam(optimizer_grouped_parameters,
+            learning_rate,
+            weight_decay_rate=weight_decay,
+            t_total=t_total,
+            warmup=0.1,           # 10 % linear warm-up, then linear decay
+            schedule='warmup_linear',
+        )
 
         if val_set is not None:
             # take early stopping
             self.early_stopping = EarlyStopping(patience=self.model.config['early_stop_patience'])
 
         train_loss_list, val_loss_list = [], []
-        num_train_batch = int(np.ceil(len(train_set[0]) / batch_size))
         for epoch in range(epochs):
             df_train = train_set[0].sample(frac=1)
             df_y_train = train_set[1].loc[df_train.index]
@@ -465,6 +471,13 @@ class Trainer:
             else:
                 avg_loss = epoch_loss / num_train_batch
                 print(f"  [SurvTrace] epoch {epoch:3d}/{epochs} loss={avg_loss:.4f}", flush=True)
+
+        # If early stopping never triggered, still load the best checkpoint saved
+        # during training (early stopping only reloads on trigger, not on completion).
+        if val_set is not None and self.early_stopping is not None and os.path.exists(self.ckpt):
+            self.model.load_state_dict(torch.load(self.ckpt, map_location='cpu'))
+            if self.use_gpu:
+                self.model.cuda()
 
         return train_loss_list, val_loss_list
 

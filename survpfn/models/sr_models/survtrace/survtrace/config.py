@@ -21,7 +21,7 @@ STConfig = EasyDict(
         'hidden_act': 'gelu',
         'attention_probs_dropout_prob': 0.1,
         'early_stop_patience': 5,
-        'initializer_range': 0.001,
+        'initializer_range': 0.02,   # standard BERT init (was 0.001 → attention too flat)
         'layer_norm_eps': 1e-12,
         'max_position_embeddings': 512, # # no use
         'chunk_size_feed_forward': 0, # no use

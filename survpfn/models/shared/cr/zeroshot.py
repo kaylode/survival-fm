@@ -144,6 +144,7 @@ class CRZeroShotPredictor(ZeroShotSurvivalPredictor):
                     )
 
         else:  # per_bin
+            self._clfs_per_bin = {}
             pbar = tqdm(
                 enumerate(self._bin_times),
                 total=len(self._bin_times),

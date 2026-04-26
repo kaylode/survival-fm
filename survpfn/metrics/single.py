@@ -363,8 +363,39 @@ def evaluate_sr_survival_eval(
                         td_cis.append(ci_t)
                     except:
                         metrics[f"TD-CI_q{q}"] = np.nan
-                
+
+                    # 4. ECE at horizon t  (pd.qcut equal-frequency binning)
+                    # Patients censored before τ have unknown status → exclude them.
+                    is_event_flag = E_test.astype(bool)
+                    y_tau     = (is_event_flag & (T_test <= t)).astype(float)
+                    observed  = (is_event_flag & (T_test <= t)) | (T_test > t)
+
+                    pred_obs = risk_t[observed]
+                    y_obs    = y_tau[observed]
+
+                    if len(y_obs) >= 10 and y_obs.sum() > 0:
+                        try:
+                            _df = pd.DataFrame({"pred": pred_obs, "y": y_obs})
+                            _df["bin"] = pd.qcut(_df["pred"], q=10, duplicates="drop")
+                            _grp = _df.groupby("bin", observed=True).agg(
+                                mean_pred=("pred", "mean"),
+                                obs_rate=("y", "mean"),
+                                n=("y", "size"),
+                            )
+                            _n = _grp["n"].sum()
+                            ece_val = float(
+                                np.sum(_grp["n"] / _n * np.abs(_grp["obs_rate"] - _grp["mean_pred"]))
+                            ) if _n > 0 else np.nan
+                            metrics[f"ECE_q{q}"] = ece_val
+                        except Exception:
+                            metrics[f"ECE_q{q}"] = np.nan
+                    else:
+                        metrics[f"ECE_q{q}"] = np.nan
+
                 metrics["AUC_mean"] = np.nanmean(aucs) if aucs else np.nan
+                metrics["ECE_mean"] = np.nanmean([
+                    metrics.get(f"ECE_q{q}", np.nan) for q in quantiles
+                ])
             else:
                 metrics["AUC_mean"] = np.nan
         except Exception as e:

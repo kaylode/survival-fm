@@ -42,6 +42,7 @@ from .cr_models.classical import run_competing_risks_cox, run_aalen_johansen, ru
 from .cr_models.deep_cr import train_deephit_cr
 from .cr_models.dysurv.survival import train_dysurv_cr
 from .cr_models.survtrace.survival import train_survtrace_cr
+from .cr_models.deepsurv import train_deepsurv_cr
 
 # ── FM entry points ───────────────────────────────────────────────────────────
 from .tabpfn import TabPFNSurvPH, TabPFNSurvPHFinetune
@@ -56,7 +57,7 @@ from .shared.cr.zeroshot import train_cr_zeroshot
 # Internal wrapper factories
 # ---------------------------------------------------------------------------
 
-def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_type: str = "sr", binning_scheme: str = "quantile") -> Callable:
+def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_type: str = "sr", use_isotonic_calibration: bool = False) -> Callable:
     """Unified factory for both Joint and Frozen-Backbone survival models.
 
     For ``task_type="cr"`` the factory uses the ``BaseCRJointFinetune``
@@ -92,27 +93,33 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
                 -1,
             )
 
+        if head_type == "pchazard":
+            num_durations = 100
+            learning_rate = 1e-4
+        else:
+            learning_rate = 1e-5
+
         wrapper = _SurvPH(
             head_type=head_type,
             task_type=task_type,
             num_events=num_events,
             num_durations=num_durations,
-            head_num_nodes=cfg.head_hidden_dims,
+            head_num_nodes=[64],#cfg.head_hidden_dims,
             dropout=cfg.dropout,
             patience=cfg.patience,
             random_state=cfg.random_state,
-            learning_rate=cfg.learning_rate,
+            learning_rate=learning_rate,
             use_adapter=cfg.use_adapter,
             input_dim=len(feat_cols),
             context_size=cfg.context_size,
             device=cfg.device,
             freeze_backbone=freeze_backbone,
-            binning_scheme=binning_scheme,
             early_event_quantile=cfg.early_event_quantile,
             early_bin_frac=cfg.early_bin_frac,
             epochs=cfg.epochs,
             batch_size=cfg.batch_size,
             sampling_ratio=cfg.sampling_ratio,
+            use_isotonic_calibration=use_isotonic_calibration,
         )
 
         wrapper.fit(
@@ -125,14 +132,18 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
         x_test = df_test[feat_cols].values.astype(np.float32)
         surv_out = wrapper.predict_survival_df(x_test, n_ensemble=cfg.n_ensemble)
 
-        if task_type == "cr":
+        if isinstance(surv_out, list):
             cifs = surv_out  # List[pd.DataFrame] — rows=times, cols=patients
             # CIF_1 at last time is a valid risk score (higher = more likely event)
             risk = cifs[0].iloc[-1].values
             return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
         else:
             if head_type != 'cox':
-                risk = 1.0 - surv_out.iloc[-1].values
+                # Use integrated survival (AUC) as an robust risk score instead of S(T_max)
+                # Higher AUC = longer life expectancy = lower risk.
+                # risk = -AUC
+                _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+                risk = -_trapz(surv_out.values.T, surv_out.index.values, axis=1)
                 return wrapper, risk, surv_out.values.T, surv_out.index.values
             else:
                 risk_scores, surv_probs, surv_times = _surv_df_to_arrays(surv_out)
@@ -142,7 +153,49 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
     return _fn
 
 
-def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile") -> Callable:
+def _cause_specific_fm_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, use_isotonic_calibration: bool = False) -> Callable:
+    def _fn(df_train, df_test, dur_col, ev_col,
+            tune=False, n_trials=10, out_dir="results",
+            cfg: Optional[FMConfig] = None, **kw):
+        all_events = np.unique(df_train[ev_col].values)
+        causes = sorted([c for c in all_events if c > 0])
+        if len(causes) == 0: causes = [1]
+        
+        models = []
+        cif_per_cause = []
+        grid = None
+        
+        for cause in causes:
+            df_train_c = df_train.copy()
+            df_train_c[ev_col] = (df_train_c[ev_col] == cause).astype(int)
+            df_test_c = df_test.copy()
+            df_test_c[ev_col] = (df_test_c[ev_col] == cause).astype(int)
+            
+            sr_wrapper = _fm_joint_wrapper(fm_name, head_type, freeze_backbone, task_type="sr", use_isotonic_calibration=use_isotonic_calibration)
+            
+            model, risk_scores, surv_probs, surv_times = sr_wrapper(
+                df_train_c, df_test_c, dur_col, ev_col, tune=tune, n_trials=n_trials, out_dir=out_dir, cfg=cfg, **kw
+            )
+            models.append(model)
+            if grid is None:
+                grid = surv_times
+                cif_per_cause.append(1.0 - surv_probs)
+            else:
+                from scipy.interpolate import interp1d
+                f = interp1d(surv_times, 1.0 - surv_probs, kind='linear', axis=1, fill_value="extrapolate")
+                cif_interp = np.clip(f(grid), 0.0, 1.0)
+                cif_per_cause.append(cif_interp)
+                
+        span = grid[-1] - grid[0] + 1e-8
+        _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+        risk_cause1 = _trapz(cif_per_cause[0], grid, axis=1) / span
+        
+        return models[0], risk_cause1, cif_per_cause, grid
+        
+    _fn.__name__ = f"train_{fm_name}_{'frozen' if freeze_backbone else 'joint'}_{head_type}_cr_cs"
+    return _fn
+
+def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile", use_isotonic_calibration: bool = False, task_type: str = "sr") -> Callable:
     """Factory for temporally expanded survival finetuning."""
     _SurvPH = {
         "tabpfn": TabPFNSurvPHFinetune,
@@ -168,7 +221,7 @@ def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile") -> Callabl
         wrapper = _SurvPH(
             num_durations=num_durations,
             learning_rate=1e-5, #cfg.learning_rate,
-            epochs=2,#cfg.epochs,
+            epochs=5,#cfg.epochs,
             batch_size=cfg.batch_size,
             device=cfg.device,
             context_size=cfg.context_size,
@@ -178,6 +231,8 @@ def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile") -> Callabl
             patience=cfg.patience,
             sampling_ratio=cfg.sampling_ratio,
             random_state=cfg.random_state,
+            use_isotonic_calibration=use_isotonic_calibration,
+            task_type=task_type,
         )
 
         wrapper.fit(
@@ -190,8 +245,15 @@ def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile") -> Callabl
         x_test = df_test[feat_cols].values.astype(np.float32)
         surv_out = wrapper.predict_survival_df(x_test, n_ensemble=cfg.n_ensemble)
 
-        risk = 1.0 - surv_out.iloc[-1].values
-        return wrapper, risk, surv_out.values.T, surv_out.index.values
+        if isinstance(surv_out, list):
+            cifs = surv_out
+            risk = cifs[0].iloc[-1].values
+            return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
+        else:
+            # Use integrated survival (AUC) as an robust risk score instead of S(T_max)
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            risk = -_trapz(surv_out.values.T, surv_out.index.values, axis=1)
+            return wrapper, risk, surv_out.values.T, surv_out.index.values
 
     _fn.__name__ = f"train_{fm_name}_finetune"
     return _fn
@@ -319,11 +381,10 @@ ALL_MODELS: dict[str, Callable] = {
     "tabdpt_zeroshot_hybrid":  _zeroshot_wrapper("tabdpt", method="per_bin", use_time_bin_encoder=True, n_estimators=5, binning_scheme="hybrid"),
     "tabicl_zeroshot_hybrid":  _zeroshot_wrapper("tabicl", method="per_bin", use_time_bin_encoder=True, n_estimators=5, binning_scheme="hybrid"),
 
-    "tabpfn_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabpfn", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
-    "tabdpt_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabdpt", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
-    "tabicl_embedding_mtlr_hybrid":     _fm_joint_wrapper("tabicl", "mtlr", freeze_backbone=True, binning_scheme="hybrid"),
-    
-    
+    # ---- Calibration ----
+    "tabpfn_embedding_mtlr_calibration": _fm_joint_wrapper("tabpfn", "mtlr", freeze_backbone=True, use_isotonic_calibration=False),
+    "tabdpt_embedding_mtlr_calibration": _fm_joint_wrapper("tabdpt", "mtlr", freeze_backbone=True, use_isotonic_calibration=False),
+    "tabicl_embedding_mtlr_calibration": _fm_joint_wrapper("tabicl", "mtlr", freeze_backbone=True, use_isotonic_calibration=False),
 
 
     # ── Competing Risks (CR) ────────────────────────────────────────────────
@@ -334,6 +395,7 @@ ALL_MODELS: dict[str, Callable] = {
     "deephit_cr":         lambda df_tr, df_ts, dur, ev, **kw: train_deephit_cr(df_tr, df_ts, dur, ev, **kw),
     "dysurv_cr":          lambda df_tr, df_ts, dur, ev, **kw: train_dysurv_cr(df_tr, df_ts, dur, ev, **kw),
     "survtrace_cr":       lambda df_tr, df_ts, dur, ev, **kw: train_survtrace_cr(df_tr, df_ts, dur, ev, **kw),
+    "deepsurv_cr":        lambda df_tr, df_ts, dur, ev, **kw: train_deepsurv_cr(df_tr, df_ts, dur, ev, **kw),
 
     # ── FM Fixed Embedding Models (CR) ──────────────────────────────────────
     "tabpfn_embedding_deephit_cr": _fm_joint_wrapper("tabpfn", "deephit", freeze_backbone=True, task_type="cr"),
@@ -345,6 +407,17 @@ ALL_MODELS: dict[str, Callable] = {
     "tabdpt_embedding_cox_cr": _fm_joint_wrapper("tabdpt", "cox", freeze_backbone=True, task_type="cr"),
     "tabicl_embedding_cox_cr": _fm_joint_wrapper("tabicl", "cox", freeze_backbone=True, task_type="cr"),
 
+    "tabpfn_embedding_mtlr_cr": _cause_specific_fm_wrapper("tabpfn", "mtlr", freeze_backbone=True),
+    "tabdpt_embedding_mtlr_cr": _cause_specific_fm_wrapper("tabdpt", "mtlr", freeze_backbone=True),
+    "tabicl_embedding_mtlr_cr": _cause_specific_fm_wrapper("tabicl", "mtlr", freeze_backbone=True),
+
+    "tabpfn_embedding_pchazard_cr": _cause_specific_fm_wrapper("tabpfn", "pchazard", freeze_backbone=True),
+    "tabdpt_embedding_pchazard_cr": _cause_specific_fm_wrapper("tabdpt", "pchazard", freeze_backbone=True),
+    "tabicl_embedding_pchazard_cr": _cause_specific_fm_wrapper("tabicl", "pchazard", freeze_backbone=True),
+
+    "tabpfn_finetune_cr":       _finetune_wrapper("tabpfn", task_type="cr"),
+    "tabdpt_finetune_cr":       _finetune_wrapper("tabdpt", task_type="cr"),
+    "tabicl_finetune_cr":       _finetune_wrapper("tabicl", task_type="cr"),
 
     # ── FM Zero-shot ICL (CR) ────────────────────────────────────────────────
     # Use per_bin + time-bin encoder for CR: produces a separate FM fit per

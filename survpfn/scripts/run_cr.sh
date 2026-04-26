@@ -49,12 +49,14 @@ ALL_DATASETS="$CR_DATASETS"
 # ── Model groups (must match ALL_MODELS keys in models/__init__.py) ───────────
 # ── Model groups (must match analysis.py) ──────────────────────────────────────
 CLASSICAL_CR="cox_cr aj_cr fine_gray_cr survival_boost_cr"
-DEEP_CR="$CLASSICAL_CR deephit_cr dysurv_cr survtrace_cr"
+DEEP_CR="$CLASSICAL_CR deepsurv_cr deephit_cr dysurv_cr survtrace_cr"
 
-FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr tabpfn_embedding_cox_cr tabdpt_embedding_cox_cr tabicl_embedding_cox_cr"
+FM_CR_EMBEDDING="tabpfn_embedding_deephit_cr tabdpt_embedding_deephit_cr tabicl_embedding_deephit_cr tabpfn_embedding_mtlr_cr tabdpt_embedding_mtlr_cr tabicl_embedding_mtlr_cr tabpfn_embedding_pchazard_cr tabdpt_embedding_pchazard_cr tabicl_embedding_pchazard_cr"
+FM_CR_COX_EMBEDDING="tabpfn_embedding_cox_cr tabdpt_embedding_cox_cr tabicl_embedding_cox_cr"
+FM_CR_FINETUNE="tabpfn_finetune_cr tabdpt_finetune_cr tabicl_finetune_cr"
 FM_CR_ZEROSHOT="tabpfn_zeroshot_cr_ens tabdpt_zeroshot_cr_ens tabicl_zeroshot_cr_ens"
 
-ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING" # $FM_CR_ZEROSHOT"
+ALL_CR_MODELS="$DEEP_CR $FM_CR_EMBEDDING $FM_CR_FINETUNE $FM_CR_ZEROSHOT"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
@@ -90,8 +92,8 @@ case "$GROUP" in
     classical_cr)    MODELS="$CLASSICAL_CR" ;;
     deep_cr)         MODELS="$DEEP_CR" ;;
     fm_embedding)    MODELS="$FM_CR_EMBEDDING" ;;
-    fm_joint)        MODELS="$FM_CR_JOINT" ;;
-    fm_cr_deephit)   MODELS="$FM_CR_DEEPHIT" ;;
+    cox_embedding)   MODELS="$FM_CR_COX_EMBEDDING" ;;
+    finetune)        MODELS="$FM_CR_FINETUNE" ;;
     fm_zeroshot)     MODELS="$FM_CR_ZEROSHOT" ;;
     tabpfn_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;
     tabdpt_cr)       MODELS=$(echo "$ALL_CR_MODELS" | xargs -n1 | grep tabdpt | xargs) ;;

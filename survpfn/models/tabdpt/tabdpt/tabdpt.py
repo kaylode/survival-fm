@@ -112,7 +112,8 @@ class TabDPTEstimator(BaseEstimator):
 
         # Apply PCA optionally to reduce the number of features
         if self.n_features > self.max_features:
-            _, _, self.V = torch.pca_lowrank(train_x, q=self.max_features)
+            q = min(self.max_features, train_x.shape[0], train_x.shape[1])
+            _, _, self.V = torch.pca_lowrank(train_x, q=q)
             train_x = train_x @ self.V
         else:
             self.V = None

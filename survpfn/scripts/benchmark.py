@@ -173,13 +173,21 @@ def _save_predictions(
     """
     out = os.path.join(pred_dir, dataset_name, model_tag)
     os.makedirs(out, exist_ok=True)
-    pd.DataFrame({
+    
+    data = {
         "original_idx": test_idx.astype(np.int64),
-        "risk_score":   np.asarray(risk_scores, dtype=np.float64),
         "duration":     np.asarray(duration,    dtype=np.float64),
-        "event":        np.asarray(event,        dtype=np.int8),
+        "event":        np.asarray(event,       dtype=np.int64),
         "fold":         fold,
-    }).to_parquet(os.path.join(out, f"fold_{fold}.parquet"), index=False)
+    }
+    
+    if isinstance(risk_scores, list) or (isinstance(risk_scores, np.ndarray) and risk_scores.ndim > 1):
+        for i, rs in enumerate(risk_scores):
+            data[f"risk_score_c{i+1}"] = np.asarray(rs, dtype=np.float64)
+    else:
+        data["risk_score"] = np.asarray(risk_scores, dtype=np.float64)
+        
+    pd.DataFrame(data).to_parquet(os.path.join(out, f"fold_{fold}.parquet"), index=False)
 
 
 def run_fold_model(
@@ -196,6 +204,7 @@ def run_fold_model(
     output_dir: str,
     test_idx: np.ndarray | None = None,
     pred_dir: str | None = None,
+    tuned_dir: str | None = None,
     **training_kwargs,
 ) -> dict:
     """Train one model for one fold, save all outputs to a dedicated folder.
@@ -244,6 +253,23 @@ def run_fold_model(
             pass
 
     os.makedirs(out_dir, exist_ok=True)
+    
+    if tuned_dir is not None:
+        src_dir = os.path.join(tuned_dir, dataset_name, model_name, f"fold_{fold}")
+        from survpfn.utils.optuna import _LEGACY_STUDY_OVERRIDES
+        import shutil
+        import warnings
+        log_name = _LEGACY_STUDY_OVERRIDES.get(model_name, (f"optuna_{model_name}.log",))[0]
+        src_log = os.path.join(src_dir, log_name)
+        dst_log = os.path.join(out_dir, log_name)
+        if os.path.exists(src_log):
+            if not os.path.exists(dst_log):
+                shutil.copy(src_log, dst_log)
+            tune = True
+            n_trials = 0
+        else:
+            warnings.warn(f"Tuned logs not found at {src_log}, falling back to default behavior.")
+
     print()
     feature_names = [c for c in df_train.columns
                      if c not in {duration_col, event_col}]
@@ -266,6 +292,19 @@ def run_fold_model(
 
     # ── Save predictions for fairness evaluation ────────────────────────────
     if pred_path is not None and test_idx is not None:
+        num_events_for_pred = int(df_train[event_col].max())
+        if num_events_for_pred > 1 and isinstance(surv_p, list):
+            risk_scores_out = []
+            span = surv_t[-1] - surv_t[0] + 1e-8
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            for c_cif in surv_p:
+                if _trapz is not None:
+                    risk_scores_out.append(_trapz(c_cif, surv_t, axis=1) / span)
+                else:
+                    risk_scores_out.append(c_cif[:, -1])
+        else:
+            risk_scores_out = risk if not isinstance(risk, list) else risk[0]
+
         try:
             _save_predictions(
                 pred_dir=pred_dir,
@@ -273,9 +312,9 @@ def run_fold_model(
                 model_tag=model_tag,
                 fold=fold,
                 test_idx=test_idx,
-                risk_scores=risk if not isinstance(risk, list) else risk[0],
+                risk_scores=risk_scores_out,
                 duration=df_test[duration_col].values,
-                event=(df_test[event_col].values > 0).astype(int),
+                event=df_test[event_col].values,
             )
         except Exception as _pred_exc:
             warnings.warn(f"Could not save predictions for {model_tag}/fold_{fold}: {_pred_exc}")
@@ -381,6 +420,7 @@ def run_benchmark(
     temporal_frac_train: float = 0.70,
     save_predictions: bool = False,
     pred_dir: str = "results/predictions",
+    tuned_dir: str | None = None,
 ) -> None:
     """Run k-fold CV (or a single temporal split) for one dataset.
 
@@ -473,6 +513,7 @@ def run_benchmark(
                     fold, tune, n_trials, output_dir,
                     test_idx=test_idx if save_predictions else None,
                     pred_dir=pred_dir if save_predictions else None,
+                    tuned_dir=tuned_dir,
                     **{k: v for k, v in (extra.items() if extra else {}.items())
                         if k != "label_fractions"},
                 )
@@ -550,6 +591,11 @@ def main():
         metavar="F",
         help="Training fraction for --temporal-split (default 0.70).",
     )
+    g3.add_argument(
+        "--tuned-dir", type=str, default=None,
+        help="Path to an existing benchmark results directory. If provided, Optuna "
+             "logs are copied from this directory to reuse tuned hyperparameters without retuning.",
+    )
 
     args = parser.parse_args()
 
@@ -599,6 +645,7 @@ def main():
             temporal_frac_train=args.temporal_frac_train,
             save_predictions=args.save_predictions,
             pred_dir=args.pred_dir,
+            tuned_dir=args.tuned_dir,
         )
 
 

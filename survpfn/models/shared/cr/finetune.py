@@ -91,14 +91,130 @@ class BaseCRJointFinetune(BaseJointSurvFinetune):
         dur_pt: torch.Tensor,
         ev_pt: torch.Tensor,
     ) -> None:
-        """No-op — CR models have no Cox baseline hazard."""
-        pass
+        """No-op for DeepHit; computes Breslow estimators for Cox CR."""
+        if self.head_type not in ("cox", "deepsurv"):
+            return
+        self.net.eval()
+        with torch.no_grad():
+            out = self.net(x_pt)               # (N, K, 1) or (N, K)
+            risk = out.squeeze(-1) if out.dim() == 3 else out   # (N, K)
+        # Use continuous durations stored by parent fit() before this call
+        dur_cont = getattr(self, "_dur_pt_cont", dur_pt)
+        ev      = getattr(self, "_ev_pt", ev_pt)
+        self._compute_cox_cr_breslow(
+            risk.cpu().numpy(),
+            dur_cont.cpu().numpy(),
+            ev.cpu().numpy(),
+        )
+
+    def _compute_cox_cr_breslow(
+        self,
+        risk_np: np.ndarray,
+        dur_np: np.ndarray,
+        ev_np: np.ndarray,
+    ) -> None:
+        """Compute cause-specific Breslow baseline cumulative hazards.
+
+        Stores ``self._cox_baselines``: list of (times, H0_vals) per cause.
+        """
+        K = self.num_events
+        exp_risk = np.exp(risk_np - risk_np.max(axis=0, keepdims=True))  # (N, K) stabilised
+        baselines: List[tuple] = []
+        for k in range(K):
+            code = k + 1
+            event_mask = (ev_np == code)
+            event_times = np.sort(np.unique(dur_np[event_mask])) if event_mask.any() else np.array([])
+            h0_times, h0_vals, h0_cum = [], [], 0.0
+            for t in event_times:
+                at_risk = (dur_np >= t)
+                n_ev_t = int(np.sum((dur_np == t) & event_mask))
+                denom = float(exp_risk[at_risk, k].sum())
+                if denom > 0 and n_ev_t > 0:
+                    h0_cum += n_ev_t / denom
+                h0_times.append(t)
+                h0_vals.append(h0_cum)
+            baselines.append((np.array(h0_times), np.array(h0_vals)))
+        self._cox_baselines = baselines
 
     # ------------------------------------------------------------------
     # Prediction
     # ------------------------------------------------------------------
 
     def predict_survival_df(
+        self, x: np.ndarray, n_ensemble: int = 0
+    ) -> List[pd.DataFrame]:
+        """Return per-cause CIF DataFrames in pycox convention.
+
+        For Cox CR: builds CIFs from Breslow baseline hazards computed
+        during ``fit()``.
+        """
+        if self.head_type in ("cox", "deepsurv"):
+            return self._predict_cox_cr_cifs(x)
+        return self._predict_deephit_cr_cifs(x, n_ensemble)
+
+    # ------------------------------------------------------------------
+    # Cox CR prediction
+    # ------------------------------------------------------------------
+
+    def _predict_cox_cr_cifs(self, x: np.ndarray) -> List[pd.DataFrame]:
+        """CIF curves for Cox CR via cause-specific Breslow baseline hazards.
+
+        Algorithm
+        ---------
+        1. Network gives risk scores (N, K).
+        2. H_k(t, x) = H0_k(t) · exp(risk_k(x))  [cause-specific cum. hazard]
+        3. S(t, x)   = exp(-Σ_k H_k(t, x))        [overall survival]
+        4. CIF_k(t, x) ≈ Σ_{s≤t} ΔH_k(s) · S(s⁻)  [discrete Aalen-Johansen]
+        """
+        self.net.eval()
+        x_pt = self._prep.transform(x, device=self.device)
+        N = x_pt.shape[0]
+
+        with torch.no_grad():
+            out = self.net(x_pt)                         # (N, K, 1)
+            risk_np = out.squeeze(-1).cpu().numpy()      # (N, K)
+
+        # Build a common time grid spanning all causes
+        all_times = np.concatenate([h[0] for h in self._cox_baselines if len(h[0]) > 0])
+        if len(all_times) == 0:
+            grid = np.linspace(0, 1, 1000)
+            empty = pd.DataFrame(np.zeros((1000, N)), index=grid, columns=np.arange(N))
+            return [empty.copy() for _ in range(self.num_events)]
+
+        t_max = float(all_times.max())
+        grid = np.linspace(0, t_max, 1000)
+
+        # Cause-specific cumulative hazards on the grid
+        all_H: List[np.ndarray] = []
+        for k in range(self.num_events):
+            h0_times, h0_vals = self._cox_baselines[k]
+            if len(h0_times) == 0:
+                all_H.append(np.zeros((N, len(grid))))
+                continue
+            H0 = np.interp(grid, h0_times, h0_vals, left=0.0, right=h0_vals[-1])
+            # Patient-specific: scale baseline by exp(risk)
+            H_k = np.exp(risk_np[:, k:k+1]) * H0[np.newaxis, :]  # (N, T)
+            all_H.append(H_k)
+
+        sum_H = np.sum(all_H, axis=0)   # (N, T)
+        S = np.exp(-sum_H)              # overall survival (N, T)
+
+        # Discrete Aalen-Johansen approximation
+        cifs: List[pd.DataFrame] = []
+        for k in range(self.num_events):
+            dH_k = np.diff(all_H[k], axis=1, prepend=0.0)          # (N, T)
+            S_lag = np.concatenate([np.ones((N, 1)), S[:, :-1]], axis=1)  # (N, T)
+            cif_k = np.clip(np.cumsum(dH_k * S_lag, axis=1), 0.0, 1.0)   # (N, T)
+            cifs.append(
+                pd.DataFrame(cif_k.T, index=grid, columns=np.arange(N))
+            )
+        return cifs
+
+    # ------------------------------------------------------------------
+    # DeepHit CR prediction (original logic, renamed)
+    # ------------------------------------------------------------------
+
+    def _predict_deephit_cr_cifs(
         self, x: np.ndarray, n_ensemble: int = 0
     ) -> List[pd.DataFrame]:
         """Return per-cause CIF DataFrames in pycox convention.
@@ -258,7 +374,7 @@ class TabPFNCRPH(BaseCRJointFinetune):
         self.labtrans      = None
 
         self.net = TabPFNSurvModel(
-            n_out=num_durations * num_events,
+            n_out=num_events if self.head_type in ("cox", "deepsurv") else num_durations * num_events,
             head_num_nodes=head_num_nodes,
             dropout=dropout,
             freeze_tabpfn=freeze_backbone,
@@ -268,6 +384,7 @@ class TabPFNCRPH(BaseCRJointFinetune):
             num_events=num_events,
             use_adapter=use_adapter,
             input_dim=input_dim,
+            head_type=self.head_type,
         )
         self._setup_cr_loss()
 
@@ -311,7 +428,7 @@ class TabDPTCRPH(BaseCRJointFinetune):
 
         self.net = TabDPTSurvModel(
             device=self.device,
-            n_out=num_durations * num_events,
+            n_out=num_events if self.head_type in ("cox", "deepsurv") else num_durations * num_events,
             head_num_nodes=head_num_nodes,
             dropout=dropout,
             task_type="cr",
@@ -319,6 +436,7 @@ class TabDPTCRPH(BaseCRJointFinetune):
             use_adapter=use_adapter,
             input_dim=input_dim,
             freeze_tabdpt=freeze_backbone,
+            head_type=self.head_type,
         )
         self._setup_cr_loss()
 
@@ -361,7 +479,7 @@ class TabICLCRPH(BaseCRJointFinetune):
         self.labtrans      = None
 
         self.net = TabICLSurvModel(
-            n_out=num_durations * num_events,
+            n_out=num_events if self.head_type in ("cox", "deepsurv") else num_durations * num_events,
             head_num_nodes=head_num_nodes,
             dropout=dropout,
             device=self.device,
@@ -370,5 +488,6 @@ class TabICLCRPH(BaseCRJointFinetune):
             use_adapter=use_adapter,
             input_dim=input_dim,
             freeze_backbone=freeze_backbone,
+            head_type=self.head_type,
         ).to(self.device)
         self._setup_cr_loss()

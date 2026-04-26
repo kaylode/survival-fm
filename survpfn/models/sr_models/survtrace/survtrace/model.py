@@ -5,7 +5,6 @@ import numpy as np
 from pycox.models import utils
 import pandas as pd
 import torchtuples as tt
-import pdb
 import torch.nn.functional as F
 from .modeling_bert import BaseModel, BertEmbeddings, BertEncoder, BertCLS, BertCLSMulti
 from .utils import pad_col
@@ -235,12 +234,9 @@ class SurvTraceSingle(BaseModel):
         )
 
         encoder_outputs = self.encoder(embedding_output)
-        sequence_output = encoder_outputs[1]
-        
-        # do pooling
-        # sequence_output = (encoder_outputs[1][-2] + encoder_outputs[1][-1]).mean(dim=1)
+        sequence_output = encoder_outputs[0]   # last hidden state (mirrors SurvTraceMulti)
 
-        predict_logits = self.cls(encoder_outputs[0])
+        predict_logits = self.cls(sequence_output)
 
         return sequence_output, predict_logits
 

@@ -21,8 +21,10 @@ import seaborn as sns
 
 plt.style.use("seaborn-v0_8-paper")
 plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.size'] = 12
+plt.rcParams['font.size'] = 20
 plt.rcParams['font.sans-serif'] = ['Arial']
+plt.rcParams['xtick.labelsize'] = 20
+plt.rcParams['ytick.labelsize'] = 20
 
 warnings.filterwarnings("ignore")
 
@@ -31,27 +33,33 @@ warnings.filterwarnings("ignore")
 # ---------------------------------------------------------------------------
 
 MODEL_ORDER = [ # "km", "aj_cr",
-    "cox", "rsf", "gbsa",
+    "cox", "rsf", "gbsa", "pchazard",
     "deepsurv", "mtlr",  "deephit_single", "soden", "dysurv", "survtrace", 
 
     "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
     
     "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+    "tabpfn_finetune_cr", "tabdpt_finetune_cr", "tabicl_finetune_cr",
 
+    "tabpfn_embedding_pchazard", "tabdpt_embedding_pchazard", "tabicl_embedding_pchazard",
     "tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr", "tabicl_embedding_mtlr",
 
     "tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit",
     "tabpfn_embedding_cox", "tabdpt_embedding_cox", "tabicl_embedding_cox",
 
-    "cox_cr",  "fine_gray_cr",
-    "deephit_cr", 
-    "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent",
+    "aj_cr", "cox_cr", "fine_gray_cr", "survival_boost_cr",
+    "deephit_cr", "deepsurv_cr", "dysurv_cr", "survtrace_cr",
+    "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent", "tabpfn_zeroshot_cr_ens",
+    "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens",
+    
     "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
+    "tabpfn_embedding_mtlr_cr", "tabdpt_embedding_mtlr_cr", "tabicl_embedding_mtlr_cr",
+    "tabpfn_embedding_pchazard_cr", "tabdpt_embedding_pchazard_cr", "tabicl_embedding_pchazard_cr",
+    "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
+
     "tabpfn_embedding_deephit_v2_cr", "tabdpt_embedding_deephit_v2_cr", "tabicl_embedding_deephit_v2_cr",
     "tabpfn_embedding_deephit_v2_cr_adapter", "tabdpt_embedding_deephit_v2_cr_adapter", "tabicl_embedding_deephit_v2_cr_adapter",
-    "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
     "tabpfn_embedding_cox_cr_adapter", "tabdpt_embedding_cox_cr_adapter", "tabicl_embedding_cox_cr_adapter",
-
 ]
 
 BINNING_STRATS = [
@@ -70,33 +78,37 @@ ZEROSHOT_STRATS = [
 ]
 
 MODEL_LABELS = {
-    "km": "KM", "cox": "Cox PH", "rsf": "RSF", "gbsa": "GBSA",
+    "km": "KM", "cox": "Cox PH", "rsf": "RSF", "gbsa": "GBSA", "pchazard": "PCHazard",
     "deepsurv": "DeepSurv", "mtlr": "MLP-MTLR", "deephit_single": "MLP-DeepHit",
     "survtrace": "SurvTrace", "soden": "SODEN", "dysurv": "DySurv", "beta_surv": "Beta-Surv",
     "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS", "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS", "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS",
     "tabpfn_finetune": "TabPFN-FT-CE", "tabdpt_finetune": "TabDPT-FT-CE", "tabicl_finetune": "TabICL-FT-CE",
     "cox_cr": "Cox-CR", "aj_cr": "Aalen-Johansen", "fine_gray_cr": "Fine-Gray",
-    "survival_boost_cr": "SurvBoost-CR", "deephit_cr": "DeepHit-CR",
+    "survival_boost_cr": "SurvBoost-CR", "deephit_cr": "DeepHit-CR", "deepsurv_cr": "DeepSurv-CR",
+    "dysurv_cr": "DySurv-CR", "survtrace_cr": "SurvTrace-Multi",
     "tabpfn_zeroshot_cr_multinomial": "TabPFN-ZS-CR-Mul", "tabpfn_zeroshot_cr_perevent": "TabPFN-ZS-CR-PE",
+    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS-CR-Ens", "tabdpt_zeroshot_cr_ens": "TabDPT-ZS-CR-Ens", "tabicl_zeroshot_cr_ens": "TabICL-ZS-CR-Ens",
 }
 
 for fm, fm_name in zip(["tabpfn", "tabdpt", "tabicl"], ["TabPFN", "TabDPT", "TabICL"]):
     for task, task_name in zip(["embedding", "joint"], ["FT", "Joint"]):
-        for head, h_name in zip(["cox", "deephit", "mtlr"], ["Cox", "DeepHit", "MTLR"]):
+        for head, h_name in zip(["cox", "deephit", "mtlr", "pchazard"], ["Cox", "DeepHit", "MTLR", "PCHazard"]):
             MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
-        for head, h_name in zip(["deephit_cr", "deephit_v2_cr", "cox_cr"], ["DH-CR", "DH-v2-CR", "Cox-CR"]):
+        for head, h_name in zip(["deephit_cr", "deephit_v2_cr", "cox_cr", "mtlr_cr", "pchazard_cr"], ["DH-CR", "DH-v2-CR", "Cox-CR", "MTLR-CR", "PCH-CR"]):
             MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
         for head, h_name in zip(["mtlr_hybrid"], ["MTLR-Hybrid"]):
             MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
+        MODEL_LABELS[f"{fm}_finetune_cr"] = f"{fm_name}-FT-CR"
 
 MODEL_GROUPS = {
     "Baseline": ["km", "cox", "cox_cr", "aj_cr", "fine_gray_cr"], "Tree": ["rsf", "gbsa"],
-    "Deep": ["deepsurv", "mtlr", "deephit_single", "dysurv", "deephit_cr"], "Attention": ["survtrace"],
+    "Deep": ["deepsurv", "pchazard", "mtlr", "deephit_single", "dysurv", "deephit_cr", "deepsurv_cr", "dysurv_cr", "survtrace_cr"], "Attention": ["survtrace"],
     "Finetune-Cox": [m for m in MODEL_ORDER if "cox" in m and ("_embedding" in m or "_joint" in m)],
     "Finetune-DeepHit": [m for m in MODEL_ORDER if "deephit" in m and ("_embedding" in m or "_joint" in m)],
     "Finetune-MTLR": [m for m in MODEL_ORDER if "mtlr" in m and ("_embedding" in m or "_joint" in m)],
-    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent"],
-    "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
+    "Finetune-PCHazard": [m for m in MODEL_ORDER if "pchazard" in m and ("_embedding" in m or "_joint" in m)],
+    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent", "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens"],
+    "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune", "tabpfn_finetune_cr", "tabdpt_finetune_cr", "tabicl_finetune_cr"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
@@ -150,6 +162,10 @@ method_styles = {
         'color': '#c44e52', 'marker': 'D', 
         "linewidth": 3.5, "markersize": 7
     },
+    "embedding_pchazard": {
+        'color': '#ff7f0e', 'marker': 'D', 
+        "linewidth": 3.5, "markersize": 7
+    },
 
     # ---------- Tree ----------
     "rsf": {'color': '#8172b2', 'marker': '^', 'label': 'RSF', "alpha": 0.7},
@@ -161,6 +177,7 @@ method_styles = {
 
     # ---------- Deep ----------
     "deepsurv": {'color': '#c44e52', 'marker': 'h', 'label': 'DeepSurv', "alpha": 0.7},
+    "pchazard": {'color': '#eec744', 'marker': 'v', 'label': 'PCHazard', "alpha": 0.7},
     "deephit_single": {'color': '#c44e52', 'linestyle': '--', 'marker': 'h', 'label': 'MLP-DeepHit', "alpha": 0.7},
     "mtlr": {'color': '#64b5cd', 'marker': 'P', 'label': 'MLP-MTLR', "alpha": 0.7},
     "dysurv": {'color': '#c44e52', 'linestyle': ':', 'marker': 'h', 'label': 'DySurv', "alpha": 0.7},
@@ -339,7 +356,7 @@ def _plot_grid_bar(df: pd.DataFrame, val_col: str, title: str, ylab: str, out_di
             ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8, alpha=0.4)
             ax.set_ylim(0.3, min(1.0, sub["mean"].max() + 0.08) if val_col != "AUC_mean" else 1.0)
         ax.set_xticks(range(len(sub)))
-        ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index], rotation=90, ha="right", fontsize=8)
+        ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index], rotation=90, ha="right", fontsize=14)
         ax.set_ylabel(ylab if idx % n_cols == 0 else "")
         ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
         ax.grid(axis="y", alpha=0.3)
@@ -626,8 +643,8 @@ def fig08_survival_heads(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") 
     if metric not in df.columns: return
     
     backbones = ["tabpfn", "tabdpt", "tabicl"]
-    heads = ["ce", "mtlr", "deephit", "cox"]
-    head_labels = {"ce": "CE", "mtlr": "MTLR", "deephit": "DeepHit", "cox": "Cox PH"}
+    heads = ["ce", "pchazard", "mtlr", "deephit", "cox"]
+    head_labels = {"ce": "CE", "mtlr": "MTLR", "deephit": "DeepHit", "cox": "Cox PH", "pchazard": "PCHazard"}
     backbone_labels = {"tabpfn": "TabPFN", "tabdpt": "TabDPT", "tabicl": "TabICL"}
     
     summary = df.groupby("Model", observed=True)[metric].mean()
@@ -659,7 +676,7 @@ def fig08_survival_heads(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") 
     width = 0.2
     
     fig, ax = plt.subplots(figsize=FIG_SIZE)
-    colors = [group_colors_type["Finetune-CE"], group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DeepHit"], group_colors_type["Finetune-Cox"]] # Match groups
+    colors = [group_colors_type["Finetune-CE"], group_colors_type["Finetune-PCHazard"], group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DeepHit"], group_colors_type["Finetune-Cox"], ] # Match groups
     
     for i, h in enumerate(heads):
         offset = (i - 1.5) * width
@@ -846,6 +863,185 @@ def fig12_ranking_cr(df: pd.DataFrame, out_dir: Path) -> None:
     for c in configs: _plot_ranking_set(df, models, datasets, *c, out_dir)
 
 # ---------------------------------------------------------------------------
+# Figure 10 — Win-rate / ranking table
+# ---------------------------------------------------------------------------
+
+def fig10_win_rate(
+    df: pd.DataFrame,
+    out_dir: Path,
+    metric: str = "C_td",
+    higher_is_better: bool = True,
+    fname_prefix: str = "fig10_win_rate",
+    title_suffix: str = "",
+    target_datasets: list[str] | None = None,
+) -> None:
+    """For each dataset pick the best model (by mean metric across folds),
+    then count wins per model and per MODEL_TO_GROUP group.
+
+    Produces two figures:
+      *_group  — horizontal bar: wins per group (stacked by backbone if applicable)
+      *_model  — horizontal bar: wins per individual model, colored by group
+    """
+    if metric not in df.columns or df[metric].isna().all():
+        print(f"  [skip] {fname_prefix} — metric '{metric}' not available")
+        return
+
+    datasets = [
+        d for d in (target_datasets or DATASET_ORDER)
+        if d in df["Dataset"].unique()
+    ]
+    if not datasets:
+        print(f"  [skip] {fname_prefix} — no datasets")
+        return
+
+    # ── 1. Find winner per dataset ───────────────────────────────────────────
+    mean_scores = (
+        df[df["Dataset"].isin(datasets)]
+        .groupby(["Dataset", "Model"], observed=True)[metric]
+        .mean()
+        .dropna()
+    )
+    if mean_scores.empty:
+        return
+
+    wins_per_model: dict[str, int] = {}
+    for ds in datasets:
+        if ds not in mean_scores.index.get_level_values("Dataset"):
+            continue
+        ds_scores = mean_scores.xs(ds, level="Dataset")
+        if ds_scores.empty:
+            continue
+        winner = ds_scores.idxmax() if higher_is_better else ds_scores.idxmin()
+        wins_per_model[winner] = wins_per_model.get(winner, 0) + 1
+
+    if not wins_per_model:
+        return
+
+    wins_series = pd.Series(wins_per_model, name="Wins").sort_values(ascending=False)
+
+    # ── 2. Attach group info ─────────────────────────────────────────────────
+    wins_df = wins_series.reset_index()
+    wins_df.columns = ["Model", "Wins"]
+    wins_df["Group"] = wins_df["Model"].map(MODEL_TO_GROUP).fillna("Other")
+    wins_df["Label"] = wins_df["Model"].map(lambda m: MODEL_LABELS.get(m, m))
+    wins_df["Color"] = wins_df["Group"].map(
+        lambda g: group_colors_type.get(g, "#888888")
+    )
+
+    # ── 3. Group-level wins ──────────────────────────────────────────────────
+    group_wins = wins_df.groupby("Group")["Wins"].sum().sort_values(ascending=False)
+    group_colors_list = [group_colors_type.get(g, "#888888") for g in group_wins.index]
+
+    n_datasets = len(datasets)
+    metric_label = f"$C_{{td}}$" if metric == "C_td" else metric
+    sup = f" — {title_suffix}" if title_suffix else ""
+
+    # ── Figure A: wins per group ─────────────────────────────────────────────
+    fig_a, ax_a = plt.subplots(figsize=(10, max(4, len(group_wins) * 0.55 + 1.5)))
+    bars = ax_a.barh(
+        range(len(group_wins)),
+        group_wins.values,
+        color=group_colors_list,
+        edgecolor="white",
+        linewidth=0.6,
+    )
+    ax_a.set_yticks(range(len(group_wins)))
+    ax_a.set_yticklabels(group_wins.index, fontsize=10)
+    ax_a.invert_yaxis()
+    ax_a.set_xlabel(f"# datasets where group is best ({metric_label})", fontsize=10)
+    ax_a.set_title(
+        f"Win-Rate by Model Group{sup}\n(N = {n_datasets} datasets)",
+        fontweight="bold",
+        fontsize=11,
+    )
+    ax_a.axvline(0, color="black", linewidth=0.8)
+    ax_a.set_xlim(0, max(group_wins.max() + 1, 2))
+    ax_a.grid(axis="x", alpha=0.3)
+    for bar, val in zip(bars, group_wins.values):
+        if val > 0:
+            ax_a.text(
+                val + 0.1, bar.get_y() + bar.get_height() / 2,
+                str(val), va="center", ha="left", fontsize=10, fontweight="bold",
+            )
+    fig_a.tight_layout()
+    save_fig(fig_a, out_dir, f"{fname_prefix}_group")
+
+    # ── Figure B: wins per individual model ──────────────────────────────────
+    if wins_df.empty:
+        return
+    wins_df_sorted = wins_df.sort_values("Wins", ascending=True)  # ascending for barh
+
+    fig_b, ax_b = plt.subplots(figsize=(10, max(5, len(wins_df_sorted) * 0.40 + 1.5)))
+    bars_b = ax_b.barh(
+        range(len(wins_df_sorted)),
+        wins_df_sorted["Wins"].values,
+        color=wins_df_sorted["Color"].values,
+        edgecolor="white",
+        linewidth=0.5,
+    )
+    ax_b.set_yticks(range(len(wins_df_sorted)))
+    ax_b.set_yticklabels(wins_df_sorted["Label"].values, fontsize=9)
+    ax_b.set_xlabel(f"# datasets where model is best ({metric_label})", fontsize=10)
+    ax_b.set_title(
+        f"Win-Rate by Model{sup}\n(N = {n_datasets} datasets)",
+        fontweight="bold",
+        fontsize=11,
+    )
+    ax_b.axvline(0, color="black", linewidth=0.8)
+    ax_b.set_xlim(0, max(wins_df_sorted["Wins"].max() + 1, 2))
+    ax_b.grid(axis="x", alpha=0.3)
+    for bar, val in zip(bars_b, wins_df_sorted["Wins"].values):
+        ax_b.text(
+            val + 0.05, bar.get_y() + bar.get_height() / 2,
+            str(val), va="center", ha="left", fontsize=9, fontweight="bold",
+        )
+
+    # Group legend
+    present_groups = wins_df["Group"].unique()
+    legend_handles = [
+        mpatches.Patch(color=group_colors_type.get(g, "#888888"), label=g)
+        for g in MODEL_GROUPS if g in present_groups
+    ]
+    if legend_handles:
+        ax_b.legend(
+            handles=legend_handles,
+            title="Model Group",
+            loc="lower right",
+            frameon=True,
+            fontsize=8,
+            title_fontsize=9,
+        )
+    fig_b.tight_layout()
+    save_fig(fig_b, out_dir, f"{fname_prefix}_model")
+
+
+def fig10_win_rate_sr(df: pd.DataFrame, out_dir: Path) -> None:
+    for metric, higher in [("C_td", True), ("IBS", False), ("AUC_mean", True)]:
+        sfx = "" if metric == "C_td" else f"_{metric.lower()}"
+        fig10_win_rate(
+            df, out_dir,
+            metric=metric,
+            higher_is_better=higher,
+            fname_prefix=f"fig10_win_rate{sfx}",
+            title_suffix=metric,
+            target_datasets=SR_DATASETS,
+        )
+
+
+def fig10_win_rate_cr(df: pd.DataFrame, out_dir: Path) -> None:
+    for metric, higher in [("C_td", True), ("IBS", False), ("AUC_mean", True)]:
+        sfx = "" if metric == "C_td" else f"_{metric.lower()}"
+        fig10_win_rate(
+            df, out_dir,
+            metric=metric,
+            higher_is_better=higher,
+            fname_prefix=f"fig10_win_rate_cr{sfx}",
+            title_suffix=f"{metric} — CR",
+            target_datasets=CR_DATASETS,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Summary statistics printer (stdout for RESULTS.md)
 # ---------------------------------------------------------------------------
 
@@ -920,6 +1116,8 @@ def main() -> None:
         "08_ibs": lambda: fig08_survival_heads(df, out_dir, metric="IBS"),
         "09": lambda: fig09_cd_diagram(df, out_dir, metric="C_td"),
         "09_ibs": lambda: fig09_cd_diagram(df, out_dir, metric="IBS"),
+        "10": lambda: fig10_win_rate_sr(df, out_dir),
+        "10_cr": lambda: fig10_win_rate_cr(df_cr, out_dir) if df_cr is not None else None,
         "12": lambda: fig12_ranking(df, out_dir),
         "12_cr": lambda: fig12_ranking_cr(df_cr, out_dir) if df_cr is not None else lambda: None,
     }
