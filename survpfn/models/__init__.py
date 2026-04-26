@@ -49,6 +49,9 @@ from .tabpfn import TabPFNSurvPH, TabPFNSurvPHFinetune
 from .tabdpt import TabDPTSurvPH, TabDPTSurvPHFinetune
 from .tabicl import TabICLSurvPH, TabICLSurvPHFinetune
 
+# ── TabTune (tabtune library) wrappers ───────────────────────────────────────
+from .shared.tabtune import TabPFNTune, TabDPTTune, TabICLTune
+
 # ── CR fine-tuning wrappers ──────────────────────────────────────────────────
 from .shared.cr import TabPFNCRPH, TabDPTCRPH, TabICLCRPH, CRZeroShotPredictor
 from .shared.cr.zeroshot import train_cr_zeroshot
@@ -304,6 +307,80 @@ def _zeroshot_wrapper(backbone: str, method: str = "single_context", use_time_bi
     return _fn
 
 
+def _tabtune_wrapper(fm_name: str, binning_scheme: str = "quantile", task_type: str = "sr") -> Callable:
+    """Factory for tabtune-based temporal expansion finetuning.
+
+    Uses :class:`TabPFNTune`, :class:`TabDPTTune`, or :class:`TabICLTune`
+    (each backed by a ``tabtune.TabularPipeline``) instead of the hand-written
+    ``BaseSurvExpandedFinetune`` subclasses.
+    """
+    _TuneCls = {
+        "tabpfn": TabPFNTune,
+        "tabdpt": TabDPTTune,
+        "tabicl": TabICLTune,
+    }[fm_name]
+
+    def _fn(df_train, df_test, dur_col, ev_col,
+            tune=False, n_trials=10, out_dir="results",
+            cfg: Optional[FMConfig] = None, **kw):
+        cfg = cfg or FMConfig.from_kwargs(**kw)
+        feat_cols = [c for c in df_train.columns if c not in {dur_col, ev_col}]
+
+        if kw.get("num_durations") is not None and kw.get("num_durations") > 0:
+            num_durations = kw["num_durations"]
+        else:
+            num_durations = resolve_num_durations(
+                df_train[dur_col].values,
+                df_train[ev_col].values,
+                -1,
+            )
+
+        if fm_name == 'tabpfn':
+            tuning_strategy="finetune"
+            finetune_mode="native"
+        else:
+            tuning_strategy="peft"
+            finetune_mode="sft"
+
+        wrapper = _TuneCls(
+            num_durations=num_durations,
+            learning_rate=1e-5,
+            epochs=5,
+            batch_size=cfg.batch_size,
+            device=cfg.device,
+            binning_scheme=binning_scheme,
+            early_event_quantile=cfg.early_event_quantile,
+            early_bin_frac=cfg.early_bin_frac,
+            patience=cfg.patience,
+            random_state=cfg.random_state,
+            task_type=task_type,
+            finetune_mode=finetune_mode,
+			tuning_strategy=tuning_strategy
+        )
+
+        wrapper.fit(
+            df_train[feat_cols].values.astype(np.float32),
+            df_train[dur_col].values,
+            df_train[ev_col].values,
+            verbose=cfg.verbose,
+        )
+
+        x_test = df_test[feat_cols].values.astype(np.float32)
+        surv_out = wrapper.predict_survival_df(x_test, n_ensemble=0)
+
+        if isinstance(surv_out, list):
+            cifs = surv_out
+            risk = cifs[0].iloc[-1].values
+            return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
+        else:
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            risk = -_trapz(surv_out.values.T, surv_out.index.values, axis=1)
+            return wrapper, risk, surv_out.values.T, surv_out.index.values
+
+    _fn.__name__ = f"train_{fm_name}_tabtune"
+    return _fn
+
+
 # ---------------------------------------------------------------------------
 # Model registry
 # ---------------------------------------------------------------------------
@@ -357,6 +434,11 @@ ALL_MODELS: dict[str, Callable] = {
     "tabpfn_finetune":       _finetune_wrapper("tabpfn"),
     "tabdpt_finetune":       _finetune_wrapper("tabdpt"),
     "tabicl_finetune":       _finetune_wrapper("tabicl"),
+
+    # ── TabTune library finetuning (tabtune.TabularPipeline backend) ─────────
+    "tabpfn_tabtune":        _tabtune_wrapper("tabpfn"),
+    "tabdpt_tabtune":        _tabtune_wrapper("tabdpt"),
+    "tabicl_tabtune":        _tabtune_wrapper("tabicl"),
 
     # ── Zero-shot ICL (SR) ──────────────────────────────────────────────────
     "tabpfn_zeroshot":         _zeroshot_wrapper("tabpfn"),

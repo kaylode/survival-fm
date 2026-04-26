@@ -83,11 +83,12 @@ ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot tabpfn_zeroshot
 ZEROSHOT_TEMPORAL="tabpfn_zeroshot_perbin_time tabdpt_zeroshot_perbin_time tabicl_zeroshot_perbin_time tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
 BESTSHOT="tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
 FINETUNE="tabpfn_finetune tabdpt_finetune tabicl_finetune"
+TABTUNE="tabpfn_tabtune tabdpt_tabtune tabicl_tabtune"
 
 HYBRID="tabpfn_finetune_hybrid tabdpt_finetune_hybrid tabicl_finetune_hybrid tabpfn_zeroshot_hybrid tabdpt_zeroshot_hybrid tabicl_zeroshot_hybrid tabpfn_embedding_mtlr_hybrid tabdpt_embedding_mtlr_hybrid tabicl_embedding_mtlr_hybrid"
 CALIBR="tabpfn_embedding_mtlr_calibration tabdpt_embedding_mtlr_calibration tabicl_embedding_mtlr_calibration"
 
-ALL_SR_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_EMBEDDING $BESTSHOT $FINETUNE"
+ALL_SR_MODELS="$CLASSICAL_MODELS $DEEP_MODELS $FM_EMBEDDING $BESTSHOT $FINETUNE $TABTUNE"
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 usage() {
@@ -143,6 +144,7 @@ case "$GROUP" in
     zeroshot_temporal) MODELS="$ZEROSHOT_TEMPORAL" ;;
     bestshot)          MODELS="$BESTSHOT" ;;
     finetune)          MODELS="$FINETUNE" ;;
+    tabtune)           MODELS="$TABTUNE" ;;
     tabpfn)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabpfn | xargs) ;;
     tabdpt)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabdpt | xargs) ;;
     tabicl)            MODELS=$(echo "$ALL_SR_MODELS" | xargs -n1 | grep tabicl | xargs) ;;

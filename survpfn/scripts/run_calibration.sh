@@ -19,7 +19,7 @@ for DATASET in $DATASETS; do
         # Check if predictions exist before trying to plot
         if [ -d "results/predictions/${DATASET}/${MODEL}" ]; then
             echo "Plotting: $DATASET / $MODEL"
-            uv run survpfn/scripts/plot_calibration.py \
+            uv run survpfn/xai/plot_calibration.py \
                 --dataset "$DATASET" \
                 --model   "$MODEL" \
                 --out     "results/xai/calibration/${DATASET}/${MODEL}_calibr.pdf"

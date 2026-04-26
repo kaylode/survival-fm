@@ -26,7 +26,8 @@ from __future__ import annotations
 import argparse
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+import importlib
 
 import matplotlib
 matplotlib.use("Agg")
@@ -251,6 +252,7 @@ def plot_km_axis(
     palette: dict | list,
     title: str = "",
     show_atrisk: bool = False,
+    show_legend: bool = True,
 ) -> None:
     """
     Draw KM curves for each subgroup level on ax.
@@ -274,23 +276,25 @@ def plot_km_axis(
                 label=f"{grp} (n={n:,})")
         kmf.plot_survival_function(
             ax=ax, ci_show=True, ci_alpha=0.12,
-            color=color, linewidth=1.8,
+            color=color, linewidth=3.0,
+            legend=show_legend,
         )
 
     # Log-rank p annotation
     p_str = (f"p < 0.001" if p < 0.001
              else f"p = {p:.3f}" if not np.isnan(p)
              else "p = n/a")
-    ax.text(0.97, 0.97, f"log-rank {p_str}",
-            ha="right", va="top", transform=ax.transAxes,
-            fontsize=7.5, style="italic",
-            bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7, ec="none"))
+    # ax.text(0.97, 0.97, f"log-rank {p_str}",
+    #         ha="right", va="top", transform=ax.transAxes,
+    #         fontsize=7.5, style="italic",
+    #         bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7, ec="none"))
 
     ax.set_ylim(-0.02, 1.05)
-    ax.set_xlabel("Time (hours from ICU admission)", fontsize=8)
-    ax.set_ylabel("Survival probability", fontsize=8)
-    ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
-    ax.legend(fontsize=7, loc="lower left", framealpha=0.8)
+    ax.set_xlabel("Time (hours)", fontsize=20)
+    ax.set_ylabel("Survival probability", fontsize=20)
+    # ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
+    if show_legend:
+        ax.legend(fontsize=7, loc="lower left", framealpha=0.8)
 
 
 def plot_eventrate_axis(
@@ -328,7 +332,7 @@ def plot_eventrate_axis(
     ax.set_yticks(y)
     ax.set_yticklabels(sub["Subgroup"], fontsize=8)
     ax.set_xlabel("Mortality rate (%)", fontsize=8)
-    ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
+    # ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
     ax.set_xlim(0, min(100, sub["CI_hi"].max() + 10))
 
 
@@ -372,7 +376,7 @@ def plot_followup_axis(
     ax.set_xticks(np.arange(len(labels)))
     ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("Follow-up time (hours)", fontsize=8)
-    ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
+    # ax.set_title(title or axis_label, fontsize=9, fontweight="bold")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -556,6 +560,7 @@ def plot_risk_stratification_km(
     out_path: Path,
     dataset_name: str,
     model_name: str,
+    is_calibrated: bool = False,
 ) -> None:
     if "duration" not in df_preds.columns or "event" not in df_preds.columns:
         return
@@ -564,7 +569,7 @@ def plot_risk_stratification_km(
     if risk_groups is None:
         return
         
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(12, 10))
     
     palette = {
         "Low risk (bottom 20%)": "#4dac26", 
@@ -572,6 +577,10 @@ def plot_risk_stratification_km(
         "High risk (top 20%)": "#d7191c"
     }
     
+    # title = f"{model_name} Risk Stratification"
+    # if is_calibrated:
+    #     title += " (Calibrated)"
+        
     plot_km_axis(
         ax, 
         df=df_preds, 
@@ -580,25 +589,26 @@ def plot_risk_stratification_km(
         groups=risk_groups, 
         axis_label="Predicted Risk", 
         palette=palette, 
-        title="temp",
+        # title=title,
+        show_legend=False,
     )
     
-    # Drop title
-    ax.set_title("")
+    # Drop title for the final plot if needed, or keep it if it's descriptive
+    # ax.set_title("") 
     
     # Larger fonts
-    ax.set_xlabel(ax.get_xlabel(), fontsize=16)
-    ax.set_ylabel(ax.get_ylabel(), fontsize=16)
-    ax.tick_params(axis='both', labelsize=14)
-    ax.legend(fontsize=14, loc="lower left", framealpha=0.8)
+    ax.set_xlabel(ax.get_xlabel(), fontsize=22)
+    ax.set_ylabel(ax.get_ylabel(), fontsize=22)
+    ax.tick_params(axis='both', labelsize=20)
+    # ax.legend(fontsize=20, loc="lower left", framealpha=0.8)
     
     for text in ax.texts:
         if "log-rank" in text.get_text():
-            text.set_fontsize(14)
+            text.set_fontsize(20)
             
     # Denser lines
     for line in ax.get_lines():
-        line.set_linewidth(2.5)
+        line.set_linewidth(3.5)
         
     # Plot from 24 hours to 720 hours
     # ax.set_xlim(left=24, right=720)
@@ -618,6 +628,8 @@ def analyse_dataset(
     include_insurance: bool = True,
     predictions_dir: Optional[Path] = None,
     predictions_model: Optional[str] = None,
+    calibrate: bool = False,
+    calibration_horizon: Optional[float] = None,
 ) -> None:
     """Run full subgroup EDA for one EHR dataset."""
     from survpfn.dataloaders import ALL_DATASETS
@@ -752,10 +764,57 @@ def analyse_dataset(
                     
                 pred_files = list(model_pred_dir.glob("*.parquet"))
                 if pred_files:
-                    df_preds_list = [pd.read_parquet(pf) for pf in pred_files]
+                    df_preds_list = []
+                    for pf in pred_files:
+                        temp_df = pd.read_parquet(pf)
+                        # Ensure fold is present if not in parquet
+                        if "fold" not in temp_df.columns:
+                            try:
+                                fold_num = int(pf.stem.split("_")[-1])
+                                temp_df["fold"] = fold_num
+                            except Exception:
+                                pass
+                        df_preds_list.append(temp_df)
+                        
                     df_preds = pd.concat(df_preds_list, ignore_index=True)
-                    risk_km_path = out_dir / f"subgroup_km_risk_{m_name}.pdf"
-                    plot_risk_stratification_km(df_preds, risk_km_path, name, m_name)
+                    
+                    is_calibrated = False
+                    if calibrate:
+                        try:
+                            from survpfn.xai.plot_calibration import lovo_platt_calibrate, horizon_labels, km_censoring_at
+                            
+                            # Determine horizon if not provided
+                            tau = calibration_horizon
+                            if tau is None:
+                                et = df_preds.loc[df_preds["event"] > 0, "duration"]
+                                if not et.empty:
+                                    tau = float(et.median())
+                                else:
+                                    tau = float(df_preds["duration"].median())
+                            
+                            print(f"  [Calibration] Applying Platt scaling at τ={tau:.1f}...")
+                            
+                            risk = df_preds["risk_score"].values
+                            T = df_preds["duration"].values
+                            E = df_preds["event"].values
+                            
+                            if "fold" in df_preds.columns:
+                                folds = df_preds["fold"].values
+                                y_tau, observed = horizon_labels(T, E, tau)
+                                # We don't use IPCW for simplicity here unless requested, matching plot_calibration's defaults
+                                risk_cal = lovo_platt_calibrate(risk, y_tau, observed, folds)
+                                df_preds["risk_score"] = risk_cal
+                                is_calibrated = True
+                            else:
+                                print("  [WARN] 'fold' column missing, skipping calibration.")
+                        except ImportError:
+                            print("  [WARN] Could not import calibration functions from plot_calibration.py")
+                        except Exception as e:
+                            print(f"  [WARN] Calibration failed: {e}")
+
+                    suffix = "_calibrated" if is_calibrated else ""
+                    risk_km_path = out_dir / f"subgroup_km_risk_{m_name}{suffix}.pdf"
+                    plot_risk_stratification_km(df_preds, risk_km_path, name, m_name, is_calibrated=is_calibrated)
                 else:
                     if predictions_model:
                         print(f"  [WARN] No parquet files found in {model_pred_dir}")
@@ -799,20 +858,31 @@ def main() -> None:
     )
     parser.add_argument(
         "--predictions-model", type=str, default=None,
-        help="Name of the model to use for risk stratification (e.g. tabpfn_embedding_cox). If not specified, loops over all models in the predictions directory.",
+        help="Specific model name to use for risk stratification (e.g. tabdpt_embedding_mtlr)",
     )
+    parser.add_argument(
+        "--calibrate", action="store_true",
+        help="Apply Platt calibration to risk scores before stratification.",
+    )
+    parser.add_argument(
+        "--calibration-horizon", type=float, default=None,
+        help="Time horizon for calibration (defaults to median event time).",
+    )
+    
     args = parser.parse_args()
 
     print(f"\nSubgroup EDA — datasets: {args.datasets}")
     print(f"Output root:  {args.output_dir}\n")
 
-    for name in args.datasets:
+    for ds in args.datasets:
         analyse_dataset(
-            name=name,
-            out_dir=args.output_dir / name,
+            ds, 
+            args.output_dir / ds, 
             include_insurance=not args.no_insurance,
             predictions_dir=args.predictions_dir,
             predictions_model=args.predictions_model,
+            calibrate=args.calibrate,
+            calibration_horizon=args.calibration_horizon,
         )
 
     print("\nAll done.")
