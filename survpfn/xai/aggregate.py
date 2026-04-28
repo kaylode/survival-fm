@@ -111,12 +111,12 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--output-dir", default="results/benchmark",
+        "--output-dir", default="results/benchmark_cr",
         help="Root directory produced by scripts/benchmark.py.",
     )
     parser.add_argument(
         "--dest", default=None,
-        help="Output CSV path. Defaults to <output-dir>/aggregated.csv.",
+        help="Output CSV path. Defaults to <output-dir>/aggregated_cr.csv.",
     )
     parser.add_argument(
         "--summary-metric", default="C_td",

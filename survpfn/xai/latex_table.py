@@ -53,63 +53,77 @@ MODEL_DISPLAY: dict[str, str] = {
     "deepsurv":       "DeepSurv",
     "mtlr":           "MLP-MTLR",
     # "pchazard":       "PCHazard",
-    "deephit_single": "MLP-DeepHit",
+    "deephit_single": "MLP-DH",
     "survtrace":      "SurvTRACE",
     "dysurv":        "DySurv",
     "soden":          "SODEN",
-    # TabPFN frozen embedding
-    "tabpfn_embedding_cox":      "TabPFN-FT-Cox",
-    "tabpfn_embedding_deephit":  "TabPFN-FT-DeepHit",
-    "tabpfn_embedding_pchazard": "TabPFN-FT-PCHazard",
-    "tabpfn_embedding_mtlr":     "TabPFN-FT-MTLR",
-    # TabDPT frozen embedding
-    "tabdpt_embedding_cox":      "TabDPT-FT-Cox",
-    "tabdpt_embedding_deephit":  "TabDPT-FT-DeepHit",
-    "tabdpt_embedding_pchazard": "TabDPT-FT-PCHazard",
-    "tabdpt_embedding_mtlr":     "TabDPT-FT-MTLR",
-    # TabICL frozen embedding
-    "tabicl_embedding_cox":      "TabICL-FT-Cox",
-    "tabicl_embedding_deephit":  "TabICL-FT-DeepHit",
-    "tabicl_embedding_pchazard": "TabICL-FT-PCHazard",
-    "tabicl_embedding_mtlr":     "TabICL-FT-MTLR",
-    # Finetune CE
-    "tabpfn_finetune":           "TabPFN-FT-CE",
-    "tabdpt_finetune":           "TabDPT-FT-CE",
-    "tabicl_finetune":           "TabICL-FT-CE",
+
     # Zero-shot
     "tabpfn_zeroshot_perbin_time_ens":  "TabPFN-ZS",
     "tabdpt_zeroshot_perbin_time_ens":  "TabDPT-ZS",
     "tabicl_zeroshot_perbin_time_ens":  "TabICL-ZS",
+
+    # Finetune CE
+    "tabpfn_finetune":           "TabPFN-CE",
+    "tabdpt_finetune":           "TabDPT-CE",
+    "tabicl_finetune":           "TabICL-CE",
+
+    # TabPFN frozen embedding
+    "tabpfn_embedding_cox":      "TabPFN-Cox",
+    "tabpfn_embedding_deephit":  "TabPFN-DH",
+    # "tabpfn_embedding_pchazard": "TabPFN-PCH",
+    "tabpfn_embedding_mtlr":     "TabPFN-MTLR",
+    # TabDPT frozen embedding
+    "tabdpt_embedding_cox":      "TabDPT-Cox",
+    "tabdpt_embedding_deephit":  "TabDPT-DH",
+    # "tabdpt_embedding_pchazard": "TabDPT-PCH",
+    "tabdpt_embedding_mtlr":     "TabDPT-MTLR",
+    # TabICL frozen embedding
+    "tabicl_embedding_cox":      "TabICL-Cox",
+    "tabicl_embedding_deephit":  "TabICL-DH",
+    # "tabicl_embedding_pchazard": "TabICL-PCH",
+    "tabicl_embedding_mtlr":     "TabICL-MTLR",
+
     
     # Competing Risks Classical
-    "cox_cr":            "Cox-CR",
-    "aj_cr":             "Aalen-Johansen",
+    "cox_cr":            "Cox PH",
+    # "aj_cr":             "Aalen-Johansen",
     "fine_gray_cr":      "Fine-Gray",
-    "survival_boost_cr": "SurvBoost-CR",
+    "survival_boost_cr": "SurvBoost",
+
+    # Competing Risks Zero-shot
+    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS",
+    "tabdpt_zeroshot_cr_ens": "TabDPT-ZS",
+    "tabicl_zeroshot_cr_ens": "TabICL-ZS",
     
     # Competing Risks Deep
-    "deephit_cr":        "DeepHit-CR",
-    "dysurv_cr":         "DySurv-CR",
-    "survtrace_cr":      "SurvTRACE-CR",
-    
+    "deephit_cr":        "DeepHit",
+    "dysurv_cr":         "DySurv",
+    "survtrace_cr":      "SurvTRACE",
+
+    "tabpfn_finetune_cr": "TabPFN-CE",
+    "tabdpt_finetune_cr": "TabDPT-CE",
+    "tabicl_finetune_cr": "TabICL-CE",
+
     # Competing Risks FM Embedding
-    "tabpfn_embedding_cox_cr": "TabPFN-FT-Cox-CR",
-    "tabdpt_embedding_cox_cr": "TabDPT-FT-Cox-CR",
-    "tabicl_embedding_cox_cr": "TabICL-FT-Cox-CR",
-    "tabpfn_embedding_deephit_cr": "TabPFN-FT-DeepHit-CR",
-    "tabdpt_embedding_deephit_cr": "TabDPT-FT-DeepHit-CR",
-    "tabicl_embedding_deephit_cr": "TabICL-FT-DeepHit-CR",
-    
-    # Competing Risks Zero-shot
-    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS-CR",
-    "tabdpt_zeroshot_cr_ens": "TabDPT-ZS-CR",
-    "tabicl_zeroshot_cr_ens": "TabICL-ZS-CR",
+    "tabpfn_embedding_cox_cr": "TabPFN-Cox",
+    "tabdpt_embedding_cox_cr": "TabDPT-Cox",
+    "tabicl_embedding_cox_cr": "TabICL-Cox",
+
+    "tabpfn_embedding_mtlr_cr": "TabPFN-MTLR",
+    "tabdpt_embedding_mtlr_cr": "TabDPT-MTLR",
+    "tabicl_embedding_mtlr_cr": "TabICL-MTLR",
+
+    "tabpfn_embedding_deephit_cr": "TabPFN-DH",
+    "tabdpt_embedding_deephit_cr": "TabDPT-DH",
+    "tabicl_embedding_deephit_cr": "TabICL-DH",
+
 }
 
 #: Ordered model groups for row layout
 MODEL_GROUPS: dict[str, list[str]] = {
-    "Classical": ["cox", "km", "cox_cr", "aj_cr", "fine_gray_cr", "survival_boost_cr"],
-    "Tree Ensemble": ["rsf", "gbsa"],
+    "Classical": ["cox", "km", "cox_cr", "aj_cr", "fine_gray_cr"],
+    "Tree Ensemble": ["rsf", "gbsa", "survival_boost_cr"],
     "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv", "survtrace", "soden", "deephit_cr", "dysurv_cr", "survtrace_cr"],
     "Finetune-Surv": [
         "tabpfn_embedding_cox", "tabpfn_embedding_deephit",
@@ -121,14 +135,9 @@ MODEL_GROUPS: dict[str, list[str]] = {
         "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
         "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
     ],
-    "FM Joint": [
-        "tabpfn_joint_cox", "tabpfn_joint_deephit", "tabpfn_joint_pchazard", "tabpfn_joint_mtlr",
-        "tabdpt_joint_cox", "tabdpt_joint_deephit", "tabdpt_joint_pchazard", "tabdpt_joint_mtlr",
-        "tabicl_joint_cox", "tabicl_joint_deephit", "tabicl_joint_pchazard", "tabicl_joint_mtlr",
+    "Finetune-CE": [
+        "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
     ],
-    # "Finetune-CE": [
-    #     "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
-    # ],
     "Zero-Shot": [
         "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
         "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens",
@@ -211,8 +220,12 @@ ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS + CR_DATA
 
 #: (internal_name → display_name)
 METRIC_DISPLAY: dict[str, str] = {
-    "C_td": "Concordance Index (C_td)",
-    "IBS":     "Integrated Brier Score",
+    "C_td_cause1": "$C_{td}$ (Cause 1)",
+    "C_td_cause2": "$C_{td}$ (Cause 2)",
+    "IBS_cause1": "IBS (Cause 1)",
+    "IBS_cause2": "IBS (Cause 2)",
+    "AUC_cause1": "AUC (Cause 1)",
+    "AUC_cause2": "AUC (Cause 2)",
 }
 
 
@@ -439,20 +452,31 @@ def build_latex_table(
     # Compute best/second per column
     ranks = compute_ranks(mean_pivot[ds_present], lower_is_better=lower_is_better)
 
-    # Ordered list of model rows (preserve group order; skip missing)
+    # Ordered list of model rows (Follow MODEL_DISPLAY order)
     all_models_present = set(mean_pivot.index)
-    ordered_models: list[str] = []
+    
+    # Map each model to its group
+    model_to_group = {m: grp for grp, mlist in MODEL_GROUPS.items() for m in mlist}
+    
+    # Filter and order models based on MODEL_DISPLAY
+    ordered_models = [m for m in MODEL_DISPLAY if m in all_models_present]
+    
+    # Re-construct ordered_groups to follow MODEL_DISPLAY order
     ordered_groups: list[tuple[str, list[str]]] = []
-    for grp, mlist in MODEL_GROUPS.items():
-        grp_models = [m for m in mlist if m in all_models_present]
-        if grp_models:
-            ordered_groups.append((grp, grp_models))
-            ordered_models.extend(grp_models)
-    # Any model not in a group → "Other"
-    extra = None#[m for m in sorted(all_models_present) if m not in ordered_models]
-    if extra:
-        ordered_groups.append(("Other", extra))
-        ordered_models.extend(extra)
+    current_grp = None
+    current_mlist = []
+    
+    for m in ordered_models:
+        grp = model_to_group.get(m, "Other")
+        if grp != current_grp:
+            if current_mlist:
+                ordered_groups.append((current_grp, current_mlist))
+            current_grp = grp
+            current_mlist = [m]
+        else:
+            current_mlist.append(m)
+    if current_mlist:
+        ordered_groups.append((current_grp, current_mlist))
 
     # Compute average rank across present datasets
     avg_ranks = compute_average_ranks(mean_pivot[ds_present], lower_is_better=lower_is_better)
@@ -715,6 +739,11 @@ def build_latex_longtable_all_metrics(
     
     # Calculate means and stds
     summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
+
+    # Filter out models not in MODEL_DISPLAY
+    models = summary.index.get_level_values("Model").unique()
+    models = [m for m in models if m in MODEL_DISPLAY]
+    summary = summary.loc[summary.index.get_level_values("Model").isin(models)]
     
     ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
     
@@ -734,7 +763,6 @@ def build_latex_longtable_all_metrics(
                         ranks[d][metric][sorted_vals.index[1]] = "second"
             except KeyError:
                 pass
-    
     _sig_note = (
         " $^{\\ast}$~indicates statistically significant improvement over the "
         "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
@@ -761,11 +789,10 @@ def build_latex_longtable_all_metrics(
     lines.append("\\bottomrule")
     lines.append("\\endfoot")
     
-    # Ordered list of model rows
+    # Ordered list of model rows (Follow MODEL_DISPLAY order)
     all_models_present = set(summary.index.get_level_values("Model"))
-    ordered_models = []
-    for grp, mlist in MODEL_GROUPS.items():
-        ordered_models.extend([m for m in mlist if m in all_models_present])
+    ordered_models = [m for m in MODEL_DISPLAY if m in all_models_present]
+    # Any models not in MODEL_DISPLAY but present in summary
     extra = [m for m in sorted(all_models_present) if m not in ordered_models]
     ordered_models.extend(extra)
     
@@ -823,11 +850,14 @@ def build_latex_longtable_cr_metrics(
     sig_map: dict[tuple[str, str], str] | None = None,
 ) -> str:
     """Generate a NeurIPS-formatted longtable for Competing Risks: rows=Dataset->Model, cols=Metrics."""
-    metrics = ["C_td", "IBS", "AUC_mean"]
+    metrics = ["C_td_cause1", "IBS_cause1", "AUC_cause1", "C_td_cause2", "IBS_cause2", "AUC_cause2"]
     metric_display = {
-        "C_td": "Macro $C_{td}$",
-        "IBS": "Macro IBS",
-        "AUC_mean": "Macro AUC",
+        "C_td_cause1": "$C_{td}^{(1)}$",
+        "IBS_cause1": "IBS$^{(1)}$",
+        "AUC_cause1": "AUC$^{(1)}$",
+        "C_td_cause2": "$C_{td}^{(2)}$",
+        "IBS_cause2": "IBS$^{(2)}$",
+        "AUC_cause2": "AUC$^{(2)}$",
     }
     
     df = pd.read_csv(csv_path)
@@ -866,7 +896,7 @@ def build_latex_longtable_cr_metrics(
     lines.append("\\footnotesize")
     lines.append("\\setlength{\\tabcolsep}{3pt}")
     lines.append("\\begin{longtable}{ll" + "c" * len(present_metrics) + "}")
-    lines.append(f"\\caption{{Detailed Competing Risks Performance Metrics (Macro-averaged, mean~$\\pm$~std across 5 folds).{_sig_note}}} \\label{{tab:detailed_metrics_cr}} \\\\")
+    lines.append(f"\\caption{{Detailed Competing Risks Performance Metrics (Macro-averaged and per-cause, mean~$\\pm$~std across 5 folds).{_sig_note}}} \\label{{tab:detailed_metrics_cr}} \\\\")
     lines.append("\\toprule")
     
     header = " & ".join(["\\textbf{Dataset}", "\\textbf{Model}"] + [f"\\textbf{{{metric_display.get(m, m)}}}" for m in present_metrics])
@@ -881,10 +911,10 @@ def build_latex_longtable_cr_metrics(
     lines.append("\\bottomrule")
     lines.append("\\endfoot")
     
+    # Ordered list of model rows (Follow MODEL_DISPLAY order)
     all_models_present = set(summary.index.get_level_values("Model"))
-    ordered_models = []
-    for grp, mlist in MODEL_GROUPS.items():
-        ordered_models.extend([m for m in mlist if m in all_models_present])
+    ordered_models = [m for m in MODEL_DISPLAY if m in all_models_present]
+    # Any models not in MODEL_DISPLAY but present in summary
     extra = [m for m in sorted(all_models_present) if m not in ordered_models]
     ordered_models.extend(extra)
     
@@ -1048,8 +1078,6 @@ def main() -> None:
         col_name = metric
         if col_name == "Integrated Brier Score":
             col_name = "IBS"
-        elif col_name not in ["C_td", "IBS", "D-cal"] and "IBS" in metric:
-             col_name = "IBS"
 
         print(f"\n[{metric}] Loading {args.aggregated} … (using CSV column '{col_name}')")
         try:
@@ -1059,7 +1087,7 @@ def main() -> None:
             continue
 
         mean_pivot, std_pivot = pivot_for_table(summary, selected_datasets)
-        lower = col_name in _lower_is_better_set or metric in _lower_is_better_set
+        lower = col_name in _lower_is_better_set or metric in _lower_is_better_set or "IBS" in metric
 
         # Load significance map (per-metric, respecting lower_is_better direction)
         sig_map: dict[tuple[str, str], str] | None = None

@@ -39,27 +39,22 @@ MODEL_ORDER = [ # "km", "aj_cr",
     "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
     
     "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
-    "tabpfn_finetune_cr", "tabdpt_finetune_cr", "tabicl_finetune_cr",
 
-    "tabpfn_embedding_pchazard", "tabdpt_embedding_pchazard", "tabicl_embedding_pchazard",
+    # "tabpfn_embedding_pchazard", "tabdpt_embedding_pchazard", "tabicl_embedding_pchazard",
     "tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr", "tabicl_embedding_mtlr",
 
     "tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit",
     "tabpfn_embedding_cox", "tabdpt_embedding_cox", "tabicl_embedding_cox",
 
-    "aj_cr", "cox_cr", "fine_gray_cr", "survival_boost_cr",
-    "deephit_cr", "deepsurv_cr", "dysurv_cr", "survtrace_cr",
-    "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent", "tabpfn_zeroshot_cr_ens",
-    "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens",
-    
+    # "aj_cr", 
+    "cox_cr", "fine_gray_cr", "survival_boost_cr",
+    "deepsurv_cr", "deephit_cr", "dysurv_cr", "survtrace_cr",
+    "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens",
+    "tabpfn_finetune_cr", "tabdpt_finetune_cr", "tabicl_finetune_cr",
     "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
     "tabpfn_embedding_mtlr_cr", "tabdpt_embedding_mtlr_cr", "tabicl_embedding_mtlr_cr",
-    "tabpfn_embedding_pchazard_cr", "tabdpt_embedding_pchazard_cr", "tabicl_embedding_pchazard_cr",
+    # "tabpfn_embedding_pchazard_cr", "tabdpt_embedding_pchazard_cr", "tabicl_embedding_pchazard_cr",
     "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
-
-    "tabpfn_embedding_deephit_v2_cr", "tabdpt_embedding_deephit_v2_cr", "tabicl_embedding_deephit_v2_cr",
-    "tabpfn_embedding_deephit_v2_cr_adapter", "tabdpt_embedding_deephit_v2_cr_adapter", "tabicl_embedding_deephit_v2_cr_adapter",
-    "tabpfn_embedding_cox_cr_adapter", "tabdpt_embedding_cox_cr_adapter", "tabicl_embedding_cox_cr_adapter",
 ]
 
 BINNING_STRATS = [
@@ -79,36 +74,36 @@ ZEROSHOT_STRATS = [
 
 MODEL_LABELS = {
     "km": "KM", "cox": "Cox PH", "rsf": "RSF", "gbsa": "GBSA", "pchazard": "PCHazard",
-    "deepsurv": "DeepSurv", "mtlr": "MLP-MTLR", "deephit_single": "MLP-DeepHit",
+    "deepsurv": "DeepSurv", "mtlr": "MLP-MTLR", "deephit_single": "MLP-DH",
     "survtrace": "SurvTrace", "soden": "SODEN", "dysurv": "DySurv", "beta_surv": "Beta-Surv",
     "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS", "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS", "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS",
-    "tabpfn_finetune": "TabPFN-FT-CE", "tabdpt_finetune": "TabDPT-FT-CE", "tabicl_finetune": "TabICL-FT-CE",
-    "cox_cr": "Cox-CR", "aj_cr": "Aalen-Johansen", "fine_gray_cr": "Fine-Gray",
-    "survival_boost_cr": "SurvBoost-CR", "deephit_cr": "DeepHit-CR", "deepsurv_cr": "DeepSurv-CR",
-    "dysurv_cr": "DySurv-CR", "survtrace_cr": "SurvTrace-Multi",
-    "tabpfn_zeroshot_cr_multinomial": "TabPFN-ZS-CR-Mul", "tabpfn_zeroshot_cr_perevent": "TabPFN-ZS-CR-PE",
-    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS-CR-Ens", "tabdpt_zeroshot_cr_ens": "TabDPT-ZS-CR-Ens", "tabicl_zeroshot_cr_ens": "TabICL-ZS-CR-Ens",
+    "tabpfn_finetune": "TabPFN-CE", "tabdpt_finetune": "TabDPT-CE", "tabicl_finetune": "TabICL-CE",
+    "cox_cr": "Cox PH", "aj_cr": "Aalen-Johansen", "fine_gray_cr": "Fine-Gray",
+    "survival_boost_cr": "SurvBoost", "deephit_cr": "DeepHit", "deepsurv_cr": "DeepSurv",
+    "dysurv_cr": "DySurv", "survtrace_cr": "SurvTrace",
+    "tabpfn_zeroshot_cr_ens": "TabPFN-ZS", "tabdpt_zeroshot_cr_ens": "TabDPT-ZS", "tabicl_zeroshot_cr_ens": "TabICL-ZS",
 }
 
 for fm, fm_name in zip(["tabpfn", "tabdpt", "tabicl"], ["TabPFN", "TabDPT", "TabICL"]):
-    for task, task_name in zip(["embedding", "joint"], ["FT", "Joint"]):
-        for head, h_name in zip(["cox", "deephit", "mtlr", "pchazard"], ["Cox", "DeepHit", "MTLR", "PCHazard"]):
-            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
-        for head, h_name in zip(["deephit_cr", "deephit_v2_cr", "cox_cr", "mtlr_cr", "pchazard_cr"], ["DH-CR", "DH-v2-CR", "Cox-CR", "MTLR-CR", "PCH-CR"]):
-            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
+    for task, task_name in zip(["embedding"], ["FT"]):
+        for head, h_name in zip(["cox", "deephit", "mtlr", "pchazard"], ["Cox", "DH", "MTLR", "PCH"]):
+            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{h_name}"
+        for head, h_name in zip(["deephit_cr", "deephit_v2_cr", "cox_cr", "mtlr_cr", "pchazard_cr"], ["DH", "DeepHit-v2", "Cox", "MTLR", "PCH"]):
+            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{h_name}"
         for head, h_name in zip(["mtlr_hybrid"], ["MTLR-Hybrid"]):
-            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{task_name}-{h_name}"
-        MODEL_LABELS[f"{fm}_finetune_cr"] = f"{fm_name}-FT-CR"
+            MODEL_LABELS[f"{fm}_{task}_{head}"] = f"{fm_name}-{h_name}"
+        MODEL_LABELS[f"{fm}_finetune_cr"] = f"{fm_name}-CE"
 
 MODEL_GROUPS = {
-    "Baseline": ["km", "cox", "cox_cr", "aj_cr", "fine_gray_cr"], "Tree": ["rsf", "gbsa"],
-    "Deep": ["deepsurv", "pchazard", "mtlr", "deephit_single", "dysurv", "deephit_cr", "deepsurv_cr", "dysurv_cr", "survtrace_cr"], "Attention": ["survtrace"],
+    "Baseline": ["km", "cox", "cox_cr", "aj_cr", "fine_gray_cr"], "Tree": ["rsf", "gbsa", "survival_boost_cr"],
+    "Deep": ["deepsurv", "pchazard", "mtlr", "deephit_single", "dysurv", "deephit_cr", "deepsurv_cr", "dysurv_cr"], 
+    "Attention": ["survtrace", "survtrace_cr"],
     "Finetune-Cox": [m for m in MODEL_ORDER if "cox" in m and ("_embedding" in m or "_joint" in m)],
-    "Finetune-DeepHit": [m for m in MODEL_ORDER if "deephit" in m and ("_embedding" in m or "_joint" in m)],
+    "Finetune-DH": [m for m in MODEL_ORDER if "deephit" in m and ("_embedding" in m or "_joint" in m)],
     "Finetune-MTLR": [m for m in MODEL_ORDER if "mtlr" in m and ("_embedding" in m or "_joint" in m)],
-    "Finetune-PCHazard": [m for m in MODEL_ORDER if "pchazard" in m and ("_embedding" in m or "_joint" in m)],
-    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent", "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens"],
     "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune", "tabpfn_finetune_cr", "tabdpt_finetune_cr", "tabicl_finetune_cr"],
+    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent", "tabpfn_zeroshot_cr_ens", "tabdpt_zeroshot_cr_ens", "tabicl_zeroshot_cr_ens"],
+    "Finetune-PCH": [m for m in MODEL_ORDER if "pchazard" in m and ("_embedding" in m or "_joint" in m)],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
@@ -117,7 +112,6 @@ from survpfn.xai.colors import BRIGHT_PALETTE, MUTED_PALETTE, ALTERNATING_PALETT
 group_colors_type = {
     model: MUTED_PALETTE[i % len(MUTED_PALETTE)] for i, model in enumerate(MODEL_GROUPS.keys())
 }
-
 
 method_styles = {
 
@@ -269,7 +263,7 @@ plt.rcParams.update({
     "savefig.bbox": "tight",
 })
 
-FIG_SIZE = (12, 8)
+FIG_SIZE = (12, 10)
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -338,6 +332,7 @@ def _plot_grid_bar(df: pd.DataFrame, val_col: str, title: str, ylab: str, out_di
     datasets = [d for d in (target_datasets or SR_DATASETS) if d in df_sub["Dataset"].unique()]
     models = [m for m in MODEL_ORDER if m in df_sub["Model"].unique()]
     n_cols = min(5, len(datasets))
+    if len(datasets) <= 4: n_cols = 2
     n_rows = max(1, (len(datasets) + n_cols - 1) // n_cols)
     summary = df_sub.groupby(["Dataset", "Model"], observed=True)[val_col].agg(["mean", "std"]).reset_index()
 
@@ -356,9 +351,19 @@ def _plot_grid_bar(df: pd.DataFrame, val_col: str, title: str, ylab: str, out_di
             ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8, alpha=0.4)
             ax.set_ylim(0.3, min(1.0, sub["mean"].max() + 0.08) if val_col != "AUC_mean" else 1.0)
         ax.set_xticks(range(len(sub)))
-        ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index], rotation=90, ha="right", fontsize=14)
-        ax.set_ylabel(ylab if idx % n_cols == 0 else "")
-        ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
+        ax.set_xticklabels([MODEL_LABELS.get(m, m) for m in sub.index], rotation=90, ha="right", fontsize=18)
+        ax.tick_params(axis='y', labelsize=16)
+        ax.set_ylabel(ylab if idx % n_cols == 0 else "", fontsize=20)
+        # Add metadata to title
+        ds_meta = df[df["Dataset"] == dataset].iloc[0]
+        n_ev = ds_meta.get("n_events_test")
+        n_fe = ds_meta.get("n_features")
+        base_title = DATASET_LABELS.get(dataset, dataset)
+        if pd.notna(n_ev) and pd.notna(n_fe):
+            title_str = f"{base_title}\n(E={int(n_ev)}, F={int(n_fe)})"
+        else:
+            title_str = base_title
+        ax.set_title(title_str, fontweight="bold", fontsize=12)
         ax.grid(axis="y", alpha=0.3)
         
     for idx in range(len(datasets), n_rows * n_cols): axes[idx // n_cols][idx % n_cols].set_visible(False)
@@ -367,7 +372,7 @@ def _plot_grid_bar(df: pd.DataFrame, val_col: str, title: str, ylab: str, out_di
     legend_handles = [mpatches.Patch(color=c, label=g) for g, c in group_colors_type.items() if g in present_groups]
     fig.legend(handles=legend_handles, loc="lower center", ncol=min(7, len(legend_handles)), bbox_to_anchor=(0.5, -0.05), frameon=True, title="Model Group", fontsize=9)
     fig.suptitle(title, fontweight="bold", y=1.01)
-    fig.tight_layout()
+    fig.tight_layout(pad=2.0, w_pad=3.0, h_pad=4.0)
     save_fig(fig, out_dir, fname)
 
 def fig02_cindex_comparison(df: pd.DataFrame, out_dir: Path) -> None:
@@ -541,18 +546,18 @@ def _plot_efficiency_frontier(df: pd.DataFrame, time_col: str, xlabel: str, fnam
     for _, row in agg.iterrows():
         style = get_style(row["Model"])
         ax.scatter(row["time"], row["mean_rank"], color=style["color"], marker=style["marker"], s=150, alpha=0.9, edgecolors="black", linewidth=0.5, zorder=3)
-        ax.text(row["time"], row["mean_rank"], MODEL_LABELS.get(row["Model"], row["Model"]), fontsize=9, ha='right', va='bottom', alpha=0.9)
+        ax.text(row["time"] * 1.1, row["mean_rank"], MODEL_LABELS.get(row["Model"], row["Model"]), fontsize=11, ha='left', va='center', alpha=0.9)
     
-    ax.set_xscale("log"); ax.set_xlabel(xlabel); ax.set_ylabel("Mean Rank of C_td (↓ better)")
+    ax.set_xscale("log")
+    ax.tick_params(axis='both', which='major', labelsize=16)
+    ax.set_xlabel(xlabel, fontsize=20)
+    ax.set_ylabel("Mean Rank of C_td (↓ better)", fontsize=20)
     # ax.set_title("Performance–Efficiency Frontier", fontweight="bold")
-    ax.grid(alpha=0.3)
+    ax.grid(alpha=0.3, which='both')
     ax.invert_yaxis()
     
-    # Add manual padding to prevent left-aligned text and outer markers from being cut off
-    ax.set_xlim(left=agg["time"].min()*0.5, right=agg["time"].max())
-    xticks = ax.get_xticks().tolist()
-    if len(xticks) > 2:
-        ax.set_xticks(xticks[3:-1])
+    # Better padding for log scale
+    ax.set_xlim(agg["time"].min() * 0.5, agg["time"].max() * 2)
     
     xlims = ax.get_xlim()
     ylims = ax.get_ylim()
@@ -625,11 +630,12 @@ def fig07_zeroshot_strategies(df: pd.DataFrame, out_dir: Path, metric: str = "C_
             ax.errorbar(range(len(stages)), y_vals, yerr=y_errs, label=label, capsize=4, **style)
             
     ax.set_xticks(range(len(stages)))
-    ax.set_xticklabels(stage_labels, fontweight="bold")
-    ax.set_ylabel(f"Mean ${metric}$" if metric == "C_td" else f"Mean {metric}")
+    ax.set_xticklabels(stage_labels, fontweight="bold", fontsize=20)
+    ax.tick_params(axis='y', labelsize=18)
+    ax.set_ylabel(f"Mean ${metric}$" if metric == "C_td" else f"Mean {metric}", fontsize=20)
     # ax.set_title("Incremental Performance of Zero-Shot Strategies", fontweight="bold")
     ax.grid(alpha=0.3)
-    ax.legend(loc="lower right", frameon=True, fontsize=14)
+    ax.legend(loc="lower right", frameon=True, fontsize=20)
     
     fig.tight_layout()
     fname = "fig07_zeroshot_strategies" if metric == "C_td" else f"fig07_zeroshot_strategies_{metric.lower()}"
@@ -643,7 +649,7 @@ def fig08_survival_heads(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") 
     if metric not in df.columns: return
     
     backbones = ["tabpfn", "tabdpt", "tabicl"]
-    heads = ["ce", "pchazard", "mtlr", "deephit", "cox"]
+    heads = ["ce", "mtlr", "deephit", "cox"]
     head_labels = {"ce": "CE", "mtlr": "MTLR", "deephit": "DeepHit", "cox": "Cox PH", "pchazard": "PCHazard"}
     backbone_labels = {"tabpfn": "TabPFN", "tabdpt": "TabDPT", "tabicl": "TabICL"}
     
@@ -673,18 +679,19 @@ def fig08_survival_heads(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") 
         
     x_labels = [backbone_labels[b] for b in backbones] + ["Average"]
     x = np.arange(len(x_labels))
-    width = 0.2
+    width = 0.15
     
     fig, ax = plt.subplots(figsize=FIG_SIZE)
-    colors = [group_colors_type["Finetune-CE"], group_colors_type["Finetune-PCHazard"], group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DeepHit"], group_colors_type["Finetune-Cox"], ] # Match groups
+    colors = [group_colors_type["Finetune-CE"],  group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DH"], group_colors_type["Finetune-Cox"], ] # Match groups
     
     for i, h in enumerate(heads):
-        offset = (i - 1.5) * width
+        offset = (i - 2) * width
         ax.bar(x + offset, data[h], width, yerr=errs[h], capsize=4, label=head_labels[h], color=colors[i], edgecolor="white", zorder=3)
         
     ax.set_xticks(x)
-    ax.set_xticklabels(x_labels, fontweight="bold")
-    ax.set_ylabel(f"Mean ${metric}$ (averaged across datasets)" if metric == "C_td" else f"Mean {metric} (averaged across datasets)")
+    ax.set_xticklabels(x_labels, fontweight="bold", fontsize=20)
+    ax.tick_params(axis='y', labelsize=18)
+    ax.set_ylabel(f"Mean ${metric}$ (averaged across datasets)" if metric == "C_td" else f"Mean {metric} (averaged across datasets)", fontsize=20)
     # ax.set_title("Performance of Survival Heads across Backbones", fontweight="bold")
     
     valid_vals = [v for h in heads for v in data[h] if pd.notna(v)]
@@ -810,18 +817,21 @@ def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], 
     # Bar Chart
     fig_a, ax_a = plt.subplots(figsize=(12,10))
     ax_a.barh(range(len(mr_models)), mean_ranks.values, xerr=sem_ranks.values, capsize=3, color=[group_colors_type.get(MODEL_TO_GROUP.get(m, ""), "#888888") for m in mr_models], edgecolor="white")
-    ax_a.set_yticks(range(len(mr_models))); ax_a.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models])
-    ax_a.set_xlabel("Mean Rank (↓ better)"); 
+    ax_a.set_yticks(range(len(mr_models)))
+    ax_a.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models], fontsize=18)
+    ax_a.tick_params(axis='x', labelsize=16)
+    ax_a.set_xlabel("Mean Rank (↓ better)", fontsize=20)
     # ax_a.set_title(title_mean, fontweight="bold")
+    ax_a.set_xlim(0, max(mean_ranks.max() + 4, len(mr_models) + 1))
     ax_a.axvline(len(mr_models) / 2, color="gray", linestyle="--", alpha=0.5); ax_a.grid(axis="x", alpha=0.3)
     for i, (m, r) in enumerate(mean_ranks.items()): 
         err = sem_ranks[m]
         offset = err if pd.notna(err) else 0
-        ax_a.text(r + offset + 0.2, i, f"{r:.1f}±{err:.1f}" if pd.notna(err) else f"{r:.1f}", va="center", fontsize=8.5)
+        ax_a.text(r + offset + 0.2, i, f"{r:.1f}±{err:.1f}" if pd.notna(err) else f"{r:.1f}", va="center", fontsize=10, fontweight="bold")
     
     present_groups = set(MODEL_TO_GROUP.get(m) for m in mr_models)
     legend_handles = [mpatches.Patch(color=c, label=g) for g, c in group_colors_type.items() if g in present_groups]
-    ax_a.legend(handles=legend_handles, loc="upper right", ncol=2, frameon=True, title="Model Group", fontsize=14, title_fontsize=16)
+    ax_a.legend(handles=legend_handles, loc="upper right", frameon=True, title="Model Group", fontsize=14, title_fontsize=16)
     fig_a.tight_layout(rect=[0, 0.05, 1, 1])
     save_fig(fig_a, out_dir, fname_mean)
 
@@ -831,8 +841,10 @@ def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], 
     xlabels, ylabels = [DATASET_LABELS.get(d, d) for d in rank_pivot.columns], [MODEL_LABELS.get(m, m) for m in rank_pivot.index]
     im = ax_b.imshow(rank_pivot.values.astype(float), cmap="RdYlGn_r", vmin=1, vmax=len(mr_models), aspect="auto")
     plt.colorbar(im, ax=ax_b, label="Rank (1 = best)", shrink=0.75)
-    ax_b.set_xticks(range(len(xlabels))); ax_b.set_xticklabels(xlabels, rotation=35, ha="right")
-    ax_b.set_yticks(range(len(ylabels))); ax_b.set_yticklabels(ylabels)
+    ax_b.set_xticks(range(len(xlabels)))
+    ax_b.set_xticklabels(xlabels, rotation=35, ha="right", fontsize=16)
+    ax_b.set_yticks(range(len(ylabels)))
+    ax_b.set_yticklabels(ylabels, fontsize=16)
     for i in range(len(rank_pivot.index)):
         for j in range(len(rank_pivot.columns)):
             val = rank_pivot.iloc[i, j]

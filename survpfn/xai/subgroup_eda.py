@@ -38,7 +38,7 @@ import pandas as pd
 from scipy import stats as scipy_stats
 
 try:
-    from lifelines import KaplanMeierFitter
+    from lifelines import KaplanMeierFitter, AalenJohansenFitter
     from lifelines.statistics import multivariate_logrank_test
     _HAS_LIFELINES = True
 except ImportError:
@@ -618,6 +618,96 @@ def plot_risk_stratification_km(
     plt.close(fig)
     print(f"    KM Risk Stratification → {out_path}")
 
+def plot_risk_stratification_cif(
+    df_preds: pd.DataFrame,
+    out_path: Path,
+    dataset_name: str,
+    model_name: str,
+    target_cause: int = 1,
+) -> None:
+    """
+    Risk stratification for competing risks using Cumulative Incidence Function (CIF).
+    Stratifies patients by predicted risk for the target cause, then plots observed CIF
+    using the Aalen-Johansen estimator.
+    """
+    if "duration" not in df_preds.columns or "event" not in df_preds.columns:
+        return
+        
+    # Determine which column to use for predicted risk
+    risk_col = f"risk_score_c{target_cause}"
+    if risk_col not in df_preds.columns:
+        if "risk_score" in df_preds.columns:
+            risk_col = "risk_score"
+        else:
+            print(f"    [WARN] No risk column found for cause {target_cause}")
+            return
+
+    # Stratify patients into Low (20%), Medium (60%), High (20%) risk groups
+    try:
+        risk_groups = pd.qcut(
+            df_preds[risk_col], 
+            q=[0.0, 0.2, 0.8, 1.0], 
+            labels=["Low risk (bottom 20%)", "Medium risk (middle 60%)", "High risk (top 20%)"]
+        )
+    except ValueError:
+        # Fallback if too many identical risk scores
+        return
+        
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    palette = {
+        "Low risk (bottom 20%)": "#4dac26", 
+        "Medium risk (middle 60%)": "#fdae61", 
+        "High risk (top 20%)": "#d7191c"
+    }
+    
+    if not _HAS_LIFELINES:
+        ax.text(0.5, 0.5, "lifelines not installed",
+                ha="center", va="center", transform=ax.transAxes, fontsize=12)
+        return
+
+    order = ["Low risk (bottom 20%)", "Medium risk (middle 60%)", "High risk (top 20%)"]
+    
+    for grp in order:
+        mask = (risk_groups == grp) & risk_groups.notna()
+        if mask.sum() < 5:
+            continue
+            
+        color = palette[grp]
+        ajf = AalenJohansenFitter(calculate_variance=True)
+        # In lifelines, AJFitter.fit(durations, event_observed, event_of_interest)
+        # event_observed should contain the cause (1, 2, ...) or 0 for censored
+        ajf.fit(
+            df_preds.loc[mask, "duration"].astype(float),
+            df_preds.loc[mask, "event"].astype(int),
+            event_of_interest=target_cause,
+            label=f"{grp} (n={int(mask.sum()):,})"
+        )
+        
+        ajf.plot_cumulative_density(
+            ax=ax,
+            ci_show=True,
+            ci_alpha=0.12,
+            color=color,
+            linewidth=4.0,
+        )
+
+    ax.set_ylim(-0.02, 1.05)
+    ax.set_xlabel("Time (hours)", fontsize=22)
+    ax.set_ylabel(f"Observed Cumulative Incidence (Cause {target_cause})", fontsize=22)
+    ax.tick_params(axis='both', labelsize=20)
+    ax.legend(fontsize=18, loc="upper left", framealpha=0.8)
+    ax.grid(True, linestyle="--", alpha=0.3)
+    
+    # Matching style of plot_risk_stratification_km
+    for text in ax.get_legend().get_texts():
+        text.set_fontsize(18)
+        
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    CIF Risk Stratification (Cause {target_cause}) → {out_path}")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main per-dataset runner
 # ─────────────────────────────────────────────────────────────────────────────
@@ -813,8 +903,17 @@ def analyse_dataset(
                             print(f"  [WARN] Calibration failed: {e}")
 
                     suffix = "_calibrated" if is_calibrated else ""
-                    risk_km_path = out_dir / f"subgroup_km_risk_{m_name}{suffix}.pdf"
-                    plot_risk_stratification_km(df_preds, risk_km_path, name, m_name, is_calibrated=is_calibrated)
+                    
+                    # Determine if we should use KM or CIF
+                    num_events = int(df_preds["event"].max())
+                    if num_events > 1:
+                        # Competing risks
+                        risk_cif_path = out_dir / f"subgroup_cif_risk_{m_name}{suffix}.pdf"
+                        plot_risk_stratification_cif(df_preds, risk_cif_path, name, m_name)
+                    else:
+                        # Single risk
+                        risk_km_path = out_dir / f"subgroup_km_risk_{m_name}{suffix}.pdf"
+                        plot_risk_stratification_km(df_preds, risk_km_path, name, m_name, is_calibrated=is_calibrated)
                 else:
                     if predictions_model:
                         print(f"  [WARN] No parquet files found in {model_pred_dir}")
