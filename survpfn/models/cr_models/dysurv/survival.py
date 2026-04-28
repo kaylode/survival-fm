@@ -20,11 +20,11 @@ def train_dysurv_cr(
     duration_col: str,
     event_col: str,
     epochs: int = 100,
-    batch_size: int = 64,
+    batch_size: int = 128,
     lr: float = 1e-3,
     val_fraction: float = 0.2,
-    num_durations: int = 20,
-    encoded_features: int = 16,
+    num_durations: int = 100,
+    encoded_features: int = 128,
     device: str = "cpu",
     **kwargs
 ) -> tuple:
@@ -49,8 +49,11 @@ def train_dysurv_cr(
     
     # Use cuts from train dataset
     cuts = train_ds.cuts
+    # Ensure cuts start after 0 as we prepend 0 later for interpolation
+    if cuts[0] <= 0:
+        cuts = cuts[cuts > 0]
     
-    # We need to manually discretize val_ds using train_ds.cuts if we want consistency
+    # We need to manually discretize val_ds using cuts if we want consistency
     # But SurvivalDatasetDeepHit calculates its own bins. 
     # Let's override it for consistency.
     def discretize_with_cuts(durations, cuts):
@@ -145,6 +148,7 @@ def train_dysurv_cr(
     # Interpolate CIFs to a fine grid for benchmarking
     grid = np.linspace(0, cuts.max(), 100)
     cif_per_cause = []
+    # Ensure times are unique and match the padded cif_k_ext
     times = np.concatenate([[0], cuts])
     
     for k in range(num_causes):
@@ -157,9 +161,10 @@ def train_dysurv_cr(
         cif_per_cause.append(cif_interp)
         
     # Benchmark expects: (model, risk_scores, cif_per_cause, grid)
-    # risk_scores for cause 1 (or average risk)
-    risk_cause1 = cif_per_cause[0][:, -1] # Risk at max time
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    span = grid[-1] - grid[0] + 1e-8
+    risks = [_trapz(cif, grid, axis=1) / span for cif in cif_per_cause]
     
-    return model, risk_cause1, cif_per_cause, grid
+    return model, risks, cif_per_cause, grid
 
 import torch.nn.functional as F

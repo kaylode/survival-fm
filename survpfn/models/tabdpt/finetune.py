@@ -85,6 +85,7 @@ class TabDPTFinetuneTrainer(nn.Module):
     def __init__(
         self,
         tabdpt_model: TabDPTModel,
+        n_out: int = 2,
         hidden_dim: int = 128,
         dropout: float = 0.1,
         freeze_backbone: bool = False,
@@ -93,6 +94,7 @@ class TabDPTFinetuneTrainer(nn.Module):
         self.tabdpt       = tabdpt_model
         self.max_features: int = tabdpt_model.num_features
         self.ninp: int         = tabdpt_model.ninp
+        self.n_out: int        = n_out
 
         # Optionally freeze backbone
         for param in self.tabdpt.parameters():
@@ -104,7 +106,7 @@ class TabDPTFinetuneTrainer(nn.Module):
             nn.Linear(self.ninp, hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 2),   # logits for {survived=0, event=1}
+            nn.Linear(hidden_dim, n_out),   # logits for {0, 1, ..., n_out-1}
         )
 
         # Inference-time context (populated by set_context after training)
@@ -169,7 +171,7 @@ class TabDPTFinetuneTrainer(nn.Module):
                 classification logits ``(B, 2)`` used for the auxiliary loss.
 
         Returns:
-            cls_logits: (B, 2) — binary classification logits from the head.
+            cls_logits: (B, n_out) — classification logits from the head.
             backbone_logits (optional): (B, 2) — TabDPT's own next-token logits.
         """
         if x_context is None:
@@ -208,7 +210,7 @@ class TabDPTFinetuneTrainer(nn.Module):
         query_embs = src[K:, 0, :].to(torch.float32)   # (B, ninp)
 
         # Head: LayerNorm → MLP → logits
-        cls_logits = self.classifier(self.norm(query_embs))   # (B, 2)
+        cls_logits = self.classifier(self.norm(query_embs))   # (B, n_out)
 
         if return_backbone_logits:
             # Backbone's own binary logits (first 2 class slots)
@@ -223,14 +225,12 @@ class TabDPTFinetuneTrainer(nn.Module):
 
     @torch.no_grad()
     def predict_proba(self, x: torch.Tensor) -> np.ndarray:
-        """Return (N, 2) probability array (survived=0, event=1).
-
-        Uses the stored inference context.  ``x`` should already be scaled.
+        """Return (N, n_out) probability array.
         """
         self.eval()
         device = next(self.parameters()).device
         x = x.to(device)
-        logits = self(x)                             # (N, 2)
+        logits = self(x)                             # (N, n_out)
         return F.softmax(logits, dim=-1).cpu().numpy()
 
 
@@ -318,6 +318,19 @@ class TabDPTSurvPHFinetune(BaseSurvExpandedFinetune):
         print(f"TabDPTSurvPHFinetune Initialized: {trainable_params:,} trainable / {total_params:,} total parameters "
               f"({trainable_params/total_params:.2%})", flush=True)
         
+
+    def fit(self, x, durations, events, **kwargs):
+        # Infer n_out from events
+        num_events = int(events.max())
+        n_out = num_events + 1
+        
+        if n_out != self.net.n_out:
+            # Re-initialize head with correct dimension
+            self.net.n_out = n_out
+            self.net.classifier[-1] = nn.Linear(self.net.classifier[-1].in_features, n_out).to(self.device)
+            print(f"  [TabDPT/Expanded] Adjusting head for {n_out} classes (competing risks).", flush=True)
+
+        return super().fit(x, durations, events, **kwargs)
 
     def _predict_proba_internal(self, x_bin: np.ndarray) -> np.ndarray:
         x_bin_pt = torch.from_numpy(x_bin).float().to(self.device)

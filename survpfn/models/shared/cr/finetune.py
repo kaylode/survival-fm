@@ -118,7 +118,8 @@ class BaseCRJointFinetune(BaseJointSurvFinetune):
         Stores ``self._cox_baselines``: list of (times, H0_vals) per cause.
         """
         K = self.num_events
-        exp_risk = np.exp(risk_np - risk_np.max(axis=0, keepdims=True))  # (N, K) stabilised
+        self._cox_risk_shifts = risk_np.max(axis=0, keepdims=True)  # (1, K)
+        exp_risk = np.exp(risk_np - self._cox_risk_shifts)  # (N, K) stabilised
         baselines: List[tuple] = []
         for k in range(K):
             code = k + 1
@@ -192,8 +193,10 @@ class BaseCRJointFinetune(BaseJointSurvFinetune):
                 all_H.append(np.zeros((N, len(grid))))
                 continue
             H0 = np.interp(grid, h0_times, h0_vals, left=0.0, right=h0_vals[-1])
-            # Patient-specific: scale baseline by exp(risk)
-            H_k = np.exp(risk_np[:, k:k+1]) * H0[np.newaxis, :]  # (N, T)
+            # Patient-specific: scale baseline by exp(risk - shift)
+            # This ensures mathematical consistency with the stabilized Breslow H0.
+            shift = self._cox_risk_shifts[0, k] if hasattr(self, "_cox_risk_shifts") else 0.0
+            H_k = np.exp(risk_np[:, k:k+1] - shift) * H0[np.newaxis, :]  # (N, T)
             all_H.append(H_k)
 
         sum_H = np.sum(all_H, axis=0)   # (N, T)
@@ -296,36 +299,6 @@ class BaseCRJointFinetune(BaseJointSurvFinetune):
     # Evaluation
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def evaluate(
-        surv_dfs: List[pd.DataFrame],
-        durations_test: np.ndarray,
-        events_test: np.ndarray,
-        durations_train: np.ndarray,
-        events_train: np.ndarray,
-    ) -> dict:
-        """Evaluate using cause-1 CIF; binarise CR event codes for EvalSurv.
-
-        ``EvalSurv`` does not understand multi-class event codes.  We
-        binarise: cause-1 patients are labelled 1, everyone else
-        (censored *or* competing-cause event) is labelled 0.  This gives
-        the correct cause-specific C-index for cause 1.
-        """
-        from pycox.evaluation import EvalSurv
-
-        # Binary: cause-1 = 1, censored/competing = 0
-        events_bin = (np.asarray(events_test) == 1).astype(float)
-
-        cif_1  = surv_dfs[0]   # (n_times, n_patients)
-        surv_1 = 1.0 - cif_1  # 1 − CIF_1 used as "survival" for EvalSurv
-
-        ev = EvalSurv(
-            surv_1,
-            np.asarray(durations_test),
-            events_bin,
-            censor_surv="km",
-        )
-        return {"c_index": ev.concordance_td("antolini")}
 
 
 # ---------------------------------------------------------------------------

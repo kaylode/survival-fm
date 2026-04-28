@@ -208,7 +208,7 @@ def expand_survival_data(
 
     # ── Downsampling Logic ──
     if sampling_ratio is not None:
-        pos_idx = np.where(y_exp == 1)[0]
+        pos_idx = np.where(y_exp > 0)[0]
         neg_idx = np.where(y_exp == 0)[0]
         
         n_pos = len(pos_idx)

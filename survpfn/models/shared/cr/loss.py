@@ -137,6 +137,16 @@ class CRCoxLoss(nn.Module):
         e_sorted = events[idx]
         r_sorted = risk[idx]   # (B, K)
 
+        # To handle ties correctly, patients with the same time must have the 
+        # same denominator (sum of exp(risk) for all patients with T >= t).
+        # We find the last index for each unique time in the sorted array.
+        t_sorted = t_cont[idx]
+        _, counts = torch.unique_consecutive(t_sorted, return_inverse=False, return_counts=True, dim=0)
+        # unique_consecutive returns in order of appearance. 
+        # Since t_sorted is descending, the "last" index for time t is the 
+        # end of its block.
+        last_indices = torch.cumsum(counts, dim=0) - 1
+
         total_loss = torch.zeros(1, device=device)
 
         for k in range(1, K + 1):
@@ -147,11 +157,13 @@ class CRCoxLoss(nn.Module):
             rk = r_sorted[:, k - 1]   # (B,) — risk scores for cause k
 
             # cum_lse[i] = logsumexp(rk[0], ..., rk[i])
-            # = log of denominator of partial likelihood for sample i
             cum_lse = torch.logcumsumexp(rk, dim=0)   # (B,)
+            
+            # Fix ties: use the cum_lse at the last index of each tie-block
+            cum_lse_stable = torch.repeat_interleave(cum_lse[last_indices], counts)
 
             # Partial log-likelihood contribution: r_i - logsumexp(risk set_i)
             # Negated (we minimise): logsumexp - r_i
-            total_loss = total_loss + (cum_lse[cause_mask] - rk[cause_mask]).sum()
+            total_loss = total_loss + (cum_lse_stable[cause_mask] - rk[cause_mask]).sum()
 
         return total_loss / max(n_events, 1)

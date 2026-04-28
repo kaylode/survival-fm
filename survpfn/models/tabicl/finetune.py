@@ -87,12 +87,14 @@ class TabICLFinetuneTrainer(nn.Module):
     def __init__(
         self,
         tabicl_model: nn.Module,
+        n_out: int = 2,
         hidden_dim: int = 256,
         dropout: float = 0.1,
         freeze_backbone: bool = True,
     ) -> None:
         super().__init__()
         self.tabicl = tabicl_model
+        self.n_out = n_out
 
         # Embedding dimension: embed_dim × row_num_cls  (default 128×4 = 512)
         self.icl_dim: int = tabicl_model.embed_dim * tabicl_model.row_num_cls
@@ -106,7 +108,7 @@ class TabICLFinetuneTrainer(nn.Module):
             nn.Linear(self.icl_dim, hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 2),   # {survived=0, event=1}
+            nn.Linear(hidden_dim, n_out),   # {0, 1, ..., n_out-1}
         )
 
         # Inference-time context (set after training via set_context)
@@ -170,7 +172,7 @@ class TabICLFinetuneTrainer(nn.Module):
             return_backbone_logits: Also return backbone's own binary logits.
 
         Returns:
-            cls_logits        : (B, 2) from the binary head.
+            cls_logits        : (B, n_out) from the head.
             backbone_logits   : (B, 2) from TabICL's own head  [optional].
         """
         if x_context is None:
@@ -213,7 +215,7 @@ class TabICLFinetuneTrainer(nn.Module):
         query_embs = emb[0, K:, :].to(device=device, dtype=torch.float32)
 
         # Head forward
-        cls_logits = self.classifier(query_embs)   # (B, 2)
+        cls_logits = self.classifier(query_embs)   # (B, n_out)
 
         if return_backbone_logits:
             # First 2 class columns from backbone — force float32 and correct device
@@ -228,13 +230,10 @@ class TabICLFinetuneTrainer(nn.Module):
 
     @torch.no_grad()
     def predict_proba(self, x: torch.Tensor) -> np.ndarray:
-        """Return (N, 2) probability array (survived=0, event=1).
-
-        Uses the stored inference context.  ``x`` should already be scaled.
-        Device routing is handled by forward().
+        """Return (N, n_out) probability array.
         """
         self.eval()
-        logits = self(x)                              # (N, 2) — device-routed by forward
+        logits = self(x)                              # (N, n_out) — device-routed by forward
         return F.softmax(logits, dim=-1).cpu().numpy()
 
 
@@ -342,6 +341,19 @@ class TabICLSurvPHFinetune(BaseSurvExpandedFinetune):
         )
 
 
+
+    def fit(self, x, durations, events, **kwargs):
+        # Infer n_out from events
+        num_events = int(events.max())
+        n_out = num_events + 1
+        
+        if n_out != self.net.n_out:
+            # Re-initialize head with correct dimension
+            self.net.n_out = n_out
+            self.net.classifier[-1] = nn.Linear(self.net.classifier[-1].in_features, n_out).to(self.device)
+            print(f"  [TabICL/Expanded] Adjusting head for {n_out} classes (competing risks).", flush=True)
+
+        return super().fit(x, durations, events, **kwargs)
 
     def _predict_proba_internal(self, x_bin: np.ndarray) -> np.ndarray:
         x_bin_pt = torch.from_numpy(x_bin).float().to(self.device)

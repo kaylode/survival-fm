@@ -4,6 +4,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from easydict import EasyDict
 from scipy.interpolate import interp1d
@@ -20,16 +21,16 @@ def train_survtrace_cr(
     df_test: pd.DataFrame,
     duration_col: str,
     event_col: str,
-    num_durations: int = 10,
+    num_durations: int = 100,
     epochs: int = 100,
     batch_size: int = 64,
     learning_rate: float = 1e-3,
     val_fraction: float = 0.2,
-    hidden_size: int = 16,
+    hidden_size: int = 64,
     num_hidden_layers: int = 3,
-    num_attention_heads: int = 2,
-    intermediate_size: int = 64,
-    early_stop_patience: int = 10,
+    num_attention_heads: int = 4,
+    intermediate_size: int = 256,
+    early_stop_patience: int = 20,
     device: str = "cpu",
     **kwargs
 ) -> tuple:
@@ -52,9 +53,9 @@ def train_survtrace_cr(
 
     horizons = np.linspace(0, 1, num_durations + 2)[1:-1].tolist()
     times = np.quantile(event_times, horizons).tolist()
-    t_min = float(T_train.min())
     t_max = float(T_train.max()) + 1e-6
-    cuts = np.unique(np.array([t_min] + times + [t_max]))
+    # Prepend 0 to ensure survival starts at time 0
+    cuts = np.unique(np.array([0.0] + times + [t_max]))
 
     labtrans = LabelTransform(cuts=cuts)
     # MUST call fit to initialize duc and di even if cuts are predefined
@@ -132,28 +133,53 @@ def train_survtrace_cr(
     grid = np.linspace(0, cuts.max(), 100)
     
     with torch.no_grad():
+        # 1. Collect hazards for all causes
+        all_hazards = []
         for k in range(num_causes):
-            # predict_surv returns survival probability S_k(t)
-            # For discrete CR models in SurvTrace, S_k(t) is often 1 - CIF_k(t)
-            # or it depends on how hazards are defined.
-            # Let's check predict_surv in SurvTraceMulti.
-            surv_tensor = model.predict_surv(df_x_test, batch_size=256, event=k)
-            surv_np = surv_tensor.cpu().numpy() # (batch, num_time_bins + 1)
+            # predict_hazard returns softplus(logits) padded with 0 at start
+            # shape: (batch, num_time_bins + 1)
+            h_k = model.predict_hazard(df_x_test, batch_size=256, event=k)
+            all_hazards.append(h_k) # Tensors
+        
+        # 2. Calculate overall survival S(t) = exp(-sum_k sum_{l<=t} h_k(l))
+        # sum_hazards shape: (batch, num_time_bins + 1)
+        sum_hazards = torch.stack(all_hazards, dim=0).sum(dim=0)
+        # S(t)
+        surv_all = torch.exp(-sum_hazards.cumsum(dim=1))
+        # S(t-1)
+        surv_prev = F.pad(surv_all[:, :-1], (1, 0), value=1.0)
+        
+        # 3. Calculate CIF_k(t) = sum_{l<=t} P(T=l, K=k)
+        # For discrete time: P(T=l, K=k) \approx h_k(l) * S(l-1)
+        # However, a better approximation that ensures sum_k CIF_k = 1 - S is:
+        # P(T=l, K=k) = (h_k(l) / sum_j h_j(l)) * (S(l-1) - S(l))
+        denom = sum_hazards
+        # Avoid division by zero
+        denom_safe = torch.where(denom > 0, denom, torch.ones_like(denom))
+        prob_failing_any = surv_prev - surv_all
+        
+        for k in range(num_causes):
+            h_k = all_hazards[k]
+            # Prob of cause k given failure at time l
+            weight_k = h_k / denom_safe
+            # If denom was 0, weight should be 0 (or evenly distributed, but 0 is safer)
+            weight_k = torch.where(denom > 0, weight_k, torch.zeros_like(weight_k))
             
-            # CIF_k = 1 - S_k
-            cif_k = 1.0 - surv_np
+            pdf_k = weight_k * prob_failing_any
+            cif_k = pdf_k.cumsum(dim=1).cpu().numpy()
             
             # Interpolate
+            # cif_k has num_time_bins + 1 elements, matching labtrans.cuts
+            # as out_features = len(cuts) - 1, and predict_hazard adds a start column.
             times = labtrans.cuts
-            if times[0] > 0:
-                times = np.concatenate([[0], times])
-                # cif at time 0 is 0
-                cif_k = np.concatenate([np.zeros((len(df_test), 1)), cif_k], axis=1)
             
             f = interp1d(times, cif_k, kind='linear', axis=1, fill_value="extrapolate")
             cif_interp = np.clip(f(grid), 0.0, 1.0)
             cif_per_cause.append(cif_interp)
 
-    risk_cause1 = cif_per_cause[0][:, -1]
+    _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    span = grid[-1] - grid[0] + 1e-8
+    risks = [_trapz(cif, grid, axis=1) / span for cif in cif_per_cause]
     
-    return model, risk_cause1, cif_per_cause, grid
+    return model, risks, cif_per_cause, grid
+

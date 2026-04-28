@@ -137,9 +137,15 @@ def _fm_joint_wrapper(fm_name: str, head_type: str, freeze_backbone: bool, task_
 
         if isinstance(surv_out, list):
             cifs = surv_out  # List[pd.DataFrame] — rows=times, cols=patients
-            # CIF_1 at last time is a valid risk score (higher = more likely event)
-            risk = cifs[0].iloc[-1].values
-            return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
+            # Return list of risk scores (e.g. integrated CIF) for all causes
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            risks = []
+            for cif in cifs:
+                if _trapz is not None:
+                    risks.append(_trapz(cif.values.T, cif.index.values, axis=1) / (cif.index.values[-1] - cif.index.values[0] + 1e-8))
+                else:
+                    risks.append(cif.iloc[-1].values)
+            return wrapper, risks, [c.values.T for c in cifs], cifs[0].index.values
         else:
             if head_type != 'cox':
                 # Use integrated survival (AUC) as an robust risk score instead of S(T_max)
@@ -191,9 +197,11 @@ def _cause_specific_fm_wrapper(fm_name: str, head_type: str, freeze_backbone: bo
                 
         span = grid[-1] - grid[0] + 1e-8
         _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
-        risk_cause1 = _trapz(cif_per_cause[0], grid, axis=1) / span
+        risks = []
+        for cif in cif_per_cause:
+            risks.append(_trapz(cif, grid, axis=1) / span)
         
-        return models[0], risk_cause1, cif_per_cause, grid
+        return models[0], risks, cif_per_cause, grid
         
     _fn.__name__ = f"train_{fm_name}_{'frozen' if freeze_backbone else 'joint'}_{head_type}_cr_cs"
     return _fn
@@ -250,8 +258,14 @@ def _finetune_wrapper(fm_name: str, binning_scheme: str = "quantile", use_isoton
 
         if isinstance(surv_out, list):
             cifs = surv_out
-            risk = cifs[0].iloc[-1].values
-            return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            risks = []
+            for cif in cifs:
+                if _trapz is not None:
+                    risks.append(_trapz(cif.values.T, cif.index.values, axis=1) / (cif.index.values[-1] - cif.index.values[0] + 1e-8))
+                else:
+                    risks.append(cif.iloc[-1].values)
+            return wrapper, risks, [c.values.T for c in cifs], cifs[0].index.values
         else:
             # Use integrated survival (AUC) as an robust risk score instead of S(T_max)
             _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
@@ -370,8 +384,14 @@ def _tabtune_wrapper(fm_name: str, binning_scheme: str = "quantile", task_type: 
 
         if isinstance(surv_out, list):
             cifs = surv_out
-            risk = cifs[0].iloc[-1].values
-            return wrapper, risk, [c.values.T for c in cifs], cifs[0].index.values
+            _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+            risks = []
+            for cif in cifs:
+                if _trapz is not None:
+                    risks.append(_trapz(cif.values.T, cif.index.values, axis=1) / (cif.index.values[-1] - cif.index.values[0] + 1e-8))
+                else:
+                    risks.append(cif.iloc[-1].values)
+            return wrapper, risks, [c.values.T for c in cifs], cifs[0].index.values
         else:
             _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
             risk = -_trapz(surv_out.values.T, surv_out.index.values, axis=1)

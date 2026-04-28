@@ -615,7 +615,7 @@ class BaseSurvExpandedFinetune:
 
     @staticmethod
     def evaluate(
-        surv_df: pd.DataFrame,
+        surv_df: Union[pd.DataFrame, List[pd.DataFrame]],
         durations_test: np.ndarray,
         events_test: np.ndarray,
         durations_train: np.ndarray,
@@ -625,13 +625,28 @@ class BaseSurvExpandedFinetune:
         from pycox.evaluation import EvalSurv
 
         if isinstance(surv_df, list):
-            events_test = (events_test == 1).astype(int)
-            surv_df = 1.0 - surv_df[0]
+            # Competing risks: macro-average cause-specific C-indices
+            c_indices = []
+            metrics = {}
+            for k, cif_k in enumerate(surv_df):
+                cause_code = k + 1
+                ev_k = (np.asarray(events_test) == cause_code).astype(int)
+                if ev_k.sum() == 0:
+                    continue
+                
+                # EvalSurv expects survival probabilities (1 - CIF)
+                eval_k = EvalSurv(1.0 - cif_k, np.asarray(durations_test), ev_k, censor_surv="km")
+                c_td_k = eval_k.concordance_td("antolini")
+                metrics[f"c_index_cause{cause_code}"] = c_td_k
+                c_indices.append(c_td_k)
+            
+            metrics["c_index"] = np.mean(c_indices) if c_indices else 0.5
+            return metrics
 
         ev = EvalSurv(
             surv_df,
-            durations_test,
-            events_test,
+            np.asarray(durations_test),
+            np.asarray(events_test),
             censor_surv="km",
         )
         c_index = ev.concordance_td("antolini")
@@ -781,16 +796,30 @@ class BaseJointSurvFinetune:
         """Compute survival evaluation metrics via pycox EvalSurv."""
         from pycox.evaluation import EvalSurv
         
-        # In CR models, predict_survival_df returns a list of CIFs DataFrames
         if isinstance(surv_df, list):
-            # For simplicity, evaluate Cause 1 (index 0)
-            # EvalSurv expects a survival function, so we treat 1 - CIF_1 as survival
-            surv_df = 1.0 - surv_df[0]
+            # Competing risks: average cause-specific C-indices
+            c_indices = []
+            metrics = {}
+            for k, cif_k in enumerate(surv_df):
+                cause_code = k + 1
+                ev_k = (np.asarray(events_test) == cause_code).astype(float)
+                # Skip causes with no events in test set to avoid EvalSurv errors
+                if ev_k.sum() == 0:
+                    continue
+                
+                eval_k = EvalSurv(1.0 - cif_k, np.asarray(durations_test), ev_k, censor_surv="km")
+                c_td_k = eval_k.concordance_td("antolini")
+                metrics[f"c_index_cause{cause_code}"] = c_td_k
+                c_indices.append(c_td_k)
+            
+            metrics["c_index"] = np.mean(c_indices) if c_indices else 0.5
+            return metrics
 
+        # Single-event survival
         ev = EvalSurv(
             surv_df,
-            durations_test,
-            events_test,
+            np.asarray(durations_test),
+            np.asarray(events_test),
             censor_surv="km",
         )
         c_index = ev.concordance_td("antolini")
