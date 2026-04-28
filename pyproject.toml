@@ -46,6 +46,8 @@ dependencies = [
     "pytest>=9.0.2",
     "survivaleval>=0.2.7",
     "lightgbm>=4.6.0",
+    "polars>=1.40.1",
+    "tabtune>=0.1.14",
 ]
 
 [project.optional-dependencies]
@@ -63,7 +65,8 @@ survpfn-benchmark = "survpfn.scripts.benchmark:main"
 survpfn-aggregate = "survpfn.xai.aggregate:main"
 survpfn-analyze = "survpfn.xai.analysis:main"
 survpfn-significance = "survpfn.scripts.significance:main"
-survpfn-latex-table = "survpfn.scripts.latex_table:main"
+survpfn-latex-table = "survpfn.xai.latex_table:main"
+survpfn-compare = "survpfn.xai.plot_comparison:main"
 
 [build-system]
 requires = ["hatchling"]
