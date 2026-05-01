@@ -290,10 +290,19 @@ def _zeroshot_wrapper(backbone: str, method: str = "single_context", use_time_bi
         cfg = cfg or FMConfig.from_kwargs(**kw)
         num_events = int(df_train[ev_col].max())
 
+        if kw.get("num_durations") is not None and kw.get("num_durations") > 0:
+            num_durations = kw["num_durations"]
+        else:
+            num_durations = resolve_num_durations(
+                df_train[dur_col].values,
+                df_train[ev_col].values,
+                -1,
+            )
+
         common_kw = dict(
             backbone=backbone,
             method=method,
-            n_bins=cfg.zeroshot_n_bins,
+            n_bins=num_durations,
             context_size=cfg.context_size,
             device=cfg.device,
             max_context_size=cfg.context_size,

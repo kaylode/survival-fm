@@ -134,7 +134,11 @@ class ZeroShotSurvivalPredictor:
         self._events = df_train[event_col].values.astype(int)
         self._num_events = int(self._events.max())
 
-        n_bins = resolve_num_durations(self._durations, self._events, self.n_bins)
+        if self.n_bins is None:
+            n_bins = resolve_num_durations(self._durations, self._events)
+        else:
+            n_bins = self.n_bins
+
         if self.use_time_bin_encoder:
             self._time_encoder = SurvivalTimeBinEncoder(
                 n_bins=n_bins, scheme=self.binning_scheme,

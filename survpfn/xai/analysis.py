@@ -237,7 +237,7 @@ SURVSET_BENCHMARK = [
 ]
 DATASET_ORDER = [
     "SUPPORT2", "METABRIC", "GBSG", "FLCHAIN", "VETERANS", "WHAS500", "SEER",
-    "ORMONI_TIRODEI_MORTALITY", "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI", "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI",
+    # "ORMONI_TIRODEI_MORTALITY", "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI", "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI",
     "EICU_SURV", "MIMIC_SURV_B",
     "FRAMINGHAM", "PBC2", "SUPPORT_CR", "SYNTHETIC_CR",
 ] + ["SS_" + k.upper() for k in SURVSET_BENCHMARK]
@@ -245,9 +245,9 @@ DATASET_ORDER = [
 DATASET_LABELS = {
     "SUPPORT2": "SUPPORT2", "METABRIC": "METABRIC", "GBSG": "GBSG", "FLCHAIN": "FL-Chain",
     "VETERANS": "Veterans", "WHAS500": "WHAS500", "SEER": "SEER",
-    "ORMONI_TIRODEI": "OrmoniTirodei", "ORMONI_TIRODEI_MORTALITY": "Orm.Tir.-Mort.",
-    "ORMONI_TIRODEI_CV": "Orm.Tir.-CV", "ORMONI_TIRODEI_MI": "Orm.Tir.-MI",
-    "ORMONI_TIRODEI_STROKE": "Orm.Tir.-Stroke", "FRAMINGHAM": "Fram-CR",
+    # "ORMONI_TIRODEI": "OrmoniTirodei", "ORMONI_TIRODEI_MORTALITY": "Orm.Tir.-Mort.",
+    # "ORMONI_TIRODEI_CV": "Orm.Tir.-CV", "ORMONI_TIRODEI_MI": "Orm.Tir.-MI",
+    # "ORMONI_TIRODEI_STROKE": "Orm.Tir.-Stroke", "FRAMINGHAM": "Fram-CR",
     "PBC2": "PBC2-CR", "SUPPORT_CR": "Supp-CR", "SYNTHETIC_CR": "Syn-CR",
     "EICU_SURV": "eICU", "MIMIC_SURV_B": "MIMIC-IV",
 }
@@ -535,29 +535,86 @@ def _plot_efficiency_frontier(df: pd.DataFrame, time_col: str, xlabel: str, fnam
     time_agg = sub.groupby("Model", observed=True)[time_col].mean()
     
     agg = pd.DataFrame({"mean_rank": mean_ranks, "time": time_agg}).dropna().reset_index()
-    agg["Group"] = agg["Model"].map(MODEL_TO_GROUP)
+    
+    # Hardcode zero-shot training time to near-zero (reflecting no training)
+    if time_col == "fit_time_s":
+        for m in ZEROSHOT_STRATS:
+            if m in agg["Model"].values:
+                agg.loc[agg["Model"] == m, "time"] = 10
 
-    # Drop Nan group
+    agg["Group"] = agg["Model"].map(MODEL_TO_GROUP)
     agg = agg[agg["Group"].notna()]
     
+    # Update zero-shot time to be small but not excessively so (to avoid over-stretching log scale)
+    if time_col == "fit_time_s":
+        for m in ZEROSHOT_STRATS:
+            if m in agg["Model"].values:
+                agg.loc[agg["Model"] == m, "time"] = 10
 
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
+    fig, ax = plt.subplots(figsize=(20, 15))
     
-    for _, row in agg.iterrows():
-        style = get_style(row["Model"])
-        ax.scatter(row["time"], row["mean_rank"], color=style["color"], marker=style["marker"], s=150, alpha=0.9, edgecolors="black", linewidth=0.5, zorder=3)
-        ax.text(row["time"] * 1.1, row["mean_rank"], MODEL_LABELS.get(row["Model"], row["Model"]), fontsize=11, ha='left', va='center', alpha=0.9)
+    # Plot individual points, grouped by Group for the legend
+    for group in sorted(agg["Group"].unique()):
+        group_df = agg[agg["Group"] == group]
+        color = group_colors_type.get(group, "#888888")
+        
+        # Plot all points in this group
+        ax.scatter(
+            group_df["time"], 
+            group_df["mean_rank"], 
+            color=color, 
+            marker="o", 
+            s=1200, 
+            alpha=0.8, 
+            edgecolors="black", 
+            linewidth=3.0 if group in ["Finetune-Cox", "Finetune-DH", "Finetune-MTLR"] else 1.0, 
+            zorder=3, 
+            label=group
+        )
+        
+        # Add labels to points (using Group name as requested)
+        # for _, row in group_df.iterrows():
+        #     ax.text(
+        #         row["time"] * 1.15, 
+        #         row["mean_rank"], 
+        #         group, 
+        #         fontsize=14, 
+        #         ha='left', 
+        #         va='center', 
+        #         alpha=0.8
+        #     )
+    
+    # Add "Ideal" point at top-left
+    # Align with the fastest group (zero-shot for training time)
+    if time_col == "fit_time_s":
+        ideal_time = agg["time"].min()
+    else:
+        ideal_time = agg["time"].min() / 1.5
+    ax.scatter(ideal_time, 1, color="black", marker="*", s=2500, label="Ideal (Pareto Front)", zorder=5)
+    ax.text(ideal_time * 1.3, 1, "Ideal", fontsize=24, ha='left', va='center', fontweight='bold', color="black")
     
     ax.set_xscale("log")
-    ax.tick_params(axis='both', which='major', labelsize=16)
-    ax.set_xlabel(xlabel, fontsize=20)
-    ax.set_ylabel("Mean Rank of C_td (↓ better)", fontsize=20)
-    # ax.set_title("Performance–Efficiency Frontier", fontweight="bold")
-    ax.grid(alpha=0.3, which='both')
+    
+    # Hide X-axis tick values as requested
+    ax.xaxis.set_major_formatter(plt.NullFormatter())
+    ax.xaxis.set_minor_formatter(plt.NullFormatter())
+    
+    ax.tick_params(axis='both', which='major', labelsize=24)
+    ax.tick_params(axis='both', which='minor', labelsize=18)
+    
+    # Update xlabel to include "(lower is better)"
+    clean_label = xlabel.split("(")[0].strip()
+    ax.set_xlabel(f"{clean_label} (lower is better)", fontsize=32, fontweight='bold')
+    ax.set_ylabel("Performance (higher is better)", fontsize=32, fontweight='bold')
+    
+    ax.grid(alpha=0.3, which='both', linestyle='--')
     ax.invert_yaxis()
     
-    # Better padding for log scale
-    ax.set_xlim(agg["time"].min() * 0.5, agg["time"].max() * 2)
+    # Set limits for better visibility
+    ax.set_xlim(agg["time"].min() * 0.5, agg["time"].max() * 5)
+    ax.set_ylim(max(agg["mean_rank"].max() + 1, 10), 0.5)
+    
+    ax.legend(loc="lower right", fontsize=22, frameon=True, shadow=True, title="Model Groups", title_fontsize=24, ncol=2)
     
     xlims = ax.get_xlim()
     ylims = ax.get_ylim()
@@ -603,13 +660,16 @@ def fig06_efficiency_frontier(df: pd.DataFrame, out_dir: Path) -> None:
 def fig07_zeroshot_strategies(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") -> None:
     if metric not in df.columns: return
     
-    stages = ["_zeroshot", "_zeroshot_perbin", "_zeroshot_perbin_time", "_zeroshot_perbin_time_ens"]
-    stage_labels = ["Base", "+ PerBin", "+ Time", "+ Ensemble"]
+    stages = ["_zeroshot",  "_zeroshot_perbin_time", "_zeroshot_perbin_time_ens"]
+    stage_labels = ["Base",  "+ Time", "+ Ensemble"]
     fm_prefixes = {"tabpfn": "TabPFN", "tabdpt": "TabDPT", "tabicl": "TabICL"}
     
     fig, ax = plt.subplots(figsize=FIG_SIZE)
+    x = np.arange(len(stages))
+    width = 0.22
+    offsets = np.linspace(-width, width, len(fm_prefixes))
     
-    for prefix, label in fm_prefixes.items():
+    for (prefix, label), offset in zip(fm_prefixes.items(), offsets):
         models = [f"{prefix}{stage}" for stage in stages]
         y_vals = []
         y_errs = []
@@ -619,23 +679,34 @@ def fig07_zeroshot_strategies(df: pd.DataFrame, out_dir: Path, metric: str = "C_
                 y_vals.append(sub[metric].mean())
                 y_errs.append(sub[metric].sem())
             else:
-                y_vals.append(np.nan)
-                y_errs.append(np.nan)
+                y_vals.append(0.0)
+                y_errs.append(0.0)
         
-        if any(pd.notna(y_vals)):
-            style = get_style(prefix).copy()
-            style["markersize"] = 10
-            style["linewidth"] = 8
-            if "label" in style: del style["label"]
-            ax.errorbar(range(len(stages)), y_vals, yerr=y_errs, label=label, capsize=4, **style)
+        style = get_style(prefix)
+        ax.bar(x + offset, y_vals, width, yerr=y_errs, label=label, 
+               color=style["color"], alpha=0.8, capsize=6, 
+               edgecolor="black", linewidth=1.5)
             
-    ax.set_xticks(range(len(stages)))
-    ax.set_xticklabels(stage_labels, fontweight="bold", fontsize=20)
-    ax.tick_params(axis='y', labelsize=18)
-    ax.set_ylabel(f"Mean ${metric}$" if metric == "C_td" else f"Mean {metric}", fontsize=20)
-    # ax.set_title("Incremental Performance of Zero-Shot Strategies", fontweight="bold")
-    ax.grid(alpha=0.3)
-    ax.legend(loc="lower right", frameon=True, fontsize=20)
+    ax.set_xticks(x)
+    ax.set_xticklabels(stage_labels, fontweight="bold", fontsize=24)
+    ax.tick_params(axis='y', labelsize=20)
+    ax.set_ylabel("Mean C-index" if metric == "C_td" else f"Mean {metric}", fontsize=28, fontweight="bold")
+    
+    # Set y-limits to zoom in on the performance range
+    all_vals = []
+    for prefix in fm_prefixes.keys():
+        for stage in stages:
+            sub = df[df["Model"] == f"{prefix}{stage}"]
+            if not sub.empty:
+                all_vals.extend(sub[metric].tolist())
+    
+    if all_vals:
+        ymin = max(0, min(all_vals) - 0.05)
+        ymax = min(1.0, max(all_vals) + 0.05)
+        ax.set_ylim(ymin, ymax)
+
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    ax.legend(loc="lower right", frameon=True, fontsize=22, shadow=True)
     
     fig.tight_layout()
     fname = "fig07_zeroshot_strategies" if metric == "C_td" else f"fig07_zeroshot_strategies_{metric.lower()}"
@@ -875,7 +946,206 @@ def fig12_ranking_cr(df: pd.DataFrame, out_dir: Path) -> None:
     for c in configs: _plot_ranking_set(df, models, datasets, *c, out_dir)
 
 # ---------------------------------------------------------------------------
-# Figure 10 — Win-rate / ranking table
+# Figure 13 — Performance vs. Metadata (Samples, Features)
+# ---------------------------------------------------------------------------
+
+def _plot_perf_vs_metadata(df: pd.DataFrame, meta_col: str, title: str, xlab: str, out_dir: Path, fname: str, xscale="log", metric="C_td"):
+    """Plot model ranking as a function of dataset metadata (n_train, n_features)."""
+    if metric not in df.columns or df[metric].isna().all():
+        return
+
+    # 1. Models to plot
+    models_to_plot = [
+        "cox", "rsf", "gbsa",
+        "deepsurv", "deephit_single", "survtrace",
+        "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
+        "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
+    ]
+    # Filter only models present in df
+    models_to_plot = [m for m in models_to_plot if m in df["Model"].unique()]
+    
+    # 2. Compute rankings per dataset
+    asc = (metric == "IBS") # IBS lower is better
+    
+    # We first compute mean scores per Model-Dataset (across folds)
+    mean_scores = df.groupby(["Model", "Dataset"], observed=True)[metric].mean().unstack("Dataset")
+    
+    # Get metadata per dataset
+    meta_per_ds = df.groupby("Dataset", observed=True)[meta_col].first()
+    
+    # Rank models per dataset
+    ranks = mean_scores.rank(ascending=asc, method="average") # 1 = best
+    
+    # Prepare long format for plotting
+    plot_records = []
+    for model in models_to_plot:
+        if model not in ranks.index: continue
+        for ds in ranks.columns:
+            rank_val = ranks.loc[model, ds]
+            meta_val = meta_per_ds.get(ds, np.nan)
+            if pd.notna(rank_val) and pd.notna(meta_val):
+                plot_records.append({
+                    "Model": model,
+                    "Rank": rank_val,
+                    meta_col: meta_val
+                })
+    plot_df = pd.DataFrame(plot_records)
+    
+    if plot_df.empty:
+        print(f"  [skip] {fname} — no data")
+        return
+
+    # 3. Figure
+    fig, ax = plt.subplots(figsize=(14, 10))
+    
+    for model in models_to_plot:
+        model_data = plot_df[plot_df["Model"] == model].sort_values(meta_col)
+        if model_data.empty: continue
+        
+        style = get_style(model)
+        
+        # Plot trend line using lineplot (averages over same x values if any)
+        sns.lineplot(
+            data=model_data,
+            x=meta_col,
+            y="Rank",
+            ax=ax,
+            marker=style.get('marker', 'o'),
+            label=style.get('label', model),
+            color=style['color'],
+            linewidth=4.0,
+            markersize=12,
+            linestyle=style.get('linestyle', '-'),
+            errorbar=None,
+            alpha=0.8
+        )
+
+    ax.set_xlabel(xlab, fontsize=32, fontweight='bold')
+    ax.set_ylabel('Model Ranking (1 = Best)', fontsize=32, fontweight='bold')
+    
+    if xscale == "log":
+        ax.set_xscale('log')
+        # Format log ticks
+        from matplotlib.ticker import ScalarFormatter
+        ax.xaxis.set_major_formatter(ScalarFormatter())
+    
+    ax.grid(axis='both', linestyle='--', alpha=0.5)
+    
+    # Invert y-axis so 1 is top
+    ax.set_ylim(len(models_to_plot) + 0.5, 0.5)
+    ax.set_yticks(range(1, len(models_to_plot) + 1))
+    
+    # Set tick font size
+    ax.tick_params(axis='both', labelsize=24)
+    
+    # Legend
+    ax.legend(
+        fontsize=16,
+        loc='upper center',
+        bbox_to_anchor=(0.5, -0.2),
+        frameon=True,
+        shadow=True,
+        fancybox=True,
+        ncol=3
+    )
+    
+    ax.set_title(title, fontsize=28, fontweight='bold', pad=20)
+    
+    fig.tight_layout()
+    save_fig(fig, out_dir, fname)
+
+def fig13_perf_vs_samplesize(df: pd.DataFrame, out_dir: Path) -> None:
+    _plot_perf_vs_metadata(df, "n_train", "Model Ranking vs. Training Samples", "Number of Training Samples", out_dir, "fig13_perf_vs_samplesize", xscale="log")
+
+def fig13_perf_vs_features(df: pd.DataFrame, out_dir: Path) -> None:
+    _plot_perf_vs_metadata(df, "n_features", "Model Ranking vs. Features", "Number of Features", out_dir, "fig14_perf_vs_features", xscale="log")
+
+def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path) -> None:
+    """Visualize model rankings across 3 groups of dataset: small, medium, and large."""
+    # 1. Prepare data
+    df = df.copy()
+    # Handle cases where n_train or n_test might be missing
+    df["n_train"] = df["n_train"].fillna(0)
+    df["n_test"] = df["n_test"].fillna(0)
+    df["total_size"] = df["n_train"] + df["n_test"]
+    
+    # Get unique datasets and their sizes
+    ds_sizes = df.groupby("Dataset", observed=True)["total_size"].first().dropna().sort_values()
+    if ds_sizes.empty: 
+        print("  [skip] fig13b_ranking_by_size — no dataset size metadata")
+        return
+    
+    # Split into Small, Medium, Large based on tertiles
+    # q1, q2 = ds_sizes.quantile([0.33, 0.66])
+    # print(ds_sizes, q1, q2)
+    q1 = 500
+    q2 = 4000
+    
+    # Ensure distinct groups even if quantiles are same due to discrete distribution
+    groups = {
+        "Small": ds_sizes[ds_sizes <= q1].index.tolist(),
+        "Medium": ds_sizes[(ds_sizes > q1) & (ds_sizes <= q2)].index.tolist(),
+        "Large": ds_sizes[ds_sizes > q2].index.tolist()
+    }
+    
+    # 2. Figure
+    fig, axes = plt.subplots(1, 3, figsize=(42, 14))
+    metric = "C_td"
+    asc = False # higher C_td is better -> rank 1
+    
+    # Models to plot (standard set, filtered to presence)
+    models_to_plot = [m for m in MODEL_ORDER if m in df["Model"].unique()]
+    
+    for i, (group_name, datasets) in enumerate(groups.items()):
+        ax = axes[i]
+        if not datasets:
+            ax.text(0.5, 0.5, f"No {group_name} Datasets", ha="center", va="center", fontsize=24)
+            ax.axis("off")
+            continue
+            
+        sub_df = df[df["Dataset"].isin(datasets)]
+        if sub_df.empty:
+            ax.axis("off")
+            continue
+            
+        # Compute ranks per dataset in this group
+        mean_val = sub_df.groupby(["Model", "Dataset"], observed=True)[metric].mean().unstack("Dataset").reindex(index=models_to_plot).dropna(how="all", axis=0)
+        if mean_val.empty:
+            ax.text(0.5, 0.5, "No Performance Data", ha="center", va="center", fontsize=24)
+            ax.axis("off")
+            continue
+            
+        ranks = mean_val.rank(ascending=asc) # 1 = best
+        mean_ranks = ranks.mean(axis=1).dropna().sort_values(ascending=False)
+        sem_ranks = ranks.sem(axis=1).reindex(mean_ranks.index)
+        mr_models = list(mean_ranks.index)
+        
+        # Plot bars
+        ax.barh(range(len(mr_models)), mean_ranks.values, xerr=sem_ranks.values, capsize=5, 
+                color=[group_colors_type.get(MODEL_TO_GROUP.get(m, ""), "#888888") for m in mr_models], 
+                edgecolor="white", alpha=0.8)
+        
+        ax.set_yticks(range(len(mr_models)))
+        ax.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models], fontsize=22)
+        ax.set_xlabel("Mean Rank (↓ better)", fontsize=28, fontweight="bold")
+        ax.set_title(f"{group_name} Datasets (N={len(datasets)})", fontsize=32, fontweight="bold", pad=20)
+        
+        # Consistent x-axis range
+        max_rank = len(models_to_plot) + 1
+        ax.set_xlim(0, max_rank)
+        ax.axvline(len(mr_models) / 2, color="gray", linestyle="--", alpha=0.4)
+        ax.grid(axis="x", linestyle="--", alpha=0.3)
+        ax.tick_params(axis='both', labelsize=20)
+        
+        for j, (m, r) in enumerate(mean_ranks.items()): 
+            err = sem_ranks[m]
+            offset = err if pd.notna(err) else 0
+            ax.text(r + offset + 0.2, j, f"{r:.1f}±{err:.1f}" if pd.notna(err) else f"{r:.1f}", 
+                    va="center", fontsize=16, fontweight="bold")
+
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    save_fig(fig, out_dir, "fig13b_ranking_by_size")
+
 # ---------------------------------------------------------------------------
 
 def fig10_win_rate(
@@ -887,17 +1157,9 @@ def fig10_win_rate(
     title_suffix: str = "",
     target_datasets: list[str] | None = None,
 ) -> None:
-    """For each dataset pick the best model (by mean metric across folds),
-    then count wins per model and per MODEL_TO_GROUP group.
-
-    Produces two figures:
-      *_group  — horizontal bar: wins per group (stacked by backbone if applicable)
-      *_model  — horizontal bar: wins per individual model, colored by group
-    """
     if metric not in df.columns or df[metric].isna().all():
         print(f"  [skip] {fname_prefix} — metric '{metric}' not available")
         return
-
     datasets = [
         d for d in (target_datasets or DATASET_ORDER)
         if d in df["Dataset"].unique()
@@ -1132,6 +1394,9 @@ def main() -> None:
         "10_cr": lambda: fig10_win_rate_cr(df_cr, out_dir) if df_cr is not None else None,
         "12": lambda: fig12_ranking(df, out_dir),
         "12_cr": lambda: fig12_ranking_cr(df_cr, out_dir) if df_cr is not None else lambda: None,
+        "13": lambda: fig13_perf_vs_samplesize(df, out_dir),
+        "13b": lambda: fig13b_ranking_by_size(df, out_dir),
+        "14": lambda: fig13_perf_vs_features(df, out_dir),
     }
 
     to_run = sorted(fig_map.keys()) if "all" in args.figures else [f.lower().replace("fig", "").zfill(2) for f in args.figures if f.lower().replace("fig", "").zfill(2) in fig_map]

@@ -70,19 +70,19 @@ MODEL_DISPLAY: dict[str, str] = {
 
     # TabPFN frozen embedding
     "tabpfn_embedding_cox":      "TabPFN-Cox",
-    "tabpfn_embedding_deephit":  "TabPFN-DH",
-    # "tabpfn_embedding_pchazard": "TabPFN-PCH",
-    "tabpfn_embedding_mtlr":     "TabPFN-MTLR",
-    # TabDPT frozen embedding
     "tabdpt_embedding_cox":      "TabDPT-Cox",
-    "tabdpt_embedding_deephit":  "TabDPT-DH",
-    # "tabdpt_embedding_pchazard": "TabDPT-PCH",
-    "tabdpt_embedding_mtlr":     "TabDPT-MTLR",
-    # TabICL frozen embedding
     "tabicl_embedding_cox":      "TabICL-Cox",
+    # "tabpfn_embedding_pchazard": "TabPFN-PCH",
+    # TabDPT frozen embedding
+    "tabpfn_embedding_deephit":  "TabPFN-DH",
+    "tabdpt_embedding_deephit":  "TabDPT-DH",
     "tabicl_embedding_deephit":  "TabICL-DH",
-    # "tabicl_embedding_pchazard": "TabICL-PCH",
+    # "tabdpt_embedding_pchazard": "TabDPT-PCH",
+    "tabpfn_embedding_mtlr":     "TabPFN-MTLR",
+    "tabdpt_embedding_mtlr":     "TabDPT-MTLR",
     "tabicl_embedding_mtlr":     "TabICL-MTLR",
+    # TabICL frozen embedding
+    # "tabicl_embedding_pchazard": "TabICL-PCH",
 
     
     # Competing Risks Classical
@@ -124,14 +124,11 @@ MODEL_DISPLAY: dict[str, str] = {
 MODEL_GROUPS: dict[str, list[str]] = {
     "Classical": ["cox", "km", "cox_cr", "aj_cr", "fine_gray_cr"],
     "Tree Ensemble": ["rsf", "gbsa", "survival_boost_cr"],
-    "Deep Survival": ["deepsurv", "mtlr", "pchazard", "deephit_single", "dysurv", "survtrace", "soden", "deephit_cr", "dysurv_cr", "survtrace_cr"],
+    "Deep Survival": ["deepsurv", "mtlr","deephit_single", "dysurv", "survtrace", "soden", "deephit_cr", "dysurv_cr", "survtrace_cr"],
     "Finetune-Surv": [
-        "tabpfn_embedding_cox", "tabpfn_embedding_deephit",
-        "tabpfn_embedding_pchazard", "tabpfn_embedding_mtlr",
-        "tabdpt_embedding_cox", "tabdpt_embedding_deephit",
-        "tabdpt_embedding_pchazard", "tabdpt_embedding_mtlr",
-        "tabicl_embedding_cox", "tabicl_embedding_deephit",
-        "tabicl_embedding_pchazard", "tabicl_embedding_mtlr",
+        "tabpfn_embedding_cox", "tabdpt_embedding_cox", "tabicl_embedding_cox",
+        "tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit",
+        "tabpfn_embedding_mtlr", "tabdpt_embedding_mtlr", "tabicl_embedding_mtlr",
         "tabpfn_embedding_cox_cr", "tabdpt_embedding_cox_cr", "tabicl_embedding_cox_cr",
         "tabpfn_embedding_deephit_cr", "tabdpt_embedding_deephit_cr", "tabicl_embedding_deephit_cr",
     ],
@@ -865,6 +862,9 @@ def build_latex_longtable_cr_metrics(
     
     # Calculate means and stds
     summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
+
+    # Filter summary to only include models present in MODEL_DISPLAY
+    summary = summary[summary.index.get_level_values("Model").isin(MODEL_DISPLAY)]
     
     ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
     
@@ -884,7 +884,6 @@ def build_latex_longtable_cr_metrics(
                         ranks[d][metric][sorted_vals.index[1]] = "second"
             except KeyError:
                 pass
-    
     _sig_note = (
         " $^{\\ast}$~indicates statistically significant improvement over the "
         "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."

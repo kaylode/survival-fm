@@ -227,6 +227,15 @@ def run_fold_model(
     """
     out_dir = os.path.join(output_dir, dataset_name, model_tag, f"fold_{fold}")
 
+    if training_kwargs["num_durations"] == -1:
+        training_kwargs["num_durations"] = resolve_num_durations(
+            df_train[duration_col].values,
+            df_train[event_col].values,
+            -1,
+        )
+    else:
+        out_dir = os.path.join(out_dir, f"bins{training_kwargs['num_durations']}")
+
     # Determine whether a predictions file is expected (for skip-check logic)
     pred_path = None
     if pred_dir is not None and test_idx is not None:
@@ -253,7 +262,6 @@ def run_fold_model(
             pass
 
     os.makedirs(out_dir, exist_ok=True)
-    
     if tuned_dir is not None:
         src_dir = os.path.join(tuned_dir, dataset_name, model_name, f"fold_{fold}")
         from survpfn.utils.optuna import _LEGACY_STUDY_OVERRIDES
@@ -273,13 +281,6 @@ def run_fold_model(
     print()
     feature_names = [c for c in df_train.columns
                      if c not in {duration_col, event_col}]
-
-    if training_kwargs["num_durations"] == -1:
-        training_kwargs["num_durations"] = resolve_num_durations(
-            df_train[duration_col].values,
-            df_train[event_col].values,
-            -1,
-        )
 
     # ── Train  (includes HPO when tune=True, final fit, and test-set predict) ──
     train_fn = ALL_MODELS[model_name]

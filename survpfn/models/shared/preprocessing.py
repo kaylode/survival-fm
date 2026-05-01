@@ -75,7 +75,11 @@ class SurvivalTimeBinEncoder:
         T = np.asarray(T, dtype=float)
         E = (np.asarray(E) > 0).astype(int)
 
-        n_bins = resolve_num_durations(T, E, self.n_bins)
+        if self.n_bins is None:
+            n_bins = resolve_num_durations(T, E)
+        else:
+            n_bins = self.n_bins
+            
         cuts = get_cuts(T, E, n_bins, scheme=self.scheme, **self.hybrid_kw)
         self._bin_times = np.unique(np.concatenate([[0.0], cuts])).astype(float)
         

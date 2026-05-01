@@ -43,12 +43,12 @@ import seaborn as sns
 plt.rcParams.update({
     "font.family": "sans-serif",
     "font.sans-serif": ["Inter", "Helvetica", "Arial", "DejaVu Sans"],
-    "font.size": 11,
-    "axes.titlesize": 13,
-    "axes.labelsize": 12,
-    "legend.fontsize": 9,
-    "xtick.labelsize": 10,
-    "ytick.labelsize": 10,
+    "font.size": 22,
+    "axes.titlesize": 26,
+    "axes.labelsize": 32,
+    "legend.fontsize": 20,
+    "xtick.labelsize": 24,
+    "ytick.labelsize": 24,
     "figure.dpi": 150,
     "savefig.dpi": 300,
     "savefig.bbox": "tight",
@@ -100,12 +100,27 @@ MODEL_GROUPS = {
     "Baseline": ["km", "cox", "cox_cr", "aj_cr", "fine_gray_cr"], "Tree": ["rsf", "gbsa"],
     "Deep": ["deepsurv", "mtlr", "deephit_single", "dysurv", "deephit_cr"], "Attention": ["survtrace"],
     "Finetune-Cox": [m for m in MODEL_ORDER if "cox" in m and ("_embedding" in m or "_joint" in m)],
-    "Finetune-DeepHit": [m for m in MODEL_ORDER if "deephit" in m and ("_embedding" in m or "_joint" in m)],
+    "Finetune-DH": ["tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit"],
     "Finetune-MTLR": [m for m in MODEL_ORDER if "mtlr" in m and ("_embedding" in m or "_joint" in m)],
-    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens", "tabpfn_zeroshot_cr_multinomial", "tabpfn_zeroshot_cr_perevent"],
+    "Zeroshot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
     "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
+
+# Map for the requested 3 groups only
+SPECIAL_GROUPS_MAP = {
+    "tabpfn_embedding_deephit": "Finetune-DH",
+    "tabdpt_embedding_deephit": "Finetune-DH",
+    "tabicl_embedding_deephit": "Finetune-DH",
+    "tabpfn_finetune": "Finetune-CE",
+    "tabdpt_finetune": "Finetune-CE",
+    "tabicl_finetune": "Finetune-CE",
+    "tabpfn_zeroshot_perbin_time_ens": "Zeroshot",
+    "tabdpt_zeroshot_perbin_time_ens": "Zeroshot",
+    "tabicl_zeroshot_perbin_time_ens": "Zeroshot",
+}
+
+HIGHLIGHTED_GROUPS = ["Finetune-DH", "Finetune-CE", "Zeroshot"]
 
 DATASET_LABELS = {
     "SUPPORT2": "SUPPORT2", "METABRIC": "METABRIC", "GBSG": "GBSG", "FLCHAIN": "FL-Chain",
@@ -126,6 +141,16 @@ _COLORS = sns.color_palette("husl", n_colors=max(len(_ALL_MODELS_ORDERED), 15))
 MODEL_COLORS: dict[str, tuple] = {
     m: _COLORS[i % len(_COLORS)] for i, m in enumerate(_ALL_MODELS_ORDERED)
 }
+MODEL_COLORS.update({
+    "Finetune-DH": "#71b7e7", # Red
+    "Finetune-CE": "#ed8076", # Blue
+    "Zeroshot": "#2CA02C",    # Green
+})
+MODEL_LABELS.update({
+    "Finetune-DH": "Finetune-DeepHit",
+    "Finetune-CE": "Finetune-CE",
+    "Zeroshot": "Zero-shot",
+})
 
 # Marker cycle
 _MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*", "p", "h", "<", ">"]
@@ -138,7 +163,7 @@ _MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*", "p", "h", "<", ">"]
 _FRAC_PATTERN = re.compile(r"^(.+)_frac(\d+\.\d+)$")
 
 
-def collect_fraction_results(results_dir: str) -> pd.DataFrame:
+def collect_fraction_results(results_dir: str, benchmark_dir: str = "results/benchmark") -> pd.DataFrame:
     """Collect metrics from a fraction-based benchmark run.
 
     Parses model tags of the form ``<model>_frac<F>`` and returns a DataFrame
@@ -183,6 +208,42 @@ def collect_fraction_results(results_dir: str) -> pd.DataFrame:
 
         records.append(row)
 
+    # ── Collect 100% results from benchmark_dir ──────────────────────────────
+    frac_pairs = {(r["Dataset"], r["Model"]) for r in records}
+    bench_root = Path(benchmark_dir)
+    if bench_root.exists():
+        for ds, model in frac_pairs:
+            model_dir = bench_root / ds / model
+            if not model_dir.exists():
+                continue
+            
+            for metrics_path in model_dir.glob("fold_*/metrics.json"):
+                parts = metrics_path.parts
+                fold_str = parts[-2]
+                try:
+                    fold = int(fold_str.split("_")[1])
+                except (IndexError, ValueError):
+                    fold = -1
+                
+                try:
+                    with metrics_path.open() as f:
+                        metrics = json.load(f)
+                except Exception:
+                    continue
+
+                row: dict = {
+                    "Dataset":  ds,
+                    "Model":    model,
+                    "Fraction": 1.0,
+                    "Fold":     fold,
+                }
+                for k, v in metrics.items():
+                    if v is None or (isinstance(v, float) and (np.isinf(v) or np.isnan(v))):
+                        row[k] = np.nan
+                    else:
+                        row[k] = v
+                records.append(row)
+
     if not records:
         raise FileNotFoundError(
             f"No fraction-labelled metrics.json found under '{results_dir}'. "
@@ -190,6 +251,16 @@ def collect_fraction_results(results_dir: str) -> pd.DataFrame:
         )
 
     df = pd.DataFrame(records)
+
+    # ── Filter only models in analysis.MODEL_ORDER ───────────────────────────
+    try:
+        from survpfn.xai.analysis import MODEL_ORDER as ANALYSIS_MODEL_ORDER
+        df = df[df["Model"].isin(ANALYSIS_MODEL_ORDER)]
+    except ImportError:
+        # Fallback to local MODEL_ORDER if analysis cannot be imported
+        from .analysis import MODEL_ORDER as ANALYSIS_MODEL_ORDER
+        df = df[df["Model"].isin(ANALYSIS_MODEL_ORDER)]
+
     df = df.sort_values(["Dataset", "Model", "Fraction", "Fold"]).reset_index(drop=True)
     return df
 
@@ -212,7 +283,7 @@ def plot_fraction_line(
     dataset: str,
     output_dir: Path,
     lower_is_better: bool = False,
-    figsize: tuple[float, float] = (8, 5.5),
+    figsize: tuple[float, float] = (12, 10),
 ) -> None:
     """Single-dataset line plot: metric vs fraction, one line per model."""
     sub = df[(df["Dataset"] == dataset) & df[metric].notna()].copy()
@@ -228,37 +299,51 @@ def plot_fraction_line(
     )
 
     fig, ax = plt.subplots(figsize=figsize)
+    fractions = sorted(agg["Fraction"].unique())
+    frac_to_idx = {f: i for i, f in enumerate(fractions)}
 
     models = sorted(agg["Model"].unique())
+
     for i, model in enumerate(models):
         m = agg[agg["Model"] == model].sort_values("Fraction")
         display = MODEL_LABELS.get(model, model)
         color   = MODEL_COLORS.get(model, _COLORS[i % len(_COLORS)])
         marker  = _MARKERS[i % len(_MARKERS)]
 
+        # ── Highlight logic ──────────────────────────────────────────────────
+        is_highlight = model in HIGHLIGHTED_GROUPS
+        alpha = 1.0 if is_highlight else 0.5
+        lw    = 4.0 if is_highlight else 2.5
+        z     = 10  if is_highlight else 2
+        ms    = 12  if is_highlight else 6
+        # ─────────────────────────────────────────────────────────────────────
+
         ax.plot(
-            m["Fraction"], m["mean"],
-            marker=marker, markersize=6, linewidth=2,
-            label=display, color=color,
+            m["Fraction"].map(frac_to_idx), m["mean"],
+            marker=marker, markersize=ms, linewidth=lw,
+            label=display, color=color, alpha=alpha, zorder=z
         )
         ax.fill_between(
-            m["Fraction"],
+            m["Fraction"].map(frac_to_idx),
             m["mean"] - m["std"],
             m["mean"] + m["std"],
-            alpha=0.12, color=color,
+            alpha=alpha * 0.15, color=color, zorder=z-1
         )
 
-    ax.set_xlabel("Training Label Fraction")
-    ax.set_ylabel(metric)
+    metric_name = "C-index" if metric == 'C_td' else metric
+    ax.set_xlabel("Training Label Fraction", fontsize=24)
+    ax.set_ylabel(metric_name, fontsize=24)
     direction = " (↓ better)" if lower_is_better else " (↑ better)"
-    ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)} — {metric}{direction}")
+    # ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)} — {metric_name}{direction}")
 
-    # Use percentage tick labels
-    ax.set_xticks(sorted(agg["Fraction"].unique()))
-    ax.set_xticklabels([f"{f*100:g}%" for f in sorted(agg["Fraction"].unique())])
+    # Use categorical tick labels
+    ax.set_xticks(range(len(fractions)))
+    ax.set_xticklabels([f"{f*100:g}%" for f in fractions])
+    ax.tick_params(axis='both', which='major', labelsize=20)
 
     ax.legend(
-        bbox_to_anchor=(1.02, 1), loc="upper left",
+        loc="lower right",
+        fontsize=20,
         frameon=True, framealpha=0.9, edgecolor="0.8",
     )
     ax.grid(True, alpha=0.3, linestyle="--")
@@ -284,10 +369,12 @@ def plot_fraction_combined(
     fig, axes = plt.subplots(1, n, figsize=(7 * n, 5.5), sharey=True, squeeze=False)
     axes = axes.flatten()
 
-    all_models = [m for m in MODEL_ORDER if m in df["Model"].unique()]
-    all_models.extend(sorted([m for m in df["Model"].unique() if m not in all_models]))
+    all_models = df["Model"].unique()
     
     handles, labels = [], []
+
+    all_fractions = sorted(df["Fraction"].unique())
+    frac_to_idx = {f: i for i, f in enumerate(all_fractions)}
 
     for idx, dataset in enumerate(datasets):
         ax = axes[idx]
@@ -310,16 +397,24 @@ def plot_fraction_combined(
             color   = MODEL_COLORS.get(model, _COLORS[i % len(_COLORS)])
             marker  = _MARKERS[i % len(_MARKERS)]
 
+            # ── Highlight logic ──────────────────────────────────────────────
+            is_highlight = model in HIGHLIGHTED_GROUPS
+            alpha = 1.0 if is_highlight else 0.25
+            lw    = 5.0 if is_highlight else 1.5
+            z     = 10  if is_highlight else 2
+            ms    = 12  if is_highlight else 6
+            # ─────────────────────────────────────────────────────────────────
+
             line, = ax.plot(
-                m["Fraction"], m["mean"],
-                marker=marker, markersize=6, linewidth=2,
-                label=display, color=color,
+                m["Fraction"].map(frac_to_idx), m["mean"],
+                marker=marker, markersize=ms, linewidth=lw,
+                label=display, color=color, alpha=alpha, zorder=z
             )
             ax.fill_between(
-                m["Fraction"],
+                m["Fraction"].map(frac_to_idx),
                 m["mean"] - m["std"],
                 m["mean"] + m["std"],
-                alpha=0.12, color=color,
+                alpha=alpha * 0.15, color=color, zorder=z-1
             )
 
             # Collect legend handles from first subplot only
@@ -330,8 +425,9 @@ def plot_fraction_combined(
         ax.set_xlabel("Training Label Fraction")
         if idx == 0:
             ax.set_ylabel(metric)
-        ax.set_xticks(sorted(agg["Fraction"].unique()))
-        ax.set_xticklabels([f"{f*100:g}%" for f in sorted(agg["Fraction"].unique())])
+        ax.set_xticks(range(len(all_fractions)))
+        ax.set_xticklabels([f"{f*100:g}%" for f in all_fractions])
+        ax.tick_params(axis='both', which='major', labelsize=28)
         direction = " (↓)" if lower_is_better else " (↑)"
         ax.set_title(f"{DATASET_LABELS.get(dataset, dataset)}{direction}")
         ax.grid(True, alpha=0.3, linestyle="--")
@@ -339,10 +435,10 @@ def plot_fraction_combined(
 
     fig.legend(
         handles, labels,
-        loc="lower center",
-        ncol=min(len(labels), 6),
+        loc="lower right",
+        ncol=2,
         frameon=True, framealpha=0.9, edgecolor="0.8",
-        bbox_to_anchor=(0.5, -0.08),
+        bbox_to_anchor=(0.95, 0.1),
     )
     fig.suptitle(f"Label Efficiency — {metric}", fontsize=14, fontweight="bold", y=1.02)
     fig.tight_layout()
@@ -369,7 +465,7 @@ def main():
         help="Directory where PDF figures are saved.",
     )
     parser.add_argument(
-        "--metrics", nargs="+", default=["C_td", "IBS", "AUC_mean"],
+        "--metrics", nargs="+", default=["C_td", "IBS"],
         help="Metrics to plot.",
     )
     parser.add_argument(
@@ -381,8 +477,23 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Collecting fraction results from '{args.results_dir}' ...")
+    print(f"Collecting results from '{args.results_dir}' (and 'results/benchmark' for 100%)...")
     df = collect_fraction_results(args.results_dir)
+
+    # ── Filter only models in MODEL_ORDER ───────────────────────────
+    df = df[df["Model"].isin(MODEL_ORDER)]
+
+    # ── Grouping specific models as requested ────────────────────────────────
+    df["ModelGroup"] = df["Model"].map(SPECIAL_GROUPS_MAP).fillna(df["Model"])
+    
+    # Aggregate across the 3 foundation models within each group
+    # We want mean across (ModelGroup, Fraction, Dataset, Fold)
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if "Fraction" in numeric_cols: numeric_cols.remove("Fraction")
+    if "Fold" in numeric_cols: numeric_cols.remove("Fold")
+    
+    df = df.groupby(["Dataset", "ModelGroup", "Fraction", "Fold"])[numeric_cols].mean().reset_index()
+    df = df.rename(columns={"ModelGroup": "Model"})
     print(f"  {len(df)} rows | {df['Dataset'].nunique()} datasets "
           f"| {df['Model'].nunique()} models "
           f"| fractions: {sorted(df['Fraction'].unique())}")
