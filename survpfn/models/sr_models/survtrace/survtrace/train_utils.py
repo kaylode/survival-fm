@@ -293,6 +293,10 @@ class Trainer:
             num_train_batch = len(df_y_train) // batch_size
         else:
             num_train_batch = int(np.ceil(len(df_y_train) / batch_size))
+        
+        if num_train_batch == 0:
+            num_train_batch = 1
+            
         t_total = num_train_batch * epochs   # total optimiser steps → enables LR schedule
         optimizer = BERTAdam(optimizer_grouped_parameters,
             learning_rate,
