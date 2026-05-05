@@ -42,13 +42,13 @@ SCRIPT="survpfn.scripts.benchmark"
 FOLDS=5
 TRIALS=20
 SEED=42
-OUTPUT_DIR="results/benchmark"
+OUTPUT_DIR="results/benchmark_surv"
 LOG_DIR="logs"
 
 EPOCHS=50
 LR="1e-4"
 DEVICE="cuda:0"
-BATCH_SIZE=128
+BATCH_SIZE=64
 N_ENSEMBLE=5
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
@@ -59,7 +59,18 @@ SIRBU_DATASETS="ORMONI_TIRODEI_MORTALITY" #URRAH
 SURVSET_DATASETS="SS_CANCER SS_BREAST SS_GBSG2 SS_ROTT2 SS_COLON SS_PROSTATE \
 SS_OVARIAN SS_MELANOMA SS_E1684 SS_PBC SS_HEPATOCELLULAR SS_NWTCO \
 SS_RETINOPATHY SS_HEART SS_CGD SS_COST SS_LEUKSURV SS_DIALYSIS \
-SS_ACTG SS_RHC SS_VLBW SS_GRACE SS_TRACE SS_DLBCL SS_DIABETES SS_FRAMINGHAM"
+SS_ACTG SS_RHC SS_VLBW SS_GRACE SS_TRACE SS_DIABETES SS_FRAMINGHAM SS_DLBCL"
+
+SURVSET_DATASETS_EXTRA="SS_PHPL04K8A SS_DBCD SS_D.OROPHA.REC SS_PHARMACOSMOKING \
+SS_ZINC SS_NKI70 SS_BURN SS_STAGEC SS_RDATA SS_EPILEPTIC SS_Z243 SS_CHOP \
+SS_DATADIVAT1 SS_BERGAMASCHI SS_AML_BULL SS_PROSTATESURVIVAL SS_DIVORCE SS_DATADIVAT3 \
+SS_UIS SS_COLON SS_GLIOMA SS_AIDS2 SS_WPBC SS_OVA SS_MICRO.CENSURE \
+SS_MCLCLEANED SS_CSL SS_HEART SS_GSE1992 SS_SMARTO SS_NSBCD SS_RETINOPATHY SS_SUPPORT2 \
+SS_PBC SS_PBC3 SS_OLDMORT SS_UNEMPDUR SS_CGD SS_ACATH SS_SCANIA SS_ROSSI SS_HEARTVALVE \
+SS_GSE3143 SS_UNEMPLOYMENT SS_GSE4335 SS_ROTT2 SS_DATAOVARIAN1 SS_AIDS  \
+SS_VDV SS_HEPATOCELLULAR SS_FLCHAIN SS_FRTCS SS_DATADIVAT2 SS_VETERAN SS_HDFAIL"
+
+
 EHR_DATASETS="EICU_SURV MIMIC_SURV_B"
 ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 
@@ -67,17 +78,11 @@ ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 CLASSICAL_MODELS="cox rsf gbsa"
 DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace dysurv"
 
-EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox tabicl_embedding_cox"
-EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit tabicl_embedding_deephit"
-EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr tabicl_embedding_mtlr"
-EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard tabicl_embedding_pchazard"
+EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox" #tabicl_embedding_cox
+EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit" #tabicl_embedding_deephit
+EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr" #tabicl_embedding_mtlr
+EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard" #tabicl_embedding_pchazard
 FM_EMBEDDING="$EMBEDDING_COX $EMBEDDING_DEEPHIT $EMBEDDING_MTLR"
-
-JOINT_COX="tabpfn_joint_cox tabdpt_joint_cox tabicl_joint_cox"
-JOINT_DEEPHIT="tabpfn_joint_deephit tabdpt_joint_deephit tabicl_joint_deephit"
-JOINT_MTLR="tabpfn_joint_mtlr tabdpt_joint_mtlr tabicl_joint_mtlr"
-JOINT_PCHAZARD="tabpfn_joint_pchazard tabdpt_joint_pchazard tabicl_joint_pchazard"
-FM_JOINT="$JOINT_COX $JOINT_DEEPHIT $JOINT_MTLR $JOINT_PCHAZARD"
 
 ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
 ZEROSHOT_TEMPORAL="tabpfn_zeroshot_perbin_time tabdpt_zeroshot_perbin_time tabicl_zeroshot_perbin_time tabpfn_zeroshot_perbin_time_ens tabdpt_zeroshot_perbin_time_ens tabicl_zeroshot_perbin_time_ens"
@@ -119,6 +124,7 @@ for arg in "$@"; do [[ "$arg" == "--parallel" ]] && PARALLEL=true; done
 case "${DATASET_OVERRIDE:-}" in
     public)        DATASETS="$PUBLIC_DATASETS" ;;
     survset)       DATASETS="$SURVSET_DATASETS" ;;
+    survset_extra) DATASETS="$SURVSET_DATASETS_EXTRA" ;;
     ormoni_tirodei) DATASETS="$ORMONI_TIRODEI_DATASETS" ;;
     sirbu)         DATASETS="$SIRBU_DATASETS" ;;
     ehr)           DATASETS="$EHR_DATASETS" ;;
@@ -131,9 +137,8 @@ case "$GROUP" in
     classical)         MODELS="$CLASSICAL_MODELS" ;;
     tree)              MODELS="$CLASSICAL_MODELS" ;;
     deep)              MODELS="$DEEP_MODELS" ;;
-    fm)                MODELS="$FM_EMBEDDING $FM_JOINT $ZEROSHOT_MODELS $ZEROSHOT_TEMPORAL $FINETUNE" ;;
+    fm)                MODELS="$FM_EMBEDDING $BESTSHOT $FINETUNE" ;;
     fm_embedding)      MODELS="$FM_EMBEDDING" ;;
-    fm_joint)          MODELS="$FM_JOINT" ;;
     embedding_cox)     MODELS="$EMBEDDING_COX" ;;
     embedding_deephit) MODELS="$EMBEDDING_DEEPHIT" ;;
     embedding_pch)     MODELS="$EMBEDDING_PCHAZARD" ;;

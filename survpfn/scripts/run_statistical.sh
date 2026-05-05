@@ -28,8 +28,8 @@ SCRIPT="survpfn/scripts/significance.py"
 
 AGGREGATED="results/benchmark/aggregated.csv"
 OUTPUT_DIR="results/benchmark"
-METRIC="C-index"
-ALPHA="0.05"
+METRIC="C_td"
+ALPHA="0.0625"
 REFERENCES="rsf cox deephit_single"
 TOP_N_CD=20
 NO_CD=false

@@ -266,6 +266,7 @@ class Trainer:
         learning_rate=1e-3,
         weight_decay=0,
         val_batch_size=None,
+        drop_last=False,
         **kwargs,
         ):
 
@@ -288,7 +289,10 @@ class Trainer:
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        num_train_batch = int(np.ceil(len(df_y_train) / batch_size))
+        if drop_last:
+            num_train_batch = len(df_y_train) // batch_size
+        else:
+            num_train_batch = int(np.ceil(len(df_y_train) / batch_size))
         t_total = num_train_batch * epochs   # total optimiser steps → enables LR schedule
         optimizer = BERTAdam(optimizer_grouped_parameters,
             learning_rate,
@@ -375,6 +379,7 @@ class Trainer:
         learning_rate=1e-3,
         weight_decay=0,
         val_batch_size=None,
+        drop_last=False,
         **kwargs,
         ):
 
@@ -396,7 +401,13 @@ class Trainer:
             {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        num_train_batch = int(np.ceil(len(train_set[0]) / batch_size))
+        if drop_last:
+            num_train_batch = len(train_set[0]) // batch_size
+        else:
+            num_train_batch = int(np.ceil(len(train_set[0]) / batch_size))
+        if num_train_batch == 0:
+            num_train_batch = 1
+            
         t_total = num_train_batch * epochs   # total optimiser steps → enables LR schedule
         optimizer = BERTAdam(optimizer_grouped_parameters,
             learning_rate,
@@ -489,6 +500,7 @@ class Trainer:
         learning_rate=1e-3,
         weight_decay=0,
         val_batch_size=None,
+        drop_last=False,
         **kwargs,
         ):
         '''fit on the train_set, validate on val_set for early stop
@@ -507,6 +519,7 @@ class Trainer:
                     learning_rate=learning_rate,
                     weight_decay=weight_decay,
                     val_batch_size=val_batch_size,
+                    drop_last=drop_last,
                     **kwargs,
             )
         
@@ -519,6 +532,7 @@ class Trainer:
                     learning_rate=learning_rate,
                     weight_decay=weight_decay,
                     val_batch_size=val_batch_size,
+                    drop_last=drop_last,
                     **kwargs,
             )
         

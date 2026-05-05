@@ -520,9 +520,9 @@ def run_benchmark(
                 )
                 # except Exception as exc:
                 #     warnings.warn(
-                #         f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
-                #         stacklevel=2,
-                #     )
+                #       f"{dataset_name}/{model_tag}/fold_{fold} failed: {exc}",
+                #       stacklevel=2,
+                #    )
                 #     print("      → FAILED (see warning above)")
 
 

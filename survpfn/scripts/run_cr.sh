@@ -43,7 +43,7 @@ BATCH_SIZE=128
 N_ENSEMBLE=1
 
 # ── Dataset groups ────────────────────────────────────────────────────────────
-CR_DATASETS="FRAMINGHAM PBC2 SUPPORT_CR SYNTHETIC_CR"
+CR_DATASETS="FRAMINGHAM PBC2 SUPPORT_CR SYNTHETIC_CR SS_FOLLIC"
 ALL_DATASETS="$CR_DATASETS"
 
 # ── Model groups (must match ALL_MODELS keys in models/__init__.py) ───────────

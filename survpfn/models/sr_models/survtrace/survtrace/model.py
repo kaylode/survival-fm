@@ -235,7 +235,6 @@ class SurvTraceSingle(BaseModel):
 
         encoder_outputs = self.encoder(embedding_output)
         sequence_output = encoder_outputs[0]   # last hidden state (mirrors SurvTraceMulti)
-
         predict_logits = self.cls(sequence_output)
 
         return sequence_output, predict_logits

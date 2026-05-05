@@ -38,8 +38,16 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from survpfn.dataloaders.data_utils.utils import _encode_df
+try:
+    from SurvSet.data import SurvLoader
+except ImportError as exc:
+    raise ImportError(
+        "SurvSet is not installed.  Run: uv add SurvSet"
+    ) from exc
 
-
+loader = SurvLoader()
+SURVSET_BENCHMARK = loader.df_ds["ds"].tolist()
+SURVSET_BENCHMARK.remove("mgus")
 # ---------------------------------------------------------------------------
 # Curated 25-dataset benchmark subset
 # Selected criteria: N ≥ 200, single-event (no time2/interval censoring needed),
@@ -47,39 +55,45 @@ from survpfn.dataloaders.data_utils.utils import _encode_df
 # Covers diverse domains: oncology, cardiology, haematology, transplant, etc.
 # ---------------------------------------------------------------------------
 
-SURVSET_BENCHMARK: list[str] = [
-    "cancer",           # Lung cancer (NCCTG)
-    "breast",           # German breast cancer
-    "GBSG2",            # German breast cancer (GBSG variant)
-    "rott2",            # Rotterdam breast cancer
-    "colon",            # Colon cancer (adjuvant therapy)
-    "prostate",         # Prostate cancer
-    "ovarian",          # Ovarian cancer
-    "Melanoma",         # Melanoma
-    "e1684",            # Melanoma clinical trial
-    "pbc",              # Primary biliary cirrhosis
-    "hepatoCellular",   # Hepatocellular carcinoma
-    "nwtco",            # Wilms tumour (National Wilms Tumor Study Group)
-    "retinopathy",      # Diabetic retinopathy
-    "heart",            # Stanford heart transplant
-    "veteran",          # Lung cancer veterans trial
-    "whas500",          # Worcester Heart Attack Study
-    "mgus",             # MGUS haematology (Monoclonal Gammopathy)
-    "cgd",              # Chronic granulomatous disease
-    "cost",             # Colorectal cancer
-    "LeukSurv",         # Leukemia survival
-    "Dialysis",         # Kidney dialysis
-    "actg",             # AIDS clinical trial
-    "rhc",              # Right heart catheterization
-    "vlbw",             # Very low birth weight infants
-    "grace",            # Global Registry of Acute Coronary Events
-    "TRACE",            # TRAndolapril Cardiac Evaluation
-    "support2",         # SUPPORT study (hospitalised patients)
-    "DLBCL",            # Diffuse large B-cell lymphoma
-    "diabetes",         # Diabetes
-    "flchain",          # Free light chain (plasma cell dyscrasias)
-    "Framingham",       # Framingham heart study
-]
+# SURVSET_BENCHMARK: list[str] = [
+#     "cancer",           # Lung cancer (NCCTG)
+#     "breast",           # German breast cancer
+#     "GBSG2",            # German breast cancer (GBSG variant)
+#     "rott2",            # Rotterdam breast cancer
+#     "colon",            # Colon cancer (adjuvant therapy)
+#     "prostate",         # Prostate cancer
+#     "ovarian",          # Ovarian cancer
+#     "Melanoma",         # Melanoma
+#     "e1684",            # Melanoma clinical trial
+#     "pbc",              # Primary biliary cirrhosis
+#     "hepatoCellular",   # Hepatocellular carcinoma
+#     "nwtco",            # Wilms tumour (National Wilms Tumor Study Group)
+#     "retinopathy",      # Diabetic retinopathy
+#     "heart",            # Stanford heart transplant
+#     "veteran",          # Lung cancer veterans trial
+#     "whas500",          # Worcester Heart Attack Study
+#     "mgus",             # MGUS haematology (Monoclonal Gammopathy)
+#     "cgd",              # Chronic granulomatous disease
+#     "cost",             # Colorectal cancer
+#     "LeukSurv",         # Leukemia survival
+#     "Dialysis",         # Kidney dialysis
+#     "actg",             # AIDS clinical trial
+#     "rhc",              # Right heart catheterization
+#     "vlbw",             # Very low birth weight infants
+#     "grace",            # Global Registry of Acute Coronary Events
+#     "TRACE",            # TRAndolapril Cardiac Evaluation
+#     "support2",         # SUPPORT study (hospitalised patients)
+#     "DLBCL",            # Diffuse large B-cell lymphoma
+#     "diabetes",         # Diabetes
+#     "flchain",          # Free light chain (plasma cell dyscrasias)
+#     "Framingham",       # Framingham heart study
+#     'hdfail', 
+#     'phpl04K8a',  
+#     'DBCD',  
+#     'd.oropha.rec', 
+#     'pharmacoSmoking', 
+#     'zinc', 'nki70', 'burn', 'stagec', 'ovarian', 'actg', 'rhc', 'rdata', 'epileptic', 'vlbw', 'grace', 'TRACE', 'whas500', 'dataDIVAT1', 'Bergamaschi', 'AML_Bull', 'prostateSurvival', 'nwtco', 'divorce', 'dataDIVAT3', 'uis', 'colon', 'glioma', 'follic', 'mgus', 'Aids2', 'Z243', 'veteran', 'chop', 'wpbc', 'ova', 'micro.censure', 'MCLcleaned', 'cost', 'csl', 'heart', 'gse1992', 'smarto', 'NSBCD', 'retinopathy', 'support2', 'pbc', 'Pbc3', 'oldmort', 'UnempDur', 'cgd', 'acath', 'scania', 'Rossi', 'GBSG2', 'heartvalve', 'gse3143', 'Unemployment', 'gse4335', 'rott2', 'DLBCL', 'dataOvarian1', 'aids', 'diabetes', 'vdv', 'hepatoCellular', 'flchain', 'Framingham', 'FRTCS', 'dataDIVAT2'
+# ]
 
 # Short alias: small healthcare datasets (good for quick sanity checks)
 SURVSET_SMALL: list[str] = [
@@ -101,6 +115,7 @@ SURVSET_SMALL: list[str] = [
 @lru_cache(maxsize=128)
 def load_survset_dataset(ds_name: str) -> tuple[pd.DataFrame, str, str]:
     """Load a SurvSet dataset and return it in the project's standard format.
+    Available: 'hdfail', 'e1684', 'phpl04K8a', 'prostate', 'cancer', 'DBCD', 'LeukSurv', 'Dialysis', 'Melanoma', 'd.oropha.rec', 'pharmacoSmoking', 'zinc', 'nki70', 'burn', 'breast', 'stagec', 'ovarian', 'actg', 'rhc', 'rdata', 'epileptic', 'vlbw', 'grace', 'TRACE', 'whas500', 'dataDIVAT1', 'Bergamaschi', 'AML_Bull', 'prostateSurvival', 'nwtco', 'divorce', 'dataDIVAT3', 'uis', 'colon', 'glioma', 'follic', 'mgus', 'Aids2', 'Z243', 'veteran', 'chop', 'wpbc', 'ova', 'micro.censure', 'MCLcleaned', 'cost', 'csl', 'heart', 'gse1992', 'smarto', 'NSBCD', 'retinopathy', 'support2', 'pbc', 'Pbc3', 'oldmort', 'UnempDur', 'cgd', 'acath', 'scania', 'Rossi', 'GBSG2', 'heartvalve', 'gse3143', 'Unemployment', 'gse4335', 'rott2', 'DLBCL', 'dataOvarian1', 'aids', 'diabetes', 'vdv', 'hepatoCellular', 'flchain', 'Framingham', 'FRTCS', 'dataDIVAT2
 
     Parameters
     ----------
@@ -125,20 +140,12 @@ def load_survset_dataset(ds_name: str) -> tuple[pd.DataFrame, str, str]:
     ValueError
         If the dataset is not found in SurvSet.
     """
-    try:
-        from SurvSet.data import SurvLoader
-    except ImportError as exc:
-        raise ImportError(
-            "SurvSet is not installed.  Run: uv add SurvSet"
-        ) from exc
-
-    loader = SurvLoader()
-    available = loader.df_ds["ds"].tolist()
-    match = [ds for ds in available if ds.lower() == ds_name.lower()]
+    
+    match = [ds for ds in SURVSET_BENCHMARK if ds.lower() == ds_name.lower()]
     if not match:
         raise ValueError(
             f"Dataset {ds_name!r} not found in SurvSet.  "
-            f"Available: {available}"
+            f"Available: {SURVSET_BENCHMARK}"
         )
     actual_ds_name = match[0]
     result = loader.load_dataset(ds_name=actual_ds_name)

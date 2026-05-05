@@ -61,6 +61,7 @@ def train_survtrace(
     num_attention_heads: int = 2,
     intermediate_size: int = 64,
     early_stop_patience: int = 10,
+    drop_last: bool = True,
     device: Optional[str] = None,
     tune: bool = False,
     n_trials: int = 10,
@@ -115,6 +116,35 @@ def train_survtrace(
 
     feat_cols = [c for c in df_train.columns if c not in {duration_col, event_col}]
     n_feat = len(feat_cols)
+
+    # ── Feature Reduction (PCA) if needed ──────────────────────────────────
+    if n_feat > 2000:
+        from sklearn.decomposition import PCA
+        n_comp = min(2000, len(df_train))
+        print(f"      {C_YELLOW}→ High feature count ({n_feat}). Applying PCA to {n_comp} components.{C_RESET}", flush=True)
+        pca = PCA(n_components=n_comp, random_state=42)
+        
+        # Fit on train features
+        X_train_pca = pca.fit_transform(df_train[feat_cols])
+        X_test_pca = pca.transform(df_test[feat_cols])
+        
+        # Create new feature names
+        feat_cols = [f"pca_{i}" for i in range(n_comp)]
+        
+        # Replace features in DataFrames while preserving targets
+        df_train_new = pd.DataFrame(X_train_pca, columns=feat_cols, index=df_train.index)
+        df_train_new[duration_col] = df_train[duration_col]
+        df_train_new[event_col] = df_train[event_col]
+        df_train = df_train_new
+        
+        df_test_new = pd.DataFrame(X_test_pca, columns=feat_cols, index=df_test.index)
+        if duration_col in df_test.columns:
+            df_test_new[duration_col] = df_test[duration_col]
+        if event_col in df_test.columns:
+            df_test_new[event_col] = df_test[event_col]
+        df_test = df_test_new
+        
+        n_feat = n_comp
 
     # ── Time discretisation ────────────────────────────────────────────────
     T_train = df_train[duration_col].values.astype(np.float64)
@@ -213,6 +243,7 @@ def train_survtrace(
                             batch_size=current_bs,
                             epochs=max(20, p["epochs"] // 5),  # enough to see convergence trends
                             learning_rate=p["learning_rate"],
+                            drop_last=drop_last,
                         )
                         success = True
                     except RuntimeError as e:
@@ -301,6 +332,7 @@ def train_survtrace(
                         batch_size=current_bs,
                         epochs=params["epochs"],
                         learning_rate=params["learning_rate"],
+                        drop_last=drop_last,
                     )
                 success = True
             except RuntimeError as e:

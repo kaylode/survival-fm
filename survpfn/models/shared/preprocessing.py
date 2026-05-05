@@ -254,15 +254,17 @@ class FMDataPrep:
         x_pt = torch.from_numpy(x_scaled) 
 
         if max_features is not None and x.shape[1] > max_features:
-            _, _, V = torch.pca_lowrank(x_pt, q=max_features)
+            _, _, V = torch.pca_lowrank(x_pt, q=min(x_pt.shape[0], x_pt.shape[1], max_features))
             self.pca_V = V
         else:
             self.pca_V = None
 
+        if self.pca_V is not None:
+            x_pt = x_pt @ self.pca_V
+
         if device is not None:
-            # Re-apply transform to get the projection result as a tensor on device
-            return self.transform(x, device=device)
-        return x_scaled
+            return x_pt.to(device)
+        return x_pt.numpy()
 
     def transform(self, x: np.ndarray, device: Optional[str] = None) -> Union[np.ndarray, torch.Tensor]:
         """Apply fitted scaler and optional PCA."""

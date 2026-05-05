@@ -28,6 +28,8 @@ def train_dysurv(
     verbose: bool = True,
     **kwargs
 ):
+    C_YELLOW = "\033[93m"
+    C_RESET = "\033[0m"
     if verbose:
         print(f"  [DySurv] Tuning: {tune}, Device: {kwargs.get('device', 'cpu')}", flush=True)
 
@@ -40,11 +42,22 @@ def train_dysurv(
     E_test = df_test[event_col].values.astype(float)
     X_test = df_test.drop(columns=[duration_col, event_col]).values.astype(np.float32)
 
+    # ── Feature Reduction (PCA) if needed ──────────────────────────────────
+    n_feat = X_train.shape[1]
+    if n_feat > 2000:
+        from sklearn.decomposition import PCA
+        n_comp = min(2000, X_train.shape[0])
+        print(f"      {C_YELLOW}→ [DySurv] High feature count ({n_feat}). Applying PCA to {n_comp} components.{C_RESET}", flush=True)
+        pca = PCA(n_components=n_comp, random_state=random_state)
+        X_train = pca.fit_transform(X_train).astype(np.float32)
+        X_test = pca.transform(X_test).astype(np.float32)
+        in_features = n_comp
+    else:
+        in_features = n_feat
+
     # Global time discretization for final training
     labtrans = LogisticHazard.label_transform(num_durations, scheme='quantiles')
     y_train_trans = labtrans.fit_transform(T_train, E_train)
-    
-    in_features = X_train.shape[1]
     
     # Load default params
     config = load_model_config("dysurv")
@@ -89,8 +102,21 @@ def train_dysurv(
                 # Use local hpo_out_features and labtrans_hpo
                 model_trial = get_model(p, hpo_out_features, labtrans_hpo)
                 callbacks = [tt.callbacks.EarlyStopping(patience=p.get("patience", 10))]
-                model_trial.fit(*train_data, batch_size=p["batch_size"], epochs=p["epochs"], 
-                                callbacks=callbacks, val_data=val_data, verbose=False)
+                
+                success = False
+                current_bs = p["batch_size"]
+                while not success:
+                    try:
+                        model_trial.fit(*train_data, batch_size=current_bs, epochs=p["epochs"], 
+                                        callbacks=callbacks, val_data=val_data, verbose=False)
+                        success = True
+                    except RuntimeError as e:
+                        if "CUDA out of memory" in str(e) and current_bs > 1:
+                            torch.cuda.empty_cache()
+                            current_bs = max(1, current_bs // 2)
+                            print(f"      {C_YELLOW}→ [DySurv] CUDA OOM! Reducing batch_size to {current_bs}{C_RESET}", flush=True)
+                        else:
+                            raise e
                 
                 model_trial.net.output_all = False
                 surv = model_trial.interpolate(10).predict_surv_df(X_val)
@@ -120,8 +146,21 @@ def train_dysurv(
 
     model = get_model(params, labtrans.out_features, labtrans)
     callbacks = [tt.callbacks.EarlyStopping(patience=params.get("patience", 10))]
-    model.fit(*train_final, batch_size=params["batch_size"], epochs=params["epochs"], 
-              callbacks=callbacks, val_data=val_final, verbose=verbose)
+
+    success = False
+    current_bs = params["batch_size"]
+    while not success:
+        try:
+            model.fit(*train_final, batch_size=current_bs, epochs=params["epochs"], 
+                      callbacks=callbacks, val_data=val_final, verbose=verbose)
+            success = True
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and current_bs > 1:
+                torch.cuda.empty_cache()
+                current_bs = max(1, current_bs // 2)
+                print(f"      {C_YELLOW}→ [DySurv] CUDA OOM (Final)! Reducing batch_size to {current_bs}{C_RESET}", flush=True)
+            else:
+                raise e
     
     # Prediction
     model.net.output_all = False
