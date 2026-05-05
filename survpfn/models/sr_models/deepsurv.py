@@ -79,16 +79,27 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
             optimizer = tt.optim.Adam(lr=p["lr"], weight_decay=1e-4)
             model = CoxPH(net, optimizer)
 
-            # Use internal validation for better early stopping and evaluation
-            callbacks = [tt.callbacks.EarlyStopping(patience=5)]
-            
             current_bs = params['batch_size']
-            model.fit(
-                X_tr_t, (T_tr_t, E_tr_t), 
-                current_bs, epochs_trial, 
-                verbose=True, callbacks=callbacks, 
-                val_data=(X_val_t, (T_val_t, E_val_t))
-            )
+            success = False
+            while not success:
+                callbacks = [tt.callbacks.EarlyStopping(patience=5)]
+                try:
+                    model.fit(
+                        X_tr_t, (T_tr_t, E_tr_t), 
+                        current_bs, epochs_trial, 
+                        verbose=True, callbacks=callbacks, 
+                        val_data=(X_val_t, (T_val_t, E_val_t))
+                    )
+                    success = True
+                except RuntimeError as e:
+                    if "CUDA out of memory" in str(e) and current_bs > 1:
+                        torch.cuda.empty_cache()
+                        current_bs = max(1, current_bs // 2)
+                        # Re-init model
+                        net = tt.practical.MLPVanilla(in_features, num_nodes_trial, 1, batch_norm=True, dropout=p["dropout"], activation=nn.ReLU)
+                        model = CoxPH(net, tt.optim.Adam(lr=p["lr"], weight_decay=1e-4))
+                    else:
+                        raise e
             model.compute_baseline_hazards()
             surv = model.predict_surv_df(X_val_t)
             ev = EvalSurv(surv, T_val, E_val, censor_surv='km')
@@ -119,11 +130,10 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
     optimizer = tt.optim.Adam(lr=params['lr'], weight_decay=1e-4)
     model = CoxPH(net, optimizer)
     
-    callbacks = [tt.callbacks.EarlyStopping(patience=5)]
-    
     success = False
     current_bs = params['batch_size']
     while not success:
+        callbacks = [tt.callbacks.EarlyStopping(patience=5)]
         try:
             model.fit(
                 torch.tensor(X_tr_final, dtype=torch.float32), 
@@ -141,6 +151,13 @@ def train_deepsurv(df_train, df_test, duration_col="Follow Up Data", event_col="
                 print(f"  [DeepSurv] CUDA OOM! Reducing batch_size to {current_bs}", flush=True)
                 # Re-init model
                 net = tt.practical.MLPVanilla(in_features, params['num_nodes'], 1, batch_norm=True, dropout=params['dropout'], activation=nn.ReLU)
+                model = CoxPH(net, tt.optim.Adam(lr=params['lr'], weight_decay=1e-4))
+            else:
+                raise e
+        except ValueError as e:
+            if "Expected more than 1 value per channel when training" in str(e):
+                print(f"  [DeepSurv] Disabling batch norm", flush=True)
+                net = tt.practical.MLPVanilla(in_features, params['num_nodes'], 1, batch_norm=False, dropout=params['dropout'], activation=nn.ReLU)
                 model = CoxPH(net, tt.optim.Adam(lr=params['lr'], weight_decay=1e-4))
             else:
                 raise e

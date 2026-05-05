@@ -101,11 +101,10 @@ def train_dysurv(
             try:
                 # Use local hpo_out_features and labtrans_hpo
                 model_trial = get_model(p, hpo_out_features, labtrans_hpo)
-                callbacks = [tt.callbacks.EarlyStopping(patience=p.get("patience", 10))]
-                
                 success = False
                 current_bs = p["batch_size"]
                 while not success:
+                    callbacks = [tt.callbacks.EarlyStopping(patience=p.get("patience", 10))]
                     try:
                         model_trial.fit(*train_data, batch_size=current_bs, epochs=p["epochs"], 
                                         callbacks=callbacks, val_data=val_data, verbose=False)
@@ -145,11 +144,10 @@ def train_dysurv(
     val_final = tt.tuplefy(X_val_final, (y_val_f, X_val_final))
 
     model = get_model(params, labtrans.out_features, labtrans)
-    callbacks = [tt.callbacks.EarlyStopping(patience=params.get("patience", 10))]
-
     success = False
     current_bs = params["batch_size"]
     while not success:
+        callbacks = [tt.callbacks.EarlyStopping(patience=params.get("patience", 10))]
         try:
             model.fit(*train_final, batch_size=current_bs, epochs=params["epochs"], 
                       callbacks=callbacks, val_data=val_final, verbose=verbose)

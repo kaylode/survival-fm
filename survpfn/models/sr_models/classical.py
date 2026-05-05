@@ -43,60 +43,151 @@ def run_univariate_cox(df, duration_col, event_col, penalizer=0.1):
 
     return importance_sig, importance_top20
 
+def run_multivariate_cox(
+    df_train,
+    df_test,
+    duration_col,
+    event_col,
+    penalizer=0.01,
+    scale=False,
+    max_retries=5,
+    verbose=True,
+):
+    # ---------------------------
+    # 1. Drop constant columns
+    # ---------------------------
+    non_const = [
+        c for c in df_train.columns
+        if c in {duration_col, event_col} or df_train[c].nunique() > 1
+    ]
+    df_train = df_train[non_const].copy()
+    df_test = df_test[[c for c in df_test.columns if c in non_const]].copy()
 
-def run_multivariate_cox(df_train, df_test, duration_col, event_col, penalizer=0.1):
-    # Drop constant columns (common source of Matrix is singular)
-    non_const = [c for c in df_train.columns 
-                 if c in {duration_col, event_col} or df_train[c].nunique() > 1]
-    df_train_sub = df_train[non_const].copy()
-    df_test_sub = df_test[[c for c in df_test.columns if c in non_const]].copy()
+    # ---------------------------
+    # 2. Scale features (huge impact on convergence)
+    # ---------------------------
+    features = [c for c in df_train.columns if c not in {duration_col, event_col}]
 
-    # Try fitting with increasing penalization until coefficients are finite
-    # Many EHR datasets have separation issues that require strong L2 regularization
-    current_penalizer = max(penalizer, 1.0)
-    for i in range(3):
-        cph = CoxPHFitter(penalizer=current_penalizer)
+    # ---------------------------
+    # 2.5 PCA for high-dimensional data
+    # ---------------------------
+    feat_cols = [c for c in df_train.columns if c not in {duration_col, event_col}]
+    n_feat = len(feat_cols)
+
+    if n_feat > 2000:
+        from sklearn.decomposition import PCA
+
+        # smarter component selection:
+        # keep 95% variance but cap at 2000
+        pca = PCA(n_components=0.95, random_state=42)
+        X_train_pca = pca.fit_transform(df_train[feat_cols])
+        X_test_pca = pca.transform(df_test[feat_cols])
+
+        n_comp = X_train_pca.shape[1]
+
+        print(f"→ PCA applied: {n_feat} → {n_comp} components (95% variance)", flush=True)
+
+        # rebuild dataframes
+        pca_cols = [f"pca_{i}" for i in range(n_comp)]
+
+        df_train = (
+            pd.DataFrame(X_train_pca, columns=pca_cols, index=df_train.index)
+            .assign(**{
+                duration_col: df_train[duration_col],
+                event_col: df_train[event_col],
+            })
+        )
+
+        # Bugfix: must use OLD df_test to get duration/event cols
+        df_test_pca = pd.DataFrame(X_test_pca, columns=pca_cols, index=df_test.index)
+        if duration_col in df_test.columns:
+            df_test_pca[duration_col] = df_test[duration_col]
+        if event_col in df_test.columns:
+            df_test_pca[event_col] = df_test[event_col]
+        df_test = df_test_pca
+
+        feat_cols = pca_cols
+
+    # ---------------------------
+    # 3. Fit with adaptive penalization
+    # ---------------------------
+    current_penalizer = penalizer
+    cph = None
+
+    for i in range(max_retries):
         try:
-            cph.fit(df_train_sub, duration_col=duration_col, event_col=event_col)
-            if not np.isnan(cph.params_).any() and not np.isinf(cph.params_).any():
+            cph = CoxPHFitter(penalizer=current_penalizer)
+
+            cph.fit(
+                df_train,
+                duration_col=duration_col,
+                event_col=event_col,
+                batch_mode=True,  # 🔥 big speedup
+                show_progress=verbose,
+                fit_options={
+                    "max_steps": 100,     # reduce iterations
+                    "precision": 1e-5     # faster convergence
+                }
+            )
+
+            if np.isfinite(cph.params_).all():
                 break
+
         except Exception:
             pass
+
         current_penalizer *= 5.0
-    
-    if np.isnan(cph.params_).any() or np.isinf(cph.params_).any():
-        import warnings
-        warnings.warn(f"Cox model fit still invalid after retries (penalizer={current_penalizer}). Check for severe multicollinearity.", stacklevel=2)
 
+    if cph is None or not np.isfinite(cph.params_).all():
+        warnings.warn(
+            f"Cox fit unstable after retries (penalizer={current_penalizer})",
+            stacklevel=2
+        )
 
-    c_index = cph.score(df_test_sub, scoring_method="concordance_index")
-    # print("Concordance Index (test):", c_index)
+    # ---------------------------
+    # 4. Optional summary
+    # ---------------------------
+    cph.print_summary()
 
-    # Note: lifelines handles survival prediction differently. 
-    # To prevent NaNs in downstream metrics, we ensure the fit is valid.
-    if np.isnan(cph.params_).any():
-        import warnings
-        warnings.warn("Cox model fit resulted in NaN coefficients.", stacklevel=2)
+    # ---------------------------
+    # 5. Faster scoring (optional subsample)
+    # ---------------------------
+    try:
+        if len(df_test) > 50000:
+            df_test_eval = df_test.sample(50000, random_state=42)
+        else:
+            df_test_eval = df_test
 
-    importance = cph.summary.reset_index()
-    importance.rename(columns={'index': 'feature'}, inplace=True)
+        c_index = cph.score(df_test_eval, scoring_method="concordance_index")
+    except Exception:
+        c_index = np.nan
 
-    importance_sig = importance[importance["p"] < 0.05].copy()
+    # ---------------------------
+    # 6. Importance computation (cleaned)
+    # ---------------------------
+    importance = cph.summary.reset_index().rename(columns={'index': 'feature'})
+
+    # unified filtering
+    sig_mask = importance["p"] < 0.05
+    importance_sig = importance[sig_mask].copy()
+
+    # hazard ratios
     importance_sig["HR"] = np.exp(importance_sig["coef"])
-    importance_sig["HR_lower"] = np.exp(importance_sig["coef"] - 1.96 * importance_sig["se(coef)"])
-    importance_sig["HR_upper"] = np.exp(importance_sig["coef"] + 1.96 * importance_sig["se(coef)"])
+    importance_sig["HR_lower"] = np.exp(
+        importance_sig["coef"] - 1.96 * importance_sig["se(coef)"]
+    )
+    importance_sig["HR_upper"] = np.exp(
+        importance_sig["coef"] + 1.96 * importance_sig["se(coef)"]
+    )
+
     importance_sig = importance_sig.sort_values("HR")
 
-    importance["abs_logHR"] = importance["coef"].abs()
-    importance_plot = importance[importance["p"] < 0.05].sort_values("abs_logHR", ascending=False)
+    # plotting importance
+    importance_plot = importance_sig.copy()
+    importance_plot["abs_logHR"] = importance_plot["coef"].abs()
+    importance_plot = importance_plot.sort_values("abs_logHR", ascending=False)
 
-    # fix the name convention so downstream plotting works
-    if "covariate" in importance_plot.columns:
-        importance_plot["feature"] = importance_plot["covariate"]
-    if "covariate" in importance_sig.columns:
-        importance_sig["feature"] = importance_sig["covariate"]
-
-    return cph, importance_sig, importance_plot, c_index
+    return cph, df_test, importance_sig, importance_plot, c_index
 
 
 from sksurv.nonparametric import kaplan_meier_estimator

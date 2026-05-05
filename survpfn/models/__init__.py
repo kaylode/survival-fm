@@ -418,13 +418,13 @@ ALL_MODELS: dict[str, Callable] = {
 
     # ── Classical / Deep SR ──────────────────────────────────────────────────
     "cox": lambda df_tr, df_ts, dur, ev, **kw: (
-        lambda m: (
-            m,
-            m.predict_partial_hazard(df_ts.drop(columns=[dur, ev])).values,
-            m.predict_survival_function(df_ts.drop(columns=[dur, ev])).values.T,
-            m.predict_survival_function(df_ts.drop(columns=[dur, ev])).index.values,
+        lambda res: (
+            res[0],
+            res[0].predict_partial_hazard(res[1].drop(columns=[dur, ev])).values,
+            res[0].predict_survival_function(res[1].drop(columns=[dur, ev])).values.T,
+            res[0].predict_survival_function(res[1].drop(columns=[dur, ev])).index.values,
         )
-    )(run_multivariate_cox(df_tr, df_ts, dur, ev)[0]),
+    )(run_multivariate_cox(df_tr, df_ts, dur, ev)),
 
     "km": lambda df_tr, df_ts, dur, ev, **kw: (
         lambda t, p, df: (None, np.zeros(len(df_ts)), np.tile(p, (len(df_ts), 1)), t)
