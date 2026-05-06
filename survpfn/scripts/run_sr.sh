@@ -64,11 +64,11 @@ SS_ACTG SS_RHC SS_VLBW SS_GRACE SS_TRACE SS_DIABETES SS_FRAMINGHAM SS_DLBCL"
 SURVSET_DATASETS_EXTRA="SS_PHPL04K8A SS_DBCD SS_D.OROPHA.REC SS_PHARMACOSMOKING \
 SS_ZINC SS_NKI70 SS_BURN SS_STAGEC SS_RDATA SS_EPILEPTIC SS_Z243 SS_CHOP \
 SS_DATADIVAT1 SS_BERGAMASCHI SS_AML_BULL SS_PROSTATESURVIVAL SS_DIVORCE SS_DATADIVAT3 \
-SS_UIS SS_COLON SS_GLIOMA SS_AIDS2 SS_WPBC SS_OVA SS_MICRO.CENSURE \
-SS_MCLCLEANED SS_CSL SS_HEART SS_GSE1992 SS_SMARTO SS_NSBCD SS_RETINOPATHY SS_SUPPORT2 \
-SS_PBC SS_PBC3 SS_OLDMORT SS_UNEMPDUR SS_CGD SS_ACATH SS_SCANIA SS_ROSSI SS_HEARTVALVE \
-SS_GSE3143 SS_UNEMPLOYMENT SS_GSE4335 SS_ROTT2 SS_DATAOVARIAN1 SS_AIDS  \
-SS_VDV SS_HEPATOCELLULAR SS_FLCHAIN SS_FRTCS SS_DATADIVAT2 SS_VETERAN SS_HDFAIL"
+SS_UIS SS_GLIOMA SS_AIDS2 SS_WPBC SS_OVA SS_MICRO.CENSURE \
+SS_MCLCLEANED SS_CSL SS_GSE1992 SS_SMARTO SS_NSBCD SS_SUPPORT2 \
+SS_PBC3 SS_OLDMORT SS_UNEMPDUR SS_ACATH SS_SCANIA SS_ROSSI SS_HEARTVALVE \
+SS_GSE3143 SS_UNEMPLOYMENT SS_GSE4335 SS_DATAOVARIAN1 SS_AIDS \
+SS_VDV SS_FLCHAIN SS_FRTCS SS_DATADIVAT2 SS_VETERAN SS_HDFAIL"
 
 
 EHR_DATASETS="EICU_SURV MIMIC_SURV_B"
@@ -76,12 +76,12 @@ ALL_DATASETS="$PUBLIC_DATASETS $SURVSET_DATASETS"
 
 # ── Model groups (must match analysis.py groupings) ───────────────────────────
 CLASSICAL_MODELS="cox rsf gbsa"
-DEEP_MODELS="deepsurv mtlr pchazard deephit_single survtrace dysurv"
+DEEP_MODELS="deepsurv mtlr deephit_single survtrace dysurv" #pchazard
 
-EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox" #tabicl_embedding_cox
-EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit" #tabicl_embedding_deephit
-EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr" #tabicl_embedding_mtlr
-EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard" #tabicl_embedding_pchazard
+EMBEDDING_COX="tabpfn_embedding_cox tabdpt_embedding_cox tabicl_embedding_cox"
+EMBEDDING_DEEPHIT="tabpfn_embedding_deephit tabdpt_embedding_deephit tabicl_embedding_deephit" 
+EMBEDDING_MTLR="tabpfn_embedding_mtlr tabdpt_embedding_mtlr tabicl_embedding_mtlr"
+EMBEDDING_PCHAZARD="tabpfn_embedding_pchazard tabdpt_embedding_pchazard tabicl_embedding_pchazard"
 FM_EMBEDDING="$EMBEDDING_COX $EMBEDDING_DEEPHIT $EMBEDDING_MTLR"
 
 ZEROSHOT_MODELS="tabpfn_zeroshot tabdpt_zeroshot tabicl_zeroshot tabpfn_zeroshot_perbin tabdpt_zeroshot_perbin tabicl_zeroshot_perbin"
