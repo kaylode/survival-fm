@@ -105,6 +105,62 @@ def summarize(df: pd.DataFrame, metric: str = "C-index") -> pd.DataFrame:
     )
 
 
+def print_audit_report(df: pd.DataFrame):
+    """Log a summary of datasets, models, and fold counts to detect missing data."""
+    n_datasets = df["Dataset"].nunique()
+    n_models = df["Model"].nunique()
+    n_total_records = len(df)
+
+    print("\n" + "═" * 80)
+    print("  AGGREGATION AUDIT REPORT")
+    print("═" * 80)
+    print(f"  Total Datasets : {n_datasets}")
+    print(f"  Total Models   : {n_models}")
+    print(f"  Total Folders  : {n_total_records} (metrics.json found)")
+    print("─" * 80)
+
+    # Pivot table of fold counts: Dataset x Model
+    pivot = df.pivot_table(
+        index="Dataset", columns="Model", values="Fold", aggfunc="count", fill_value=0
+    )
+
+    print("\n  Folds per (Dataset, Model) [Target: 5]:")
+    with pd.option_context("display.max_columns", None, "display.width", 1000):
+        print(pivot)
+
+    # Summary of missing models per dataset
+    all_models = sorted(df["Model"].unique().tolist())
+    missing_report = []
+    for ds in sorted(df["Dataset"].unique()):
+        ds_models = set(df[df["Dataset"] == ds]["Model"].unique())
+        missing = [m for m in all_models if m not in ds_models]
+        if missing:
+            missing_report.append(f"{ds:20} : missing {', '.join(missing)}")
+
+    if missing_report:
+        print("\n  [!] Missing Models (relative to other datasets):")
+        for line in missing_report:
+            print(f"      {line}")
+    else:
+        print("\n  [✓] All datasets contain all discovered models.")
+
+    # Summary of incomplete folds
+    incomplete = []
+    for ds in pivot.index:
+        for model in pivot.columns:
+            count = pivot.loc[ds, model]
+            if 0 < count < 5:
+                incomplete.append(f"{ds} / {model} ({count}/5)")
+
+    if incomplete:
+        print("\n  [!] Incomplete Folds (found < 5):")
+        for line in incomplete:
+            print(f"      - {line}")
+    else:
+        print("\n  [✓] All present model/dataset pairs have at least 5 folds.")
+    print("═" * 80 + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Aggregate SurvPFN per-run result folders into a CSV.",
@@ -126,20 +182,19 @@ def main():
 
     print(f"Collecting results from '{args.output_dir}' ...")
     df = collect_results(args.output_dir)
-    print(f"  Found {len(df)} fold-level records across "
-          f"{df['Dataset'].nunique()} datasets and {df['Model'].nunique()} models.")
+    print_audit_report(df)
 
     dest = args.dest or str(Path(args.output_dir) / "aggregated.csv")
     df.to_csv(dest, index=False)
     print(f"  Aggregated results saved to: {dest}")
 
-    summary = summarize(df, metric=args.summary_metric)
-    if not summary.empty:
-        summary_path = str(Path(args.output_dir) / "summary.csv")
-        summary.to_csv(summary_path, index=False)
-        print(f"\nSummary ({args.summary_metric} mean ± std):\n")
-        print(summary.to_string(index=False))
-        print(f"\n  Summary saved to: {summary_path}")
+    # summary = summarize(df, metric=args.summary_metric)
+    # if not summary.empty:
+    #     summary_path = str(Path(args.output_dir) / "summary.csv")
+    #     summary.to_csv(summary_path, index=False)
+    #     print(f"\nSummary ({args.summary_metric} mean ± std):\n")
+    #     print(summary.to_string(index=False))
+    #     print(f"\n  Summary saved to: {summary_path}")
 
 
 if __name__ == "__main__":

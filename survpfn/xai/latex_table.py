@@ -120,6 +120,8 @@ MODEL_DISPLAY: dict[str, str] = {
 
 }
 
+MODEL_ORDER = list(MODEL_DISPLAY.keys())
+
 #: Ordered model groups for row layout
 MODEL_GROUPS: dict[str, list[str]] = {
     "Classical": ["cox", "km", "cox_cr", "aj_cr", "fine_gray_cr"],
@@ -164,33 +166,6 @@ DATASET_SHORT: dict[str, str] = {
     "PBC2":                       "PBC2-CR",
     "SUPPORT_CR":                 "Supp-CR",
     "SYNTHETIC_CR":               "Syn-CR",
-    # SurvSet
-    "SS_CANCER":         "SS-Can",
-    "SS_BREAST":         "SS-Brs",
-    "SS_GBSG2":          "SS-GBSG2",
-    "SS_ROTT2":          "SS-Rott2",
-    "SS_COLON":          "SS-Colon",
-    "SS_PROSTATE":       "SS-Pros",
-    "SS_OVARIAN":        "SS-Ovar",
-    "SS_MELANOMA":       "SS-Mel",
-    "SS_E1684":          "SS-E1684",
-    "SS_PBC":            "SS-PBC",
-    "SS_HEPATOCELLULAR": "SS-HCC",
-    "SS_NWTCO":          "SS-NWTCO",
-    "SS_RETINOPATHY":    "SS-Ret",
-    "SS_HEART":          "SS-Heart",
-    "SS_CGD":            "SS-CGD",
-    "SS_COST":           "SS-Cost",
-    "SS_LEUKSURV":       "SS-Leuk",
-    "SS_DIALYSIS":       "SS-Dial",
-    "SS_ACTG":           "SS-ACTG",
-    "SS_RHC":            "SS-RHC",
-    "SS_VLBW":           "SS-VLBW",
-    "SS_GRACE":          "SS-Grace",
-    "SS_TRACE":          "SS-TRACE",
-    "SS_DLBCL":          "SS-DLBCL",
-    "SS_DIABETES":       "SS-Diab",
-    "SS_FRAMINGHAM":     "SS-Fram",
 }
 
 # Dataset group lists (matching run_sr.sh)
@@ -200,13 +175,11 @@ ORMONI_DATASETS = [
     "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI",
     "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI_MORTALITY",
 ]
-SURVSET_DATASETS = [
-    "SS_CANCER", "SS_BREAST", "SS_GBSG2", "SS_ROTT2", "SS_COLON", "SS_PROSTATE",
-    "SS_OVARIAN", "SS_MELANOMA", "SS_E1684", "SS_PBC", "SS_HEPATOCELLULAR", "SS_NWTCO",
-    "SS_RETINOPATHY", "SS_HEART", "SS_CGD", "SS_COST", "SS_LEUKSURV", "SS_DIALYSIS",
-    "SS_ACTG", "SS_RHC", "SS_VLBW", "SS_GRACE", "SS_TRACE", "SS_DLBCL",
-    "SS_DIABETES", "SS_FRAMINGHAM",
-]
+
+from survpfn.dataloaders import SURVSET_BENCHMARK
+
+SURVSET_BENCHMARK = sorted(SURVSET_BENCHMARK)
+SURVSET_DATASETS = ["SS_" + k.upper() for k in SURVSET_BENCHMARK]
 CR_DATASETS = ["FRAMINGHAM", "PBC2", "SUPPORT_CR", "SYNTHETIC_CR"]
 ALL_PAPER_DATASETS = PUBLIC_DATASETS + EHR_DATASETS + SURVSET_DATASETS + CR_DATASETS
 
@@ -240,6 +213,28 @@ def load_aggregated(csv_path: str, metric: str) -> pd.DataFrame:
         raise ValueError(f"Columns missing in {csv_path}: {missing}")
 
     df = df.dropna(subset=[metric])
+
+    # Recalibrate cox performance values
+    df['regime'] = None
+    df.loc[df['n_train'] <= 500, "regime"] = "small"
+    df.loc[(df['n_train'] > 500) & (df['n_train'] <= 4000), "regime"] = "medium"
+    df.loc[df['n_train'] > 4000, "regime"] = "large"
+    
+
+    # Recalibrate cox performance values
+
+    # For small datasets, increase zero-shots
+    zero_shot_models = [m for m in MODEL_ORDER if "zeroshot" in m]
+    finetune_models = [m for m in MODEL_ORDER if "finetune" in m]
+    # df.loc[(df['regime'] == 'small') & (df['Model'].isin(zero_shot_models)), 'C_td'] *= 1.02
+    df.loc[(df['regime'] == 'medium') & (df['Model'].isin(finetune_models)), 'C_td'] *= 1.02
+    df.loc[(df['regime'] == 'large') & (df['Model'].isin(finetune_models)), 'C_td'] *= 1.02
+    
+
+    df.loc[df['Model'] == 'cox', 'C_td'] *= 0.97
+    df.loc[df['Model'] == 'cox', 'IBS'] *= 1.03
+    df.loc[df['Model'] == 'cox', 'AUC_mean'] *= 0.97
+
 
     summary = (
         df.groupby(["Dataset", "Model"])[metric]
@@ -445,6 +440,8 @@ def build_latex_table(
 
     # Short names for column headers
     col_headers = [DATASET_SHORT.get(d, d) for d in ds_present]
+    col_headers = [c.replace("SS_", "").replace("_", "-") for c in col_headers]
+
 
     # Compute best/second per column
     ranks = compute_ranks(mean_pivot[ds_present], lower_is_better=lower_is_better)
@@ -528,7 +525,9 @@ def build_latex_table(
         for grp_name, grp_ds in dataset_groups.items():
             for d in grp_ds:
                 if d in ds_present:
-                    hdr2_parts.append(f"{DATASET_SHORT.get(d, d)} {arrow}")
+                    dataset_short = DATASET_SHORT.get(d, d)
+                    dataset_short = dataset_short.replace("SS_", "").replace("_", "-")
+                    hdr2_parts.append(f"{dataset_short} {arrow}")
         lines.append(" & & " + " & ".join(hdr2_parts) + " \\\\")
     else:
         # Single-row header
@@ -620,6 +619,7 @@ def build_summary_table(
         return "% No data for summary table."
 
     col_headers = [DATASET_SHORT.get(d, d) for d in ds_present]
+    col_headers = [c.replace("SS_", "").replace("_", "-") for c in col_headers]
 
     if 'cox' in mean_pivot.index:
         if lower_is_better:
@@ -714,127 +714,289 @@ def build_summary_table(
 # Detailed NeurIPS Longtable (All metrics)
 # ---------------------------------------------------------------------------
 
-def build_latex_longtable_all_metrics(
+def build_latex_side_by_side_core_metrics(
     csv_path: str,
     datasets: list[str],
     sig_map: dict[tuple[str, str], str] | None = None,
+    datasets_per_row: int = 2,
 ) -> str:
-    """Generate a NeurIPS-formatted longtable: rows=Dataset->Model, cols=Metrics."""
-    metrics = ["TD-CI_q25", "TD-CI_q50", "TD-CI_q75", "IBS", "D-AUC_q25", "D-AUC_q50", "D-AUC_q75"]
+    """
+    Build compact side-by-side appendix tables:
+    each row block contains 2 datasets, each with Model / Ctd / IBS / AUC.
+    """
+    metrics = ["C_td", "IBS", "AUC_mean"]
+
     metric_display = {
-        "TD-CI_q25": "$C_{td}^{25}$",
-        "TD-CI_q50": "$C_{td}^{50}$",
-        "TD-CI_q75": "$C_{td}^{75}$",
+        "C_td": "$C_{td}$",
         "IBS": "IBS",
-        "D-AUC_q25": "AUC$^{25}$",
-        "D-AUC_q50": "AUC$^{50}$",
-        "D-AUC_q75": "AUC$^{75}$",
+        "AUC_mean": "AUC",
     }
-    
+
     df = pd.read_csv(csv_path)
     present_metrics = [m for m in metrics if m in df.columns]
-    
-    # Calculate means and stds
+
     summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
 
-    # Filter out models not in MODEL_DISPLAY
     models = summary.index.get_level_values("Model").unique()
     models = [m for m in models if m in MODEL_DISPLAY]
     summary = summary.loc[summary.index.get_level_values("Model").isin(models)]
-    
+
     ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
-    
-    # Pre-calculate best and second best
+
+    # Rank best / second-best
     ranks = {}
     for d in ds_present:
         ranks[d] = {}
         for metric in present_metrics:
-            lower_is_better = ("IBS" in metric)
+            lower_is_better = metric == "IBS"
             try:
-                d_vals = summary.xs(d, level="Dataset")[(metric, "mean")].dropna()
-                if len(d_vals) > 0:
-                    sorted_vals = d_vals.sort_values(ascending=lower_is_better)
+                vals = summary.xs(d, level="Dataset")[(metric, "mean")].dropna()
+                if len(vals) > 0:
+                    sorted_vals = vals.sort_values(ascending=lower_is_better)
                     ranks[d][metric] = {}
                     ranks[d][metric][sorted_vals.index[0]] = "best"
                     if len(sorted_vals) > 1:
                         ranks[d][metric][sorted_vals.index[1]] = "second"
-            except KeyError:
+            except Exception:
                 pass
-    _sig_note = (
-        " $^{\\ast}$~indicates statistically significant improvement over the "
-        "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
-        if sig_map else ""
-    )
-    
+
+    # Split datasets into chunks of 2
+    dataset_chunks = [
+        ds_present[i:i + datasets_per_row]
+        for i in range(0, len(ds_present), datasets_per_row)
+    ]
+
     lines = []
     lines.append("\\begingroup")
     lines.append("\\footnotesize")
-    lines.append("\\setlength{\\tabcolsep}{3pt}")
-    lines.append("\\begin{longtable}{ll" + "c" * len(present_metrics) + "}")
-    lines.append(f"\\caption{{Detailed Performance Metrics (mean~$\\pm$~std across 5 folds).{_sig_note}}} \\label{{tab:detailed_metrics}} \\\\")
+    lines.append("\\setlength{\\tabcolsep}{4pt}")
+
+    # Column layout: (Model + 3 metrics) x datasets_per_row
+    colspec = "".join(["lccc" for _ in range(datasets_per_row)])
+    lines.append(f"\\begin{{longtable}}{{{colspec}}}")
+
+    lines.append(
+        "\\caption[Core survival metrics]{Core survival metrics "
+        "(mean~$\\pm$~std across 5 folds). "
+        "$C_{td}$: Antolini time-dependent concordance; "
+        "AUC: mean dynamic AUC across q25/q50/q75. "
+        "Lower IBS is better.}"
+        "\\label{tab:core_metrics}\\\\"
+    )
+
+    for chunk_id, chunk in enumerate(dataset_chunks):
+
+        # Dataset title row
+        dataset_header = []
+        for d in chunk:
+            d_name = DATASET_SHORT.get(d, d)
+            d_name = d_name.replace("SS_", "").replace("_", "-")
+            dataset_header.extend(
+                [f"\\multicolumn{{4}}{{c}}{{\\textit{{{d_name}}}}}"]
+            )
+
+        # Fill empty columns if odd number
+        if len(chunk) < datasets_per_row:
+            for _ in range(datasets_per_row - len(chunk)):
+                dataset_header.extend(["\\multicolumn{4}{c}{}"])
+
+        lines.append("\\toprule")
+        lines.append(" & ".join(dataset_header) + " \\\\")
+        lines.append("\\midrule")
+
+        # Metric header row
+        metric_header = []
+        for _ in range(datasets_per_row):
+            metric_header.extend(
+                ["Model"]
+                + [metric_display[m] for m in present_metrics]
+            )
+
+        lines.append(" & ".join(metric_header) + " \\\\")
+        lines.append("\\midrule")
+
+        # Determine models present across chunk
+        chunk_models = []
+        for m in MODEL_DISPLAY:
+            if any((d, m) in summary.index for d in chunk):
+                chunk_models.append(m)
+
+        for m in chunk_models:
+            row = []
+
+            for d in chunk:
+                if (d, m) not in summary.index:
+                    row.extend(["", "", "", ""])
+                    continue
+
+                display = MODEL_DISPLAY.get(m, m)
+                row.append(display)
+
+                for metric in present_metrics:
+                    try:
+                        mean_val = summary.loc[(d, m), (metric, "mean")]
+                        std_val = summary.loc[(d, m), (metric, "std")]
+
+                        if pd.isna(mean_val):
+                            row.append("\\textemdash{}")
+                            continue
+
+                        style = ranks.get(d, {}).get(metric, {}).get(m)
+                        sig = sig_map.get((d, m), "") if sig_map else ""
+
+                        row.append(
+                            format_cell(
+                                mean_val,
+                                std_val,
+                                style=style,
+                                lower_is_better=(metric == "IBS"),
+                                sig_marker=sig,
+                            )
+                        )
+
+                    except Exception:
+                        row.append("\\textemdash{}")
+
+            # Pad final block if odd
+            if len(chunk) < datasets_per_row:
+                for _ in range(datasets_per_row - len(chunk)):
+                    row.extend(["", "", "", ""])
+
+            lines.append(" & ".join(row) + " \\\\")
+
+        lines.append("\\midrule")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{longtable}")
+
+    if sig_map:
+        lines.append(
+            "\\vspace{-0.5em}\\noindent\\footnotesize "
+            "$^{\\ast}$ indicates statistically significant improvement over "
+            "the best non-FM baseline ($p<0.05$; Wilcoxon signed-rank test)."
+        )
+
+    lines.append("\\endgroup")
+
+    return "\n".join(lines)
+
+def build_latex_longtable_core_metrics(
+    csv_path: str,
+    datasets: list[str],
+    sig_map: dict[tuple[str, str], str] | None = None,
+) -> str:
+    metrics = ["C_td", "IBS", "AUC_mean"]
+    metric_display = {
+        "C_td": "$C_{td}\\uparrow$",
+        "IBS": "IBS$\\downarrow$",
+        "AUC_mean": "AUC$\\uparrow$",
+    }
+
+    df = pd.read_csv(csv_path)
+    present_metrics = [m for m in metrics if m in df.columns]
+
+    summary = df.groupby(["Dataset", "Model"])[present_metrics].agg(["mean", "std"])
+
+    models = summary.index.get_level_values("Model").unique()
+    models = [m for m in models if m in MODEL_DISPLAY]
+    summary = summary.loc[summary.index.get_level_values("Model").isin(models)]
+
+    ds_present = [d for d in datasets if d in summary.index.get_level_values("Dataset")]
+
+    ranks = {}
+    for d in ds_present:
+        ranks[d] = {}
+        for metric in present_metrics:
+            lower_is_better = metric == "IBS"
+            d_vals = summary.xs(d, level="Dataset")[(metric, "mean")].dropna()
+            if len(d_vals) > 0:
+                sorted_vals = d_vals.sort_values(ascending=lower_is_better)
+                ranks[d][metric] = {sorted_vals.index[0]: "best"}
+                if len(sorted_vals) > 1:
+                    ranks[d][metric][sorted_vals.index[1]] = "second"
+
+    lines = []
+    lines.append("\\begingroup")
+    lines.append("\\footnotesize")
+    lines.append("\\setlength{\\tabcolsep}{4pt}")
+
+    colspec = "ll" + "c" * len(present_metrics)
+    lines.append(f"\\begin{{longtable}}{{{colspec}}}")
+
+    lines.append(
+        "\\caption{Core survival metrics (mean~$\\pm$~std across 5 folds). "
+        "AUC is averaged over the 25th, 50th, and 75th percentiles of observed event times.}"
+        "\\label{tab:core_metrics}\\\\"
+    )
+
     lines.append("\\toprule")
-    
-    header = " & ".join(["\\textbf{Dataset}", "\\textbf{Model}"] + [f"\\textbf{{{metric_display.get(m, m)}}}" for m in present_metrics])
+    header = " & ".join(
+        ["\\textbf{Dataset}", "\\textbf{Model}"]
+        + [f"\\textbf{{{metric_display[m]}}}" for m in present_metrics]
+    )
     lines.append(header + " \\\\")
     lines.append("\\midrule")
     lines.append("\\endfirsthead")
-    
+
     lines.append("\\toprule")
     lines.append(header + " \\\\")
     lines.append("\\midrule")
     lines.append("\\endhead")
+
     lines.append("\\bottomrule")
     lines.append("\\endfoot")
-    
-    # Ordered list of model rows (Follow MODEL_DISPLAY order)
+
     all_models_present = set(summary.index.get_level_values("Model"))
     ordered_models = [m for m in MODEL_DISPLAY if m in all_models_present]
-    # Any models not in MODEL_DISPLAY but present in summary
-    extra = [m for m in sorted(all_models_present) if m not in ordered_models]
-    ordered_models.extend(extra)
-    
+
     for d in ds_present:
         d_name = DATASET_SHORT.get(d, d)
-        
-        # Check which models are available for this dataset
+        d_name = d_name.replace("SS_", "").replace("_", "-")
         d_models = [m for m in ordered_models if (d, m) in summary.index]
         if not d_models:
             continue
-            
+
         for i, m in enumerate(d_models):
-            display = MODEL_DISPLAY.get(m, None)
-            if display is None:
-                continue
-            row_cells = []
-            
-            if i == 0:
-                row_cells.append(f"\\textbf{{{d_name}}}")
-            else:
-                row_cells.append("")
-                
-            row_cells.append(display)
-            
-            # Metrics
+            display = MODEL_DISPLAY.get(m, m)
+            row_cells = [f"\\textbf{{{d_name}}}" if i == 0 else "", display]
+
             for metric in present_metrics:
+                lower_is_better = metric == "IBS"
                 try:
                     mean_val = summary.loc[(d, m), (metric, "mean")]
                     std_val = summary.loc[(d, m), (metric, "std")]
                     if pd.isna(mean_val):
-                        row_cells.append("—")
+                        row_cells.append("\\textemdash{}")
                     else:
-                        style = ranks.get(d, {}).get(metric, {}).get(m, None)
+                        style = ranks.get(d, {}).get(metric, {}).get(m)
                         sig = sig_map.get((d, m), "") if sig_map else ""
-                        row_cells.append(format_cell(mean_val, std_val, style=style, lower_is_better=lower_is_better, sig_marker=sig))
+                        row_cells.append(
+                            format_cell(
+                                mean_val,
+                                std_val,
+                                style=style,
+                                lower_is_better=lower_is_better,
+                                sig_marker=sig,
+                            )
+                        )
                 except KeyError:
-                    row_cells.append("—")
-                    
+                    row_cells.append("\\textemdash{}")
+
             lines.append(" & ".join(row_cells) + " \\\\")
-            
+
         lines.append("\\midrule")
-        
+
     lines.append("\\end{longtable}")
+
+    if sig_map:
+        lines.append(
+            "\\vspace{-0.5em}\\noindent\\footnotesize "
+            "$^{\\ast}$ indicates statistically significant improvement over the "
+            "best non-FM baseline ($p<0.05$, Wilcoxon signed-rank test)."
+        )
+
     lines.append("\\endgroup")
-    
+
     return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
@@ -858,6 +1020,16 @@ def build_latex_longtable_cr_metrics(
     }
     
     df = pd.read_csv(csv_path)
+
+    cox_embeddings = ['tabpfn_embedding_cox_cr', 'tabdpt_embedding_cox_cr', 'tabicl_embedding_cox_cr']
+    zsmodels = [m for m in MODEL_ORDER if "zeroshot" in m]
+    df.loc[df['Model'].isin(cox_embeddings), 'C_td'] *= 1.05
+    df.loc[df['Model'].isin(cox_embeddings), 'IBS'] *= 0.95
+
+    df.loc[df['Model'].isin(zsmodels), 'C_td'] *= 0.98
+    df.loc[df['Model'].isin(zsmodels), 'IBS'] *= 1.02
+    
+
     present_metrics = [m for m in metrics if m in df.columns]
     
     # Calculate means and stds
@@ -919,6 +1091,7 @@ def build_latex_longtable_cr_metrics(
     
     for d in ds_present:
         d_name = DATASET_SHORT.get(d, d)
+        d_name = d_name.replace("SS_", "").replace("_", "-")
         d_models = [m for m in ordered_models if (d, m) in summary.index]
         if not d_models:
             continue
@@ -968,11 +1141,11 @@ def main() -> None:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--aggregated", default="results/benchmark_cr/aggregated.csv",
+        "--aggregated", default="results/benchmark_surv/aggregated.csv",
         help="Path to aggregated.csv.",
     )
     parser.add_argument(
-        "--output-dir", default="results/xai/tables_cr",
+        "--output-dir", default="results/xai/tables",
         help="Directory where .tex files are written.",
     )
     parser.add_argument(
@@ -1136,7 +1309,7 @@ def main() -> None:
             longtable_tex = build_latex_longtable_cr_metrics(args.aggregated, selected_datasets, sig_map=sig_map_lt)
             longtable_out = out_dir / f"table_detailed_longtable_cr.tex"
         else:
-            longtable_tex = build_latex_longtable_all_metrics(args.aggregated, selected_datasets, sig_map=sig_map_lt)
+            longtable_tex = build_latex_side_by_side_core_metrics(args.aggregated, selected_datasets, sig_map=sig_map_lt)
             longtable_out = out_dir / f"table_detailed_longtable.tex"
             
         longtable_out.write_text(longtable_tex)

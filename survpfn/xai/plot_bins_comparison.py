@@ -71,23 +71,28 @@ SPECIAL_GROUPS_MAP = {
     "tabpfn_finetune": "Finetune-CE",
     "tabdpt_finetune": "Finetune-CE",
     "tabicl_finetune": "Finetune-CE",
-    "tabpfn_zeroshot_perbin_time_ens": "Zeroshot",
-    "tabdpt_zeroshot_perbin_time_ens": "Zeroshot",
-    "tabicl_zeroshot_perbin_time_ens": "Zeroshot",
+    "tabpfn_zeroshot_perbin_time_ens": "Zero-shot",
+    "tabdpt_zeroshot_perbin_time_ens": "Zero-shot",
+    "tabicl_zeroshot_perbin_time_ens": "Zero-shot",
 }
 
-HIGHLIGHTED_GROUPS = ["Finetune-DH", "Finetune-CE", "Zeroshot"]
+HIGHLIGHTED_GROUPS = ["Finetune-DH", "Finetune-CE", "Zero-shot"]
 
-MODEL_COLORS = {
-    "Finetune-DH": "#71b7e7", # Blue-ish
-    "Finetune-CE": "#ed8076", # Red-ish
-    "Zeroshot": "#2CA02C",    # Green
-}
-
+# MODEL_COLORS = {
+#     "Finetune-DH": "#71b7e7", # Blue-ish
+#     "Finetune-CE": "#ed8076", # Red-ish
+#     "Zero-shot": "#2CA02C",    # Green
+# }
+MODEL_COLORS={}
+MODEL_COLORS.update({
+    "Finetune-DH": "#9d2c00", # Red
+    "Finetune-CE": "#f0c571", # Blue
+    "Zero-shot": "#0b81a2",    # Green
+})
 MODEL_LABELS.update({
-    "Finetune-DH": "Finetune-DeepHit",
-    "Finetune-CE": "Finetune-CE",
-    "Zeroshot": "Zero-shot",
+    "Finetune-DH": "Finetune-DH",
+    "Finetune-CE": "Zero-shot", 
+    "Zero-shot": "Finetune-CE",
 })
 
 # ---------------------------------------------------------------------------
@@ -233,26 +238,42 @@ def plot_bins_line(
     for i, model in enumerate(models):
         m = agg[agg["Model"] == model].sort_values("Bins")
         
-        display = MODEL_LABELS.get(model, model)
         color = MODEL_COLORS.get(model)
         marker = markers[i % len(markers)]
-        
+
         # ── Styling from plot_label_efficiency.py ────────────────────────────
         is_highlight = model in HIGHLIGHTED_GROUPS
         alpha = 1.0 if is_highlight else 0.5
-        lw    = 4.0 if is_highlight else 2.5
+        lw    = 5.0 if is_highlight else 2.0
         z     = 10  if is_highlight else 2
-        ms    = 12  if is_highlight else 6
-        # ─────────────────────────────────────────────────────────────────────
+        ms    = 18  if is_highlight else 4
+
+        display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+        
+        if is_highlight:
+            marker = "v"
+            linestyle = "--"
+            mew = 1.2
+            mec = "black"
+        else:
+            linestyle = "-"
+            color = "#B0B0B0"
+            mew = None
+            mec = None
 
         line_args = {
             "marker": marker,
             "markersize": ms,
             "linewidth": lw,
+            "linestyle": linestyle,
             "label": display,
             "alpha": alpha,
             "zorder": z
         }
+        if mew is not None:
+            line_args["markeredgewidth"] = mew
+        if mec is not None:
+            line_args["markeredgecolor"] = mec
         if color:
             line_args["color"] = color
 
@@ -261,13 +282,12 @@ def plot_bins_line(
             **line_args
         )
         
-        fill_color = color if color else ax.get_lines()[-1].get_color()
-        ax.fill_between(
-            m["Bins"].map(bins_to_idx),
-            m["mean"] - m["std"],
-            m["mean"] + m["std"],
-            alpha=alpha * 0.15, color=fill_color, zorder=z-1
-        )
+        # ax.fill_between(
+        #     m["Bins"].map(bins_to_idx),
+        #     m["mean"] - m["std"],
+        #     m["mean"] + m["std"],
+        #     alpha=alpha * 0.15, color=fill_color, zorder=z-1
+        # )
 
     metric_display = "C-index" if metric == 'C_td' else metric
     ax.set_xlabel("Number of Bins", fontsize=28)
@@ -277,7 +297,10 @@ def plot_bins_line(
     ax.set_xticklabels([str(b) for b in bins_list])
     ax.tick_params(axis='both', which='major', labelsize=24)
 
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
     ax.legend(
+        by_label.values(), by_label.keys(),
         loc="best",
         fontsize=18,
         frameon=True, framealpha=0.9, edgecolor="0.8",
@@ -285,12 +308,116 @@ def plot_bins_line(
     ax.grid(True, alpha=0.3, linestyle="--")
     sns.despine(ax=ax)
     
-    title = f"{DATASET_LABELS.get(dataset, dataset)}"
-    ax.set_title(title, fontweight="bold", pad=20)
+    # title = f"{DATASET_LABELS.get(dataset, dataset)}"
+    # ax.set_title(title, fontweight="bold", pad=20)
     
     fig.tight_layout()
 
     fname = f"bins_comparison_{dataset}_{metric.lower().replace('-', '_')}.pdf"
+    _save(fig, output_dir / fname)
+
+def plot_bins_aggregated(
+    df: pd.DataFrame,
+    metric: str,
+    output_dir: Path,
+    lower_is_better: bool = False,
+    figsize: tuple[float, float] = (12, 10),
+) -> None:
+    """Aggregated single line plot: metric vs bins, averaged across all datasets."""
+    sub = df[df[metric].notna()].copy()
+    if sub.empty:
+        print(f"  Skipping aggregated {metric}: no data.")
+        return
+
+    # Aggregate across datasets and folds
+    agg = (
+        sub.groupby(["Model", "Bins"])[metric]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    bins_list = sorted(agg["Bins"].unique())
+    bins_to_idx = {b: i for i, b in enumerate(bins_list)}
+
+    models = sorted(agg["Model"].unique())
+    markers = ["o", "s", "D", "^", "v", "p", "h", "8", "*", "X", "P", "d"]
+
+    for i, model in enumerate(models):
+        m = agg[agg["Model"] == model].sort_values("Bins")
+        
+        color = MODEL_COLORS.get(model)
+        marker = markers[i % len(markers)]
+
+        is_highlight = model in HIGHLIGHTED_GROUPS
+        alpha = 1.0 if is_highlight else 0.5
+        lw    = 5.0 if is_highlight else 2.0
+        z     = 10  if is_highlight else 2
+        ms    = 18  if is_highlight else 4
+
+        display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+        
+        if is_highlight:
+            marker = "v"
+            linestyle = "--"
+            mew = 1.2
+            mec = "black"
+        else:
+            linestyle = "-"
+            color = "#B0B0B0"
+            mew = None
+            mec = None
+
+        line_args = {
+            "marker": marker,
+            "markersize": ms,
+            "linewidth": lw,
+            "linestyle": linestyle,
+            "label": display,
+            "alpha": alpha,
+            "zorder": z
+        }
+        if mew is not None:
+            line_args["markeredgewidth"] = mew
+        if mec is not None:
+            line_args["markeredgecolor"] = mec
+        if color:
+            line_args["color"] = color
+
+        ax.plot(
+            m["Bins"].map(bins_to_idx), m["mean"],
+            **line_args
+        )
+        
+        # ax.fill_between(
+        #     m["Bins"].map(bins_to_idx),
+        #     m["mean"] - m["std"],
+        #     m["mean"] + m["std"],
+        #     alpha=alpha * 0.15, color=fill_color, zorder=z-1
+        # )
+
+    metric_display = "C-index" if metric == 'C_td' else metric
+    ax.set_xlabel("Number of Bins", fontsize=28)
+    ax.set_ylabel(metric_display, fontsize=28)
+    
+    ax.set_xticks(range(len(bins_list)))
+    ax.set_xticklabels([str(b) for b in bins_list])
+    ax.tick_params(axis='both', which='major', labelsize=24)
+
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(
+        by_label.values(), by_label.keys(),
+        loc="best",
+        fontsize=18,
+        frameon=True, framealpha=0.9, edgecolor="0.8",
+    )
+    ax.grid(True, alpha=0.3, linestyle="--")
+    sns.despine(ax=ax)
+    
+    fig.tight_layout()
+
+    fname = f"bins_comparison_aggregated_{metric.lower().replace('-', '_')}.pdf"
     _save(fig, output_dir / fname)
 
 def plot_bins_combined(
@@ -333,24 +460,41 @@ def plot_bins_combined(
             if m.empty:
                 continue
             
-            display = MODEL_LABELS.get(model, model)
             color = MODEL_COLORS.get(model)
             marker = markers[i % len(markers)]
 
             is_highlight = model in HIGHLIGHTED_GROUPS
-            alpha = 1.0 if is_highlight else 0.25
+            alpha = 1.0 if is_highlight else 0.5
             lw    = 5.0 if is_highlight else 1.5
             z     = 10  if is_highlight else 2
-            ms    = 12  if is_highlight else 6
+            ms    = 18  if is_highlight else 4
+
+            display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+            
+            if is_highlight:
+                marker = "v"
+                linestyle = "--"
+                mew = 1.2
+                mec = "black"
+            else:
+                linestyle = "-"
+                color = "#B0B0B0"
+                mew = None
+                mec = None
 
             line_args = {
                 "marker": marker,
                 "markersize": ms,
                 "linewidth": lw,
+                "linestyle": linestyle,
                 "label": display,
                 "alpha": alpha,
                 "zorder": z
             }
+            if mew is not None:
+                line_args["markeredgewidth"] = mew
+            if mec is not None:
+                line_args["markeredgecolor"] = mec
             if color:
                 line_args["color"] = color
 
@@ -359,17 +503,17 @@ def plot_bins_combined(
                 **line_args
             )
             
-            fill_color = color if color else line.get_color()
-            ax.fill_between(
-                m["Bins"].map(bins_to_idx),
-                m["mean"] - m["std"],
-                m["mean"] + m["std"],
-                alpha=alpha * 0.15, color=fill_color, zorder=z-1
-            )
+            # ax.fill_between(
+            #     m["Bins"].map(bins_to_idx),
+            #     m["mean"] - m["std"],
+            #     m["mean"] + m["std"],
+            #     alpha=alpha * 0.15, color=fill_color, zorder=z-1
+            # )
 
             if idx == 0:
-                handles.append(line)
-                labels.append(display)
+                if display not in labels:
+                    handles.append(line)
+                    labels.append(display)
 
         ax.set_xlabel("Number of Bins", fontsize=24)
         if idx == 0:
@@ -392,7 +536,7 @@ def plot_bins_combined(
         bbox_to_anchor=(0.5, -0.05),
     )
     
-    fig.suptitle(f"Bins Comparison — {metric}", fontsize=28, fontweight="bold", y=1.02)
+    # fig.suptitle(f"Bins Comparison — {metric}", fontsize=28, fontweight="bold", y=1.02)
     fig.tight_layout()
 
     fname = f"bins_comparison_combined_{metric.lower().replace('-', '_')}.pdf"
@@ -476,6 +620,11 @@ def main():
         # Combined figure
         if df["Dataset"].nunique() > 1:
             plot_bins_combined(
+                df, metric, output_dir,
+                lower_is_better=(metric in lower_is_better),
+            )
+            
+            plot_bins_aggregated(
                 df, metric, output_dir,
                 lower_is_better=(metric in lower_is_better),
             )

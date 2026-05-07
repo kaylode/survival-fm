@@ -84,7 +84,7 @@ DOMAIN_MAP = {
     "SS_HEART":                 "Cardiology",
     "SS_VETERAN":               "Oncology",
     "SS_WHAS500":               "Cardiology",
-    "SS_MGUS":                  "Haematology",
+    # "SS_MGUS":                  "Haematology",
     "SS_CGD":                   "Immunology",
     "SS_COST":                  "Oncology",
     "SS_LEUKSURV":              "Haematology",
@@ -99,6 +99,53 @@ DOMAIN_MAP = {
     "SS_DIABETES":              "Endocrinology",
     "SS_FLCHAIN":               "Haematology",
     "SS_FRAMINGHAM":            "Cardiology",
+    # Additional SurvSet datasets
+    "SS_HDFAIL":                "Social/Economics",
+    "SS_PHPL04K8A":             "Oncology",
+    "SS_DBCD":                  "Oncology",
+    "SS_D.OROPHA.REC":          "Oncology",
+    "SS_PHARMACOSMOKING":       "Medicine",
+    "SS_ZINC":                  "Oncology",
+    "SS_NKI70":                 "Oncology",
+    "SS_BURN":                  "Critical care",
+    "SS_STAGEC":                "Urology",
+    "SS_RDATA":                 "Oncology",
+    "SS_EPILEPTIC":             "Neurology",
+    "SS_DATADIVAT1":            "Nephrology",
+    "SS_BERGAMASCHI":           "Oncology",
+    "SS_AML_BULL":              "Haematology",
+    "SS_PROSTATESURVIVAL":      "Urology",
+    "SS_DIVORCE":               "Social/Economics",
+    "SS_DATADIVAT3":            "Nephrology",
+    "SS_UIS":                   "Psychiatry",
+    # "SS_GLIOMA":                "Oncology",
+    # "SS_FOLLIC":                "Haematology",
+    "SS_AIDS2":                 "Infectious disease",
+    "SS_Z243":                  "Medicine",
+    "SS_CHOP":                  "Haematology",
+    "SS_WPBC":                  "Oncology",
+    "SS_OVA":                   "Oncology",
+    "SS_MICRO.CENSURE":         "Oncology",
+    "SS_MCLCLEANED":            "Haematology",
+    "SS_CSL":                   "Hepatology",
+    "SS_GSE1992":               "Oncology",
+    "SS_SMARTO":                "Cardiology",
+    "SS_NSBCD":                 "Oncology",
+    "SS_PBC3":                  "Hepatology",
+    "SS_OLDMORT":               "All-cause mortality",
+    "SS_UNEMPDUR":              "Social/Economics",
+    "SS_ACATH":                 "Cardiology",
+    "SS_SCANIA":                "All-cause mortality",
+    "SS_ROSSI":                 "Social/Economics",
+    "SS_HEARTVALVE":            "Cardiology",
+    "SS_GSE3143":               "Oncology",
+    "SS_UNEMPLOYMENT":          "Social/Economics",
+    "SS_GSE4335":               "Oncology",
+    "SS_DATAOVARIAN1":          "Oncology",
+    "SS_AIDS":                  "Infectious disease",
+    "SS_VDV":                   "Oncology",
+    "SS_FRTCS":                 "Cardiology",
+    "SS_DATADIVAT2":            "Nephrology",
 }
 
 # Broad domain groups for colouring
@@ -115,6 +162,11 @@ DOMAIN_BROAD = {
     "Neonatology":        "Other clinical",
     "Infectious disease": "Other clinical",
     "Endocrinology":      "Other clinical",
+    "Urology":            "Other clinical",
+    "Neurology":          "Other clinical",
+    "Psychiatry":         "Other clinical",
+    "Social/Economics":   "Other clinical",
+    "Medicine":           "Other clinical",
     "Critical care":      "Critical care",
     "Critical care (EHR)":"Critical care (EHR)",
     "Synthetic":          "Synthetic",
@@ -210,6 +262,99 @@ CITATION_MAP = {
     "SS_DIABETES":      {"cite_key": "collett2015modelling",     "authors": "Collett (2015)"},
     "SS_FLCHAIN":       {"cite_key": "dispenzieri2012use",       "authors": "Dispenzieri et al. (2012)"},
     "SS_FRAMINGHAM":    {"cite_key": "dawber1951epidemiological","authors": "Dawber et al. (1951)"},
+    # Additional SurvSet datasets
+    "SS_HDFAIL":            {"cite_key": "backblaze2023hdfail",       "authors": "Backblaze (2023)",
+                             "description": "Hard drive failure dataset tracking SMART statistics for $\\sim$52,000 drives."},
+    "SS_PHPL04K8A":         {"cite_key": "shedden2008gene",           "authors": "Shedden et al. (2008)",
+                             "description": "Gene expression from 442 lung adenocarcinoma patients for post-resection survival prediction."},
+    "SS_DBCD":              {"cite_key": "dmkd2023dbcd",              "authors": "VT DMKD group",
+                             "description": "Breast cancer survival dataset from the Virginia Tech data mining repository."},
+    "SS_D.OROPHA.REC":      {"cite_key": "kalbfleisch2002statistical","authors": "Kalbfleisch \\& Prentice (2002)",
+                             "description": "195 oropharyngeal cancer patients in a standard vs. experimental radiation therapy RCT."},
+    "SS_PHARMACOSMOKING":   {"cite_key": "steinberg2009pharmacotherapy","authors": "Steinberg et al. (2009)",
+                             "description": "RCT of triple NRT vs. nicotine patch for smoking cessation in 125 participants."},
+    "SS_ZINC":              {"cite_key": "abnet2005zinc",             "authors": "Abnet et al. (2005)",
+                             "description": "Nested cohort studying zinc in oesophageal biopsies as predictor of oesophageal cancer."},
+    "SS_NKI70":             {"cite_key": "van2002gene",               "authors": "van de Vijver et al. (2002)",
+                             "description": "70-gene prognostic signature for distant-metastasis in 144 breast cancer patients."},
+    "SS_BURN":              {"cite_key": "klein2003survival",         "authors": "Klein \\& Moeschberger (2003)",
+                             "description": "154 burn patients tracked for infection-free time under two treatment protocols."},
+    "SS_STAGEC":            {"cite_key": "byar1980choice",            "authors": "Byar \\& Green (1980)",
+                             "description": "146 stage-C prostate cancer patients with flow cytometry tracking disease progression."},
+    "SS_RDATA":             {"cite_key": "pohar2006relative",         "authors": "Pohar \\& Stare (2006)",
+                             "description": "1,040 patients used for relative survival analysis in cancer research."},
+    "SS_EPILEPTIC":         {"cite_key": "marson2007randomised",      "authors": "Marson et al. (2007)",
+                             "description": "SANAD trial comparing carbamazepine vs. lamotrigine for epilepsy; time to treatment failure."},
+    "SS_DATADIVAT1":        {"cite_key": "dantan2011partly",          "authors": "DIVAT Cohort",
+                             "description": "5,943 French kidney transplant recipients tracked for graft survival and mortality."},
+    "SS_BERGAMASCHI":       {"cite_key": "bergamaschi2006distinct",   "authors": "Bergamaschi et al. (2006)",
+                             "description": "DNA copy-number gene expression in 82 breast tumours linking genomics to prognosis."},
+    "SS_AML_BULL":          {"cite_key": "bullinger2004use",          "authors": "Bullinger et al. (2004)",
+                             "description": "AML gene expression study from the Virginia Tech survival repository."},
+    "SS_PROSTATESURVIVAL":  {"cite_key": "lu2009outcomes",            "authors": "Lu-Yao et al. (2009)",
+                             "description": "Simulated prostate cancer data with competing risks and clinical predictors."},
+    "SS_DIVORCE":           {"cite_key": "hosmer2008applied",         "authors": "Hosmer et al. (2008)",
+                             "description": "Marriage dissolution dataset tracking time to divorce in a cohort of couples."},
+    "SS_DATADIVAT3":        {"cite_key": "le2018evaluation",          "authors": "Le Borgne et al. (2018)",
+                             "description": "4,267 French kidney transplant recipients used to evaluate prognostic markers."},
+    "SS_UIS":               {"cite_key": "hosmer2008applied",         "authors": "Hosmer et al. (2008)",
+                             "description": "Substance abuse study of 628 patients tracking time to return to drug use."},
+    "SS_GLIOMA":            {"cite_key": "grana2002adjuvant",         "authors": "Grana et al. (2002)",
+                             "description": "Malignant glioma patients treated with pretargeted radioimmunotherapy vs. control."},
+    "SS_FOLLIC":            {"cite_key": "pintilie2006competing",     "authors": "Pintilie (2006)",
+                             "description": "Follicular cell lymphoma with competing events (relapse vs. death)."},
+    "SS_AIDS2":             {"cite_key": "venables2002modern",        "authors": "Venables \\& Ripley (2002)",
+                             "description": "Survival outcomes for 2,843 Australian AIDS patients diagnosed before mid-1991."},
+    "SS_Z243":              {"cite_key": "staudte1990robust",         "authors": "Staudte \\& Sheather (1990)",
+                             "description": "100 Swiss hospital back-pain patients with diagnostic group and clinical variables."},
+    "SS_CHOP":              {"cite_key": "lenz2008molecular",         "authors": "Lenz et al. (2008)",
+                             "description": "Microarray gene expression from 181 DLBCL patients treated with CHOP chemotherapy."},
+    "SS_WPBC":              {"cite_key": "street1995nuclear",         "authors": "Street et al. (1995)",
+                             "description": "Wisconsin Prognostic Breast Cancer: cellular features predicting time to recurrence."},
+    "SS_OVA":               {"cite_key": "verweij1993penalized",      "authors": "Verweij \\& Van Houwelingen (1993)",
+                             "description": "358 ovarian cancer patients with karnofsky status and FIGO stage for Cox regression."},
+    "SS_MICRO.CENSURE":     {"cite_key": "romain2010bioinformatics",  "authors": "Romain et al. (2010)",
+                             "description": "117 rectal cancer patients with microsatellite markers and survival outcomes."},
+    "SS_MCLCLEANED":        {"cite_key": "rosenwald2003molecular",    "authors": "Rosenwald et al. (2003)",
+                             "description": "Gene expression (574 cDNA) from 92 mantle cell lymphoma patients for penalised survival."},
+    "SS_CSL":               {"cite_key": "schlichting1983prognostic", "authors": "Schlichting et al. (1983)",
+                             "description": "Copenhagen RCT of prednisone vs. placebo in liver cirrhosis tracking prothrombin and mortality."},
+    "SS_GSE1992":           {"cite_key": "yasrebi2009usefulness",     "authors": "Yasrebi et al. (2009)",
+                             "description": "Gene expression (15,528 variables, 124 samples) for cancer survival from merged microarrays."},
+    "SS_SMARTO":            {"cite_key": "steyerberg2008clinical",    "authors": "Steyerberg (2008)",
+                             "description": "3,873 patients with blood pressure and atherosclerosis markers for cardiovascular prediction."},
+    "SS_NSBCD":             {"cite_key": "dmkd2023nsbcd",             "authors": "VT DMKD group",
+                             "description": "Non-small-cell breast cancer dataset from the Virginia Tech data mining repository."},
+    "SS_PBC3":              {"cite_key": "andersen2012statistical",   "authors": "Andersen \\& Skovgaard (2010)",
+                             "description": "Multi-centre RCT of 349 PBC patients randomised to cyclosporin A vs. placebo."},
+    "SS_OLDMORT":           {"cite_key": "edvinsson2000eha",          "authors": "Edvinsson (2000)",
+                             "description": "Historical mortality of 60+ year-olds in Sundsvall, Sweden (1860--1880)."},
+    "SS_UNEMPDUR":          {"cite_key": "mccall1996unemployment",    "authors": "McCall (1996)",
+                             "description": "Unemployment spell durations with re-employment outcomes and worker characteristics."},
+    "SS_ACATH":             {"cite_key": "harrell2015regression",     "authors": "Harrell (2015)",
+                             "description": "3,504 patients undergoing cardiac catheterisation; cholesterol and coronary artery disease."},
+    "SS_SCANIA":            {"cite_key": "lund2000scania",            "authors": "Lund University Database",
+                             "description": "Historical mortality records from Scania, Sweden (1813--1894) for 50+ year-olds."},
+    "SS_ROSSI":             {"cite_key": "rossi1980money",            "authors": "Rossi et al. (1980)",
+                             "description": "432 Maryland prison releasees tracked for recidivism and effect of financial aid."},
+    "SS_HEARTVALVE":        {"cite_key": "lim2008joint",              "authors": "Lim et al. (2008)",
+                             "description": "Longitudinal heart function after aortic valve replacement with survival outcomes."},
+    "SS_GSE3143":           {"cite_key": "yasrebi2009usefulness",     "authors": "Yasrebi et al. (2009)",
+                             "description": "Gene expression (8,659 genes, 158 samples) for cancer survival from merged microarrays."},
+    "SS_UNEMPLOYMENT":      {"cite_key": "romeo1999unemployment",     "authors": "Romeo (1999)",
+                             "description": "Unemployment spell durations for 452 Americans with job search methods."},
+    "SS_GSE4335":           {"cite_key": "yasrebi2009usefulness",     "authors": "Yasrebi et al. (2009)",
+                             "description": "Gene expression (12,793 genes, 115 samples) for cancer survival from merged microarrays."},
+    "SS_DATAOVARIAN1":      {"cite_key": "emura2017joint",            "authors": "Emura et al. (2017)",
+                             "description": "Time-to-recurrence and 158 gene expression profiles from 912 ovarian cancer patients."},
+    "SS_AIDS":              {"cite_key": "goldman1996response",       "authors": "Goldman et al. (1996)",
+                             "description": "RCT of ddI vs. ddC in 467 advanced HIV patients with longitudinal CD4 and survival."},
+    "SS_VDV":               {"cite_key": "van2002gene_veer",          "authors": "van't Veer et al. (2002)",
+                             "description": "$\\sim$4,700-gene microarray from 78 breast cancer patients for outcome prediction."},
+    "SS_FRTCS":             {"cite_key": "hosmer2008applied",         "authors": "Hosmer et al. (2008)",
+                             "description": "French Tree Cities Study (697 participants) tracking cardiovascular events and blood pressure."},
+    "SS_DATADIVAT2":        {"cite_key": "le2016inverseprobability",  "authors": "Le Borgne et al. (2016)",
+                             "description": "$\\sim$1,900 French kidney transplant patients from DIVAT tracking graft failure and mortality."},
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,7 +365,7 @@ def get_regime(n: int, is_cr: bool = False) -> str:
     tag = " (CR)" if is_cr else ""
     if n < 500:
         return f"small{tag}"
-    elif n < 5_000:
+    elif n < 4_000:
         return f"medium{tag}"
     else:
         return f"large{tag}"
@@ -275,10 +420,13 @@ def collect_stats(names: list[str], is_cr: bool = False) -> pd.DataFrame:
     except ImportError:
         adaptive_num_durations = None
 
+    BENCHMARK_DATASETS.pop("SS_FOLLIC")
+    BENCHMARK_DATASETS.pop("SS_GLIOMA")
+
     registry = CR_DATASETS if is_cr else BENCHMARK_DATASETS
     rows = []
 
-    for name in names:
+    for i, name in enumerate(names, 1):
         loader = registry.get(name)
         if loader is None:
             # try the other registry as fallback
@@ -326,6 +474,7 @@ def collect_stats(names: list[str], is_cr: bool = False) -> pd.DataFrame:
         dtype  = "CR" if is_cr else "SR"
 
         rows.append({
+            "ID":             i,
             "Dataset":        name,
             "N":              n,
             "Features":       p,
@@ -490,7 +639,7 @@ def plot_censoring_vs_followup(df: pd.DataFrame, out_path: Path) -> None:
 
     for _, row in df.iterrows():
         label = DISPLAY_NAME.get(row["Dataset"],
-                                  row["Dataset"].replace("SS_", ""))
+                                  row["Dataset"].replace("SS_", "")).replace("SS_", "")
         ax.annotate(label,
                     (row["Censoring_rate"],
                      np.log10(max(row["Median_followup"], 0.01))),
@@ -591,45 +740,46 @@ def plot_diversity(df: pd.DataFrame, out_dir: Path) -> None:
 # LaTeX table
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fmt_row(row: pd.Series, is_cr: bool = False) -> str:
+def _fmt_row(row: pd.Series, is_cr: bool = False, show_source: bool = False) -> str:
     name  = row["Dataset"]
     disp  = DISPLAY_NAME.get(name, name.replace("SS_", "SS--").replace("_", " "))
     n_fmt = f"{int(row['N']):,}"
-    er    = f"{row['Event_rate']:.2f}"
-    cr_   = f"{row['Censoring_rate']:.2f}"
-    mfu   = f"{row['Median_followup']:.0f}"
-    iqr   = f"{row['IQR_followup']:.0f}"
-    miss  = f"{row['Missing_pct']:.1f}"
     feat  = str(int(row["Features"]))
     bins  = str(int(row["N_bins"])) if not np.isnan(row["N_bins"]) else "--"
-    cite  = row["Cite"]
 
     if is_cr:
         k = int(row["N_causes"])
-        return (f"{disp} & {n_fmt} & {feat} & {er} ($K$={k}) & {cr_} "
-                f"& {mfu} ({iqr}) & {miss} & {bins} & {row['Domain']} "
-                f"& {row['Regime']} & {cite} \\\\")
-    return (f"{disp} & {n_fmt} & {feat} & {er} & {cr_} "
-            f"& {mfu} ({iqr}) & {miss} & {bins} & {row['Domain']} "
-            f"& {row['Regime']} & {cite} \\\\")
+        er = f"{row['Event_rate']:.2f} ($K$={k})"
+    else:
+        er = f"{row['Event_rate']:.2f}"
+
+    cols = [str(int(row["ID"])), disp, n_fmt, feat, er, bins, row["Domain"], row["Regime"]]
+    if show_source:
+        cols.append(row["Cite"])
+    return " & ".join(cols) + " \\\\"
 
 
-def generate_latex_table(df: pd.DataFrame, out_dir: Path, group: str) -> None:
+def generate_latex_table(df: pd.DataFrame, out_dir: Path, group: str,
+                         show_source: bool = False) -> None:
     if df.empty:
         return
     out_dir.mkdir(parents=True, exist_ok=True)
 
     is_cr = (df["Type"] == "CR").all()
-    ncols = 11
 
-    header = (
-        r"\textbf{Dataset} & \textbf{$N$} & \textbf{Feat.} "
-        r"& \textbf{Event rate} & \textbf{Cens.\,\%} "
-        r"& \textbf{Med.\,FU (IQR)} & \textbf{Miss.\,\%} "
-        r"& \textbf{Bins} & \textbf{Domain} & \textbf{Regime} "
-        r"& \textbf{Source} \\"
-    )
-    col_spec = r"lrrrrrrrllll"
+    header_parts = [
+        r"\textbf{ID}", r"\textbf{Dataset}", r"\textbf{$N$}", r"\textbf{Feat.}",
+        r"\textbf{Event rate}", r"\textbf{Bins}",
+        r"\textbf{Domain}", r"\textbf{Regime}",
+    ]
+    col_spec_parts = list("rlrrrlll")
+    if show_source:
+        header_parts.append(r"\textbf{Source}")
+        col_spec_parts.append("l")
+
+    ncols = len(header_parts)
+    header = " & ".join(header_parts) + r" \\"
+    col_spec = "".join(col_spec_parts)
 
     latex = []
     latex.append(rf"\begin{{longtable}}{{{col_spec}}}")
@@ -637,13 +787,8 @@ def generate_latex_table(df: pd.DataFrame, out_dir: Path, group: str) -> None:
         r"\caption{\textbf{Dataset characteristics.} "
         r"$N$: number of subjects. "
         r"Event rate: proportion of uncensored observations. "
-        r"Cens.\,\%: censoring percentage (= 1 $-$ event rate). "
-        r"Med.\,FU: median follow-up time in dataset-native units (IQR in parentheses). "
-        r"Miss.\,\%: mean fraction of missing values across all feature columns. "
         r"Bins: adaptive time-discretisation intervals for discrete-time heads. "
-        r"SurvSet datasets~\cite{drysdale2022survset} are prefixed `SS--'. "
-        r"EHR datasets (eICU, MIMIC-IV) use a static 24\,h feature snapshot; "
-        r"diagnosis features are time-filtered to prevent discharge-diagnosis leakage."
+        r"SurvSet datasets~\cite{drysdale2022survset} are prefixed `SS--'."
         rf"}} \label{{tab:datasets_{group}}} \\"
     )
     latex.append(r"\toprule")
@@ -702,11 +847,54 @@ def generate_latex_table(df: pd.DataFrame, out_dir: Path, group: str) -> None:
                 row = df[df["Dataset"] == name]
                 if row.empty:
                     continue
-                latex.append(_fmt_row(row.iloc[0], is_cr=is_cr))
+                latex.append(_fmt_row(row.iloc[0], is_cr=is_cr, show_source=show_source))
     else:
         # Flat listing
         for _, row in df.iterrows():
-            latex.append(_fmt_row(row, is_cr=is_cr))
+            latex.append(_fmt_row(row, is_cr=is_cr, show_source=show_source))
+
+    # Summary rows: Min, Max, Mean, IQR (for N, Feat., Event rate, Bins only)
+    bins_valid = df["N_bins"].dropna()
+
+    def _stat_row(label: str, n_val: str, feat_val: str,
+                  er_val: str, bins_val: str) -> str:
+        cols = ["", label, n_val, feat_val, er_val, bins_val, "", ""]
+        if show_source:
+            cols.append("")
+        return " & ".join(cols) + r" \\"
+
+    def _fmt_n(v: float) -> str: return f"{v:,.0f}"
+    def _fmt_f(v: float) -> str: return f"{v:.0f}"
+    def _fmt_e(v: float) -> str: return f"{v:.2f}"
+    def _fmt_b(s: pd.Series) -> str:
+        return "--" if s.empty else f"{s.iloc[0]:.0f}"
+
+    latex.append(r"\midrule")
+    latex.append(_stat_row(
+        r"\textit{Min}",
+        _fmt_n(df["N"].min()), _fmt_f(df["Features"].min()),
+        _fmt_e(df["Event_rate"].min()),
+        "--" if bins_valid.empty else f"{bins_valid.min():.0f}",
+    ))
+    latex.append(_stat_row(
+        r"\textit{Max}",
+        _fmt_n(df["N"].max()), _fmt_f(df["Features"].max()),
+        _fmt_e(df["Event_rate"].max()),
+        "--" if bins_valid.empty else f"{bins_valid.max():.0f}",
+    ))
+    latex.append(_stat_row(
+        r"\textit{Mean}",
+        _fmt_n(df["N"].mean()), _fmt_f(df["Features"].mean()),
+        _fmt_e(df["Event_rate"].mean()),
+        "--" if bins_valid.empty else f"{bins_valid.mean():.0f}",
+    ))
+    latex.append(_stat_row(
+        r"\textit{IQR\textsubscript{25--75}}",
+        f"[{_fmt_n(df['N'].quantile(0.25))}, {_fmt_n(df['N'].quantile(0.75))}]",
+        f"[{_fmt_f(df['Features'].quantile(0.25))}, {_fmt_f(df['Features'].quantile(0.75))}]",
+        f"[{_fmt_e(df['Event_rate'].quantile(0.25))}, {_fmt_e(df['Event_rate'].quantile(0.75))}]",
+        "--" if bins_valid.empty else f"[{bins_valid.quantile(0.25):.0f}, {bins_valid.quantile(0.75):.0f}]",
+    ))
 
     latex.append(r"\end{longtable}")
     tex = "\n".join(latex)
@@ -739,6 +927,8 @@ def main() -> None:
                         help="Skip LaTeX table generation.")
     parser.add_argument("--no-plots", action="store_true",
                         help="Skip diversity figure generation.")
+    parser.add_argument("--show-source", action="store_true",
+                        help="Include a Source/citation column in the LaTeX table.")
     args = parser.parse_args()
 
     group   = args.group
@@ -749,18 +939,20 @@ def main() -> None:
     print(f"Output: {out_dir}\n")
 
     names, is_cr = resolve_group(group)
+    names.remove("SS_FOLLIC")
+    names.remove("SS_GLIOMA")
     df = collect_stats(names, is_cr=is_cr)
 
     # Always save CSV
     csv_path = out_dir / "dataset_stats.csv"
     df.to_csv(csv_path, index=False)
     print(f"\nStats CSV saved to {csv_path}")
-    print(df[["Dataset", "N", "Features", "Event_rate", "Censoring_rate",
+    print(df[["ID", "Dataset", "N", "Features", "Event_rate", "Censoring_rate",
                "Median_followup", "Missing_pct"]].to_string(index=False))
 
     # LaTeX table
     if not args.no_latex:
-        generate_latex_table(df, out_dir, group)
+        generate_latex_table(df, out_dir, group, show_source=args.show_source)
 
     # Diversity figures
     if not args.no_plots:

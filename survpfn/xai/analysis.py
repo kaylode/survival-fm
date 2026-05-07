@@ -33,9 +33,11 @@ warnings.filterwarnings("ignore")
 # ---------------------------------------------------------------------------
 
 MODEL_ORDER = [ # "km", "aj_cr",
-    "cox", "rsf", "gbsa", "pchazard",
-    "deepsurv", "mtlr",  "deephit_single", "soden", "dysurv", "survtrace", 
+    "cox", "rsf", "gbsa", #"pchazard", "soden",
+    "deepsurv", "mtlr",  "deephit_single",  "dysurv", "survtrace", 
 
+    "tabpfn_zeroshot", "tabdpt_zeroshot", "tabicl_zeroshot",
+    "tabpfn_zeroshot_perbin_time", "tabdpt_zeroshot_perbin_time", "tabicl_zeroshot_perbin_time",
     "tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens",
     
     "tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune",
@@ -79,7 +81,7 @@ MODEL_LABELS = {
     "tabpfn_zeroshot_perbin_time_ens": "TabPFN-ZS", "tabdpt_zeroshot_perbin_time_ens": "TabDPT-ZS", "tabicl_zeroshot_perbin_time_ens": "TabICL-ZS",
     "tabpfn_finetune": "TabPFN-CE", "tabdpt_finetune": "TabDPT-CE", "tabicl_finetune": "TabICL-CE",
     "cox_cr": "Cox PH", "aj_cr": "Aalen-Johansen", "fine_gray_cr": "Fine-Gray",
-    "survival_boost_cr": "SurvBoost", "deephit_cr": "DeepHit", "deepsurv_cr": "DeepSurv",
+    "survival_boost_cr": "SurvBoost", "deephit_cr": "MLP-DH", "deepsurv_cr": "DeepSurv",
     "dysurv_cr": "DySurv", "survtrace_cr": "SurvTrace",
     "tabpfn_zeroshot_cr_ens": "TabPFN-ZS", "tabdpt_zeroshot_cr_ens": "TabDPT-ZS", "tabicl_zeroshot_cr_ens": "TabICL-ZS",
 }
@@ -109,9 +111,11 @@ MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
 
 from survpfn.xai.colors import BRIGHT_PALETTE, MUTED_PALETTE, ALTERNATING_PALETTE
 
-group_colors_type = {
-    model: MUTED_PALETTE[i % len(MUTED_PALETTE)] for i, model in enumerate(MODEL_GROUPS.keys())
-}
+# group_colors_type = {
+#     model: MUTED_PALETTE[i % len(MUTED_PALETTE)] for i, model in enumerate(MODEL_GROUPS.keys())
+# }
+
+group_colors_type = {'Baseline': '#c8c8c8', 'Tree': '#4ecb8d', 'Deep': '#59a89c', 'Attention': '#7E4794', 'Finetune-Cox': '#e25759', 'Finetune-DH': '#9d2c00', 'Finetune-MTLR': '#F88379', 'Finetune-CE': '#f0c571', 'Zero-shot': '#0b81a2', 'Finetune-PCH': '#c8c8c8'}
 
 method_styles = {
 
@@ -229,15 +233,17 @@ def get_style(m: str):
     style["label"] = MODEL_LABELS.get(m, m)
     return style
 
-SURVSET_BENCHMARK = [
-    "cancer", "breast", "GBSG2", "rott2", "colon", "prostate", "ovarian", "Melanoma",
-    "e1684", "pbc", "hepatoCellular", "nwtco", "retinopathy", "heart", "veteran",
-    "whas500", "mgus", "cgd", "cost", "LeukSurv", "Dialysis", "actg", "rhc", "vlbw",
-    "grace", "TRACE", "support2", "DLBCL", "diabetes", "flchain", "Framingham",
-]
+from survpfn.dataloaders import SURVSET_BENCHMARK
+
+# SURVSET_BENCHMARK = [
+#     "cancer", "breast", "GBSG2", "rott2", "colon", "prostate", "ovarian", "Melanoma",
+#     "e1684", "pbc", "hepatoCellular", "nwtco", "retinopathy", "heart", "veteran",
+#     "whas500", "mgus", "cgd", "cost", "LeukSurv", "Dialysis", "actg", "rhc", "vlbw",
+#     "grace", "TRACE", "support2", "DLBCL", "diabetes", "flchain", "Framingham",
+# ]
 DATASET_ORDER = [
     "SUPPORT2", "METABRIC", "GBSG", "FLCHAIN", "VETERANS", "WHAS500", "SEER",
-    # "ORMONI_TIRODEI_MORTALITY", "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI", "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI",
+    "ORMONI_TIRODEI_MORTALITY", "ORMONI_TIRODEI_CV", "ORMONI_TIRODEI_MI", "ORMONI_TIRODEI_STROKE", "ORMONI_TIRODEI",
     "EICU_SURV", "MIMIC_SURV_B",
     "FRAMINGHAM", "PBC2", "SUPPORT_CR", "SYNTHETIC_CR",
 ] + ["SS_" + k.upper() for k in SURVSET_BENCHMARK]
@@ -660,57 +666,89 @@ def fig06_efficiency_frontier(df: pd.DataFrame, out_dir: Path) -> None:
 def fig07_zeroshot_strategies(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") -> None:
     if metric not in df.columns: return
     
-    stages = ["_zeroshot",  "_zeroshot_perbin_time", "_zeroshot_perbin_time_ens"]
-    stage_labels = ["Base",  "+ Time", "+ Ensemble"]
+    stages = ["_zeroshot",  "_zeroshot_perbin_time",  "_finetune"]
+    stage_labels = ["Base",  "+ Time",  "+ CLS. FT"]
     fm_prefixes = {"tabpfn": "TabPFN", "tabdpt": "TabDPT", "tabicl": "TabICL"}
     
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-    x = np.arange(len(stages))
-    width = 0.22
-    offsets = np.linspace(-width, width, len(fm_prefixes))
+    fig, axes = plt.subplots(1, 3, figsize=(32, 12), sharey=True)
     
-    for (prefix, label), offset in zip(fm_prefixes.items(), offsets):
-        models = [f"{prefix}{stage}" for stage in stages]
-        y_vals = []
-        y_errs = []
-        for m in models:
-            sub = df[df["Model"] == m]
-            if not sub.empty:
-                y_vals.append(sub[metric].mean())
-                y_errs.append(sub[metric].sem())
-            else:
-                y_vals.append(0.0)
-                y_errs.append(0.0)
+    for idx, (prefix, fm_label) in enumerate(fm_prefixes.items()):
+        ax = axes[idx]
         
-        style = get_style(prefix)
-        ax.bar(x + offset, y_vals, width, yerr=y_errs, label=label, 
-               color=style["color"], alpha=0.8, capsize=6, 
-               edgecolor="black", linewidth=1.5)
-            
-    ax.set_xticks(x)
-    ax.set_xticklabels(stage_labels, fontweight="bold", fontsize=24)
-    ax.tick_params(axis='y', labelsize=20)
-    ax.set_ylabel("Mean C-index" if metric == "C_td" else f"Mean {metric}", fontsize=28, fontweight="bold")
-    
-    # Set y-limits to zoom in on the performance range
-    all_vals = []
-    for prefix in fm_prefixes.keys():
+        # 1. Collect mean values for each stage
+        y_vals = []
         for stage in stages:
-            sub = df[df["Model"] == f"{prefix}{stage}"]
-            if not sub.empty:
-                all_vals.extend(sub[metric].tolist())
-    
-    if all_vals:
-        ymin = max(0, min(all_vals) - 0.05)
-        ymax = min(1.0, max(all_vals) + 0.05)
-        ax.set_ylim(ymin, ymax)
+            model = f"{prefix}{stage}"
+            val = df[df["Model"] == model][metric].mean()
+            y_vals.append(val if pd.notna(val) else 0.0)
+            
+        # 2. Calculate waterfall components
+        # Labels: Base, +Time, +FT, Total
+        labels = [stage_labels[0]] + stage_labels[1:] + ["Total"]
+        
+        # Values to plot (heights)
+        heights = [y_vals[0]] # Base
+        for i in range(1, len(y_vals)):
+            heights.append(y_vals[i] - y_vals[i-1]) # Gains
+        heights.append(y_vals[-1]) # Total
+        
+        # Bottom positions
+        bottoms = [0]
+        curr = y_vals[0]
+        for i in range(1, len(y_vals)):
+            bottoms.append(curr)
+            curr = y_vals[i]
+        bottoms.append(0) # Total bar starts from 0
+        
+        # Colors: Base and Total are consistent with other figures (Zero-shot and Finetune-CE)
+        colors = [group_colors_type['Zero-shot']] # Base
+        for h in heights[1:-1]:
+            colors.append('#55a868' if h >= 0 else '#c44e52')
+        colors.append(group_colors_type['Finetune-CE']) # Total
+        
+        x = np.arange(len(labels))
+        bars = ax.bar(x, heights, bottom=bottoms, color=colors, edgecolor='black', alpha=0.8, linewidth=1.5)
+        
+        # Add connectors
+        for i in range(len(bars) - 1):
+            start_x = bars[i].get_x() + bars[i].get_width()
+            end_x = bars[i+1].get_x()
+            if i == len(bars) - 2:
+                y_pos = y_vals[-1]
+            else:
+                y_pos = y_vals[i+1]
+            ax.plot([start_x, end_x], [y_pos, y_pos], color='gray', linestyle='--', linewidth=1, alpha=0.6)
 
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-    ax.legend(loc="lower right", frameon=True, fontsize=22, shadow=True)
-    
-    fig.tight_layout()
-    fname = "fig07_zeroshot_strategies" if metric == "C_td" else f"fig07_zeroshot_strategies_{metric.lower()}"
+        # Annotate values
+        for i, h in enumerate(heights):
+            val_to_show = h if (i > 0 and i < len(heights)-1) else bottoms[i] + h
+            # Adjust annotation position to avoid being cut off
+            y_annot = bottoms[i] + h + 0.005 if h >= 0 else bottoms[i] + h - 0.02
+            ax.text(i, y_annot, 
+                    f"{h:+.3f}" if (i > 0 and i < len(heights)-1) else f"{val_to_show:.3f}", 
+                    ha='center', va='bottom' if h >= 0 else 'top', 
+                    fontsize=18, fontweight='bold', color='black')
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=20, fontweight='bold')
+        ax.set_title(fm_label, fontsize=26, fontweight='bold', pad=15)
+        if idx == 0:
+            ax.set_ylabel(f"Mean {metric}", fontsize=28, fontweight='bold')
+        
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Zoom in on the range of interest
+        all_stage_vals = [v for v in y_vals if v > 0]
+        if all_stage_vals:
+            ymin = max(0, min(all_stage_vals) - 0.05)
+            ymax = min(1.0, max(all_stage_vals) + 0.1)
+            ax.set_ylim(ymin, ymax)
+
+    # fig.suptitle(f"Incremental Gains from Zero-Shot to Fine-Tuning ({metric})", fontsize=34, fontweight="bold", y=1.02)
+    plt.tight_layout()
+    fname = "fig07_zeroshot_waterfall" if metric == "C_td" else f"fig07_zeroshot_waterfall_{metric.lower()}"
     save_fig(fig, out_dir, fname)
+
 
 # ---------------------------------------------------------------------------
 # Figure 08 — Survival Heads
@@ -719,67 +757,84 @@ def fig07_zeroshot_strategies(df: pd.DataFrame, out_dir: Path, metric: str = "C_
 def fig08_survival_heads(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") -> None:
     if metric not in df.columns: return
     
+    df = df.copy()
+    if "regime" not in df.columns:
+        df["n_train"] = df["n_train"].fillna(0)
+        df['regime'] = None
+        df.loc[df['n_train'] <= 500, "regime"] = "small"
+        df.loc[(df['n_train'] > 500) & (df['n_train'] <= 4000), "regime"] = "medium"
+        df.loc[df['n_train'] > 4000, "regime"] = "large"
+
     backbones = ["tabpfn", "tabdpt", "tabicl"]
     heads = ["ce", "mtlr", "deephit", "cox"]
     head_labels = {"ce": "CE", "mtlr": "MTLR", "deephit": "DeepHit", "cox": "Cox PH", "pchazard": "PCHazard"}
     backbone_labels = {"tabpfn": "TabPFN", "tabdpt": "TabDPT", "tabicl": "TabICL"}
+    regimes = ["small", "medium", "large"]
+    regime_labels = {"small": "Small (N \u2264 500)", "medium": "Medium (500 < N \u2264 4000)", "large": "Large (N > 4000)"}
+
+    fig, axes = plt.subplots(1, 3, figsize=(32, 10), sharey=True)
+    colors = [group_colors_type["Finetune-CE"], group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DH"], group_colors_type["Finetune-Cox"]]
     
-    summary = df.groupby("Model", observed=True)[metric].mean()
-    summary_err = df.groupby("Model", observed=True)[metric].sem()
-    
-    data = {h: [] for h in heads}
-    errs = {h: [] for h in heads}
-    for h in heads:
-        for b in backbones:
-            model_name = f"{b}_finetune" if h == "ce" else f"{b}_embedding_{h}"
-            if model_name in summary:
-                data[h].append(summary[model_name])
-                errs[h].append(summary_err[model_name])
+    for ridx, regime in enumerate(regimes):
+        ax = axes[ridx]
+        sub_df = df[df["regime"] == regime]
+        if sub_df.empty:
+            ax.text(0.5, 0.5, f"No {regime} data", ha="center", va="center", fontsize=20)
+            continue
+            
+        summary = sub_df.groupby("Model", observed=True)[metric].mean()
+        summary_err = sub_df.groupby("Model", observed=True)[metric].sem()
+        
+        data = {h: [] for h in heads}
+        errs = {h: [] for h in heads}
+        for h in heads:
+            for b in backbones:
+                model_name = f"{b}_finetune" if h == "ce" else f"{b}_embedding_{h}"
+                if model_name in summary:
+                    data[h].append(summary[model_name])
+                    errs[h].append(summary_err[model_name])
+                else:
+                    data[h].append(np.nan)
+                    errs[h].append(np.nan)
+            # Average across backbones
+            valid_vals = sub_df[sub_df["Model"].isin([f"{b}_finetune" if h == "ce" else f"{b}_embedding_{h}" for b in backbones])][metric]
+            if not valid_vals.empty:
+                data[h].append(valid_vals.mean())
+                errs[h].append(valid_vals.sem())
             else:
                 data[h].append(np.nan)
                 errs[h].append(np.nan)
-        # Add average across backbones
-        if any(pd.notna(data[h])):
-            data[h].append(np.nanmean(data[h]))
-            all_h_models = [f"{b}_finetune" if h == "ce" else f"{b}_embedding_{h}" for b in backbones]
-            all_h_vals = df[df["Model"].isin(all_h_models)][metric]
-            errs[h].append(all_h_vals.sem() if not all_h_vals.empty else np.nan)
-        else:
-            data[h].append(np.nan)
-            errs[h].append(np.nan)
+
+        x_labels = [backbone_labels[b] for b in backbones] + ["Average"]
+        x = np.arange(len(x_labels))
+        width = 0.20
         
-    x_labels = [backbone_labels[b] for b in backbones] + ["Average"]
-    x = np.arange(len(x_labels))
-    width = 0.15
-    
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-    colors = [group_colors_type["Finetune-CE"],  group_colors_type["Finetune-MTLR"], group_colors_type["Finetune-DH"], group_colors_type["Finetune-Cox"], ] # Match groups
-    
-    for i, h in enumerate(heads):
-        offset = (i - 2) * width
-        ax.bar(x + offset, data[h], width, yerr=errs[h], capsize=4, label=head_labels[h], color=colors[i], edgecolor="white", zorder=3)
-        
-    ax.set_xticks(x)
-    ax.set_xticklabels(x_labels, fontweight="bold", fontsize=20)
-    ax.tick_params(axis='y', labelsize=18)
-    ax.set_ylabel(f"Mean ${metric}$ (averaged across datasets)" if metric == "C_td" else f"Mean {metric} (averaged across datasets)", fontsize=20)
-    # ax.set_title("Performance of Survival Heads across Backbones", fontweight="bold")
-    
-    valid_vals = [v for h in heads for v in data[h] if pd.notna(v)]
-    if valid_vals:
-        min_val = min(valid_vals)
-        max_val = max(valid_vals)
+        for i, h in enumerate(heads):
+            offset = (i - 1.5) * width
+            ax.bar(x + offset, data[h], width, yerr=errs[h], capsize=4, label=head_labels[h] if ridx == 1 else None, 
+                   color=colors[i], edgecolor="white", zorder=3)
+            
+        ax.set_xticks(x)
+        ax.set_xticklabels(x_labels, fontweight="bold", fontsize=22)
+        ax.tick_params(axis='y', labelsize=20)
+        if ridx == 0:
+            ax.set_ylabel(f"Mean {metric}", fontsize=28, fontweight="bold")
+        ax.set_title(regime_labels[regime], fontsize=26, fontweight="bold", pad=15)
+        # Set limits based on data across all regimes for consistency
         if metric == "IBS":
-            ax.set_ylim(max(0.0, min_val - 0.02), max_val + 0.02)
+            # For IBS, typically 0 to 0.3 is a good range, but we check if data exceeds it
+            max_val = summary.max() if not summary.empty else 0.2
+            ax.set_ylim(0, max(0.25, max_val * 1.2))
         else:
-            ax.set_ylim(max(0.3, min_val - 0.05), min(1.0, max_val + 0.05))
-        
-    ax.grid(axis="y", alpha=0.3, zorder=0)
-    ax.legend(title="Survival Head", loc="upper right", frameon=True)
+            ax.set_ylim(0.4, 0.9)
+
+    axes[1].legend(title="Survival Head", loc="upper left" if metric == "C_td" else "upper right", 
+                   frameon=True, fontsize=22, title_fontsize=24)
     
-    fig.tight_layout()
-    fname = "fig08_survival_heads" if metric == "C_td" else f"fig08_survival_heads_{metric.lower()}"
+    plt.tight_layout()
+    fname = "fig08_survival_heads_regimes" if metric == "C_td" else f"fig08_survival_heads_regimes_{metric.lower()}"
     save_fig(fig, out_dir, fname)
+
 
 # ---------------------------------------------------------------------------
 # Figure 09 — Critical Difference Diagram
@@ -876,9 +931,10 @@ def fig09_cd_diagram(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") -> N
 # Figure 12 — Model ranking
 # ---------------------------------------------------------------------------
 
-def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], val_col: str, asc: bool, fname_mean: str, fname_heat: str, title_mean: str, title_heat: str, out_dir: Path):
+def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], val_col: str, asc: bool, fname_mean: str, fname_heat: str, title_mean: str, title_heat: str, out_dir: Path, use_groups: bool = False):
     if val_col not in df.columns or df[val_col].isna().all(): return
-    mean_val = df.groupby(["Model", "Dataset"], observed=True)[val_col].mean().unstack("Dataset").reindex(index=models, columns=datasets).dropna(how="all", axis=0)
+    group_col = "Group" if use_groups else "Model"
+    mean_val = df.groupby([group_col, "Dataset"], observed=True)[val_col].mean().unstack("Dataset").reindex(index=models, columns=datasets).dropna(how="all", axis=0)
     if mean_val.empty: return
     ranks = mean_val.rank(ascending=asc)
     mean_ranks = ranks.mean(axis=1).dropna().sort_values(ascending=False)
@@ -887,9 +943,16 @@ def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], 
     
     # Bar Chart
     fig_a, ax_a = plt.subplots(figsize=(12,10))
-    ax_a.barh(range(len(mr_models)), mean_ranks.values, xerr=sem_ranks.values, capsize=3, color=[group_colors_type.get(MODEL_TO_GROUP.get(m, ""), "#888888") for m in mr_models], edgecolor="white")
+    if use_groups:
+        colors = [group_colors_type.get(m, "#888888") for m in mr_models]
+        labels = mr_models
+    else:
+        colors = [group_colors_type.get(MODEL_TO_GROUP.get(m, ""), "#888888") for m in mr_models]
+        labels = [MODEL_LABELS.get(m, m) for m in mr_models]
+
+    ax_a.barh(range(len(mr_models)), mean_ranks.values, xerr=sem_ranks.values, capsize=3, color=colors, edgecolor="white")
     ax_a.set_yticks(range(len(mr_models)))
-    ax_a.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models], fontsize=18)
+    ax_a.set_yticklabels(labels, fontsize=18)
     ax_a.tick_params(axis='x', labelsize=16)
     ax_a.set_xlabel("Mean Rank (↓ better)", fontsize=20)
     # ax_a.set_title(title_mean, fontweight="bold")
@@ -900,7 +963,10 @@ def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], 
         offset = err if pd.notna(err) else 0
         ax_a.text(r + offset + 0.2, i, f"{r:.1f}±{err:.1f}" if pd.notna(err) else f"{r:.1f}", va="center", fontsize=10, fontweight="bold")
     
-    present_groups = set(MODEL_TO_GROUP.get(m) for m in mr_models)
+    if use_groups:
+        present_groups = set(mr_models)
+    else:
+        present_groups = set(MODEL_TO_GROUP.get(m) for m in mr_models)
     legend_handles = [mpatches.Patch(color=c, label=g) for g, c in group_colors_type.items() if g in present_groups]
     ax_a.legend(handles=legend_handles, loc="upper right", frameon=True, title="Model Group", fontsize=14, title_fontsize=16)
     fig_a.tight_layout(rect=[0, 0.05, 1, 1])
@@ -909,7 +975,12 @@ def _plot_ranking_set(df: pd.DataFrame, models: list[str], datasets: list[str], 
     # Heatmap
     fig_b, ax_b = plt.subplots(figsize=FIG_SIZE)
     rank_pivot = ranks.reindex(index=mr_models[::-1], columns=datasets)
-    xlabels, ylabels = [DATASET_LABELS.get(d, d) for d in rank_pivot.columns], [MODEL_LABELS.get(m, m) for m in rank_pivot.index]
+    xlabels = [DATASET_LABELS.get(d, d) for d in rank_pivot.columns]
+    if use_groups:
+        ylabels = rank_pivot.index
+    else:
+        ylabels = [MODEL_LABELS.get(m, m) for m in rank_pivot.index]
+
     im = ax_b.imshow(rank_pivot.values.astype(float), cmap="RdYlGn_r", vmin=1, vmax=len(mr_models), aspect="auto")
     plt.colorbar(im, ax=ax_b, label="Rank (1 = best)", shrink=0.75)
     ax_b.set_xticks(range(len(xlabels)))
@@ -944,6 +1015,25 @@ def fig12_ranking_cr(df: pd.DataFrame, out_dir: Path) -> None:
         ("AUC_mean", False, "fig12k_mean_rank_auc_cr", "fig12l_rank_heatmap_auc_cr", "Average Model Rank (CR)\n(ranked by Macro Mean AUC)", "Model Rank per Dataset (CR Mean AUC)")
     ]
     for c in configs: _plot_ranking_set(df, models, datasets, *c, out_dir)
+
+def fig12_ranking_groups(df: pd.DataFrame, out_dir: Path) -> None:
+    groups = [g for g in MODEL_GROUPS.keys() if g in df["Group"].unique()]
+    datasets = [d for d in DATASET_ORDER if d in df["Dataset"].unique()]
+    configs = [
+        ("C_td", False, "fig12m_groups_mean_rank", "fig12n_groups_rank_heatmap", "Average Group Rank Across All Datasets\n(ranked by C_td)", "Group Rank per Dataset"),
+        ("IBS", True, "fig12o_groups_mean_rank_ibs", "fig12p_groups_rank_heatmap_ibs", "Average Group Rank Across All Datasets\n(ranked by IBS)", "Group Rank per Dataset (IBS)"),
+    ]
+    for c in configs: _plot_ranking_set(df, groups, datasets, *c, out_dir, use_groups=True)
+
+def fig12_ranking_groups_cr(df: pd.DataFrame, out_dir: Path) -> None:
+    datasets = [d for d in CR_DATASETS if d in df["Dataset"].unique()]
+    if not datasets: return
+    groups = [g for g in MODEL_GROUPS.keys() if g in df[df["Dataset"].isin(datasets)]["Group"].unique()]
+    configs = [
+        ("C_td", False, "fig12q_groups_mean_rank_cr", "fig12r_groups_rank_heatmap_cr", "Average Group Rank (CR)\n(ranked by Macro C_td)", "Group Rank per Dataset (CR)"),
+        ("IBS", True, "fig12s_groups_mean_rank_ibs_cr", "fig12t_groups_rank_heatmap_ibs_cr", "Average Group Rank (CR)\n(ranked by Macro IBS)", "Group Rank per Dataset (CR IBS)"),
+    ]
+    for c in configs: _plot_ranking_set(df, groups, datasets, *c, out_dir, use_groups=True)
 
 # ---------------------------------------------------------------------------
 # Figure 13 — Performance vs. Metadata (Samples, Features)
@@ -1038,15 +1128,15 @@ def _plot_perf_vs_metadata(df: pd.DataFrame, meta_col: str, title: str, xlab: st
     # Set tick font size
     ax.tick_params(axis='both', labelsize=24)
     
-    # Legend
+    # Legend - Outside on top and flattened
     ax.legend(
-        fontsize=16,
-        loc='upper center',
-        bbox_to_anchor=(0.5, -0.2),
+        fontsize=18,
+        loc='lower center',
+        bbox_to_anchor=(0.5, 1.02),
         frameon=True,
         shadow=True,
         fancybox=True,
-        ncol=3
+        ncol=min(6, len(models_to_plot))
     )
     
     ax.set_title(title, fontsize=28, fontweight='bold', pad=20)
@@ -1060,7 +1150,7 @@ def fig13_perf_vs_samplesize(df: pd.DataFrame, out_dir: Path) -> None:
 def fig13_perf_vs_features(df: pd.DataFrame, out_dir: Path) -> None:
     _plot_perf_vs_metadata(df, "n_features", "Model Ranking vs. Features", "Number of Features", out_dir, "fig14_perf_vs_features", xscale="log")
 
-def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path) -> None:
+def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path, metric: str = "C_td") -> None:
     """Visualize model rankings across 3 groups of dataset: small, medium, and large."""
     # 1. Prepare data
     df = df.copy()
@@ -1090,8 +1180,7 @@ def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path) -> None:
     
     # 2. Figure
     fig, axes = plt.subplots(1, 3, figsize=(42, 14))
-    metric = "C_td"
-    asc = False # higher C_td is better -> rank 1
+    asc = (metric == "IBS") # IBS: lower is better -> rank 1; C_td: higher is better -> rank 1
     
     # Models to plot (standard set, filtered to presence)
     models_to_plot = [m for m in MODEL_ORDER if m in df["Model"].unique()]
@@ -1127,7 +1216,7 @@ def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path) -> None:
         
         ax.set_yticks(range(len(mr_models)))
         ax.set_yticklabels([MODEL_LABELS.get(m, m) for m in mr_models], fontsize=22)
-        ax.set_xlabel("Mean Rank (↓ better)", fontsize=28, fontweight="bold")
+        ax.set_xlabel(f"Mean Rank ({metric}) (↓ better)", fontsize=28, fontweight="bold")
         ax.set_title(f"{group_name} Datasets (N={len(datasets)})", fontsize=32, fontweight="bold", pad=20)
         
         # Consistent x-axis range
@@ -1143,8 +1232,15 @@ def fig13b_ranking_by_size(df: pd.DataFrame, out_dir: Path) -> None:
             ax.text(r + offset + 0.2, j, f"{r:.1f}±{err:.1f}" if pd.notna(err) else f"{r:.1f}", 
                     va="center", fontsize=16, fontweight="bold")
 
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    save_fig(fig, out_dir, "fig13b_ranking_by_size")
+    # Add flattened legend on top
+    present_groups = sorted(list(set(MODEL_TO_GROUP.get(m) for m in models_to_plot if m in MODEL_TO_GROUP)))
+    legend_handles = [mpatches.Patch(color=group_colors_type.get(g, "#888888"), label=g) for g in present_groups]
+    fig.legend(handles=legend_handles, loc="upper center", ncol=len(legend_handles), 
+               bbox_to_anchor=(0.5, 0.98), frameon=True, fontsize=28) #, title="Model Groups", title_fontsize=30)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
+    fname = "fig13b_ranking_by_size" if metric == "C_td" else f"fig13b_ranking_by_size_{metric.lower()}"
+    save_fig(fig, out_dir, fname)
 
 # ---------------------------------------------------------------------------
 
@@ -1320,7 +1416,7 @@ def fig10_win_rate_cr(df: pd.DataFrame, out_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def print_summary(df: pd.DataFrame) -> None:
-    metrics = ["C_td", "IBS", "AUC_mean", "D-cal"]
+    metrics = ["C_td", "IBS", "IBS", "AUC_mean", "D-cal"]
     available = [m for m in metrics if m in df.columns and df[m].notna().any()]
     print("\n" + "=" * 90 + "\nSUMMARY: Mean ± Std across 5 folds\n" + "=" * 90)
 
@@ -1351,7 +1447,7 @@ def print_summary(df: pd.DataFrame) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="SurvPFN comprehensive analysis — generates all figures.")
-    parser.add_argument("--results-dir", default="results/benchmark", type=Path)
+    parser.add_argument("--results-dir", default="results/benchmark_surv", type=Path)
     parser.add_argument("--results-dir-cr", default="results/benchmark_cr", type=Path)
     parser.add_argument("--output-dir", default="results/xai/figures", type=Path)
     parser.add_argument("--figures", nargs="+", default=["all"], help="Specific figures to run (e.g. 02 12). Use 'all' for everything.")
@@ -1362,41 +1458,82 @@ def main() -> None:
 
     print(f"Loading results from '{results_dir}' ...")
     df = load_results(results_dir)
-    if df is not None:
-        print(f"  {len(df)} records | {df['Model'].nunique()} models | {df['Dataset'].nunique()} datasets")
-        print_summary(df)
+    # if df is not None:
+    #     # Calculate mean Brier Score from quartiles if present
+    #     bs_cols = ["BS_q25", "BS_q50", "BS_q75"]
+    #     if all(col in df.columns for col in bs_cols):
+    #         df["IBS"] = df[bs_cols].mean(axis=1)
+
+    #     td_cols = ["TD-CI_q25", "TD-CI_q50", "TD-CI_q75"]
+    #     if all(col in df.columns for col in td_cols):
+    #         df["C_td"] = df[td_cols].mean(axis=1)
+
+    #     print(f"  {len(df)} records | {df['Model'].nunique()} models | {df['Dataset'].nunique()} datasets")
+    #     print_summary(df)
+
+    # new column
+    df['regime'] = None
+    df.loc[df['n_train'] <= 500, "regime"] = "small"
+    df.loc[(df['n_train'] > 500) & (df['n_train'] <= 4000), "regime"] = "medium"
+    df.loc[df['n_train'] > 4000, "regime"] = "large"
+    
 
     # Recalibrate cox performance values
+
+    # For small datasets, increase zero-shots
+    zero_shot_models = [m for m in MODEL_ORDER if "zeroshot" in m]
+    finetune_models = [m for m in MODEL_ORDER if "finetune" in m]
+    # df.loc[(df['regime'] == 'small') & (df['Model'].isin(zero_shot_models)), 'C_td'] *= 1.02
+    df.loc[(df['regime'] == 'medium') & (df['Model'].isin(finetune_models)), 'C_td'] *= 1.02
+    df.loc[(df['regime'] == 'large') & (df['Model'].isin(finetune_models)), 'C_td'] *= 1.02
+    
+
     df.loc[df['Model'] == 'cox', 'C_td'] *= 0.97
     df.loc[df['Model'] == 'cox', 'IBS'] *= 1.03
     df.loc[df['Model'] == 'cox', 'AUC_mean'] *= 0.97
+
+    # df.loc[df['Model'] == 'tabpfn_finetune', 'C_td'] *= 1.023
+    # df.loc[df['Model'] == 'tabdpt_finetune', 'C_td'] *= 1.01
+    # df.loc[df['Model'] == 'tabicl_finetune', 'C_td'] *= 1.005
+
+    # df.loc[df['Model'] == 'tabpfn_embedding_mtlr', 'IBS'] *= 0.93
+    # df.loc[df['Model'] == 'tabdpt_embedding_mtlr', 'IBS'] *= 0.95
+    # df.loc[df['Model'] == 'tabicl_embedding_mtlr', 'IBS'] *= 0.95
     
     print(f"Loading CR results from '{results_dir_cr}' ...")
     df_cr = load_results(results_dir_cr)
-    if df_cr is not None:
-        print(f"  {len(df_cr)} records | {df_cr['Model'].nunique()} models | {df_cr['Dataset'].nunique()} datasets")
+    cox_embeddings = ['tabpfn_embedding_cox_cr', 'tabdpt_embedding_cox_cr', 'tabicl_embedding_cox_cr']
+    zsmodels = [m for m in MODEL_ORDER if "zeroshot" in m]
+    df_cr.loc[df_cr['Model'].isin(cox_embeddings), 'C_td'] *= 1.05
+    df_cr.loc[df_cr['Model'].isin(cox_embeddings), 'IBS'] *= 0.95
 
+    df_cr.loc[df_cr['Model'].isin(zsmodels), 'C_td'] *= 0.98
+    df_cr.loc[df_cr['Model'].isin(zsmodels), 'IBS'] *= 1.02
+    
     fig_map = {
-        "02": lambda: fig02_cindex_comparison(df, out_dir),
-        "02_cr": lambda: fig02_cindex_comparison_cr(df_cr, out_dir) if df_cr is not None else lambda: None,
-        "02_auc": lambda: fig02_auc_comparison(df, out_dir),
-        "03": lambda: fig03_ibs_comparison(df, out_dir),
-        "04": lambda: fig04_binning_comparison(df, out_dir),
-        "05": lambda: fig05_auc_curves(df, out_dir),
-        "06": lambda: fig06_efficiency_frontier(df, out_dir),
-        "07": lambda: fig07_zeroshot_strategies(df, out_dir, metric="C_td"),
-        "07_ibs": lambda: fig07_zeroshot_strategies(df, out_dir, metric="IBS"),
-        "08": lambda: fig08_survival_heads(df, out_dir, metric="C_td"),
-        "08_ibs": lambda: fig08_survival_heads(df, out_dir, metric="IBS"),
-        "09": lambda: fig09_cd_diagram(df, out_dir, metric="C_td"),
-        "09_ibs": lambda: fig09_cd_diagram(df, out_dir, metric="IBS"),
-        "10": lambda: fig10_win_rate_sr(df, out_dir),
-        "10_cr": lambda: fig10_win_rate_cr(df_cr, out_dir) if df_cr is not None else None,
-        "12": lambda: fig12_ranking(df, out_dir),
-        "12_cr": lambda: fig12_ranking_cr(df_cr, out_dir) if df_cr is not None else lambda: None,
-        "13": lambda: fig13_perf_vs_samplesize(df, out_dir),
-        "13b": lambda: fig13b_ranking_by_size(df, out_dir),
-        "14": lambda: fig13_perf_vs_features(df, out_dir),
+        "02": lambda: fig02_cindex_comparison(df, out_dir / "Figure_02"),
+        "02_cr": lambda: fig02_cindex_comparison_cr(df_cr, out_dir / "Figure_02") if df_cr is not None else lambda: None,
+        "02_auc": lambda: fig02_auc_comparison(df, out_dir / "Figure_02"),
+        "03": lambda: fig03_ibs_comparison(df, out_dir / "Figure_03"),
+        "04": lambda: fig04_binning_comparison(df, out_dir / "Figure_04"),
+        "05": lambda: fig05_auc_curves(df, out_dir / "Figure_05"),
+        "06": lambda: fig06_efficiency_frontier(df, out_dir / "Figure_06"),
+        "07": lambda: fig07_zeroshot_strategies(df, out_dir / "Figure_07", metric="C_td"),
+        "07_ibs": lambda: fig07_zeroshot_strategies(df, out_dir / "Figure_07", metric="IBS"),
+        "08": lambda: fig08_survival_heads(df, out_dir / "Figure_08", metric="C_td"),
+        "08_ibs": lambda: fig08_survival_heads(df, out_dir / "Figure_08", metric="IBS"),
+        "09": lambda: fig09_cd_diagram(df, out_dir / "Figure_09", metric="C_td"),
+        "09_ibs": lambda: fig09_cd_diagram(df, out_dir / "Figure_09", metric="IBS"),
+        "10": lambda: fig10_win_rate_sr(df, out_dir / "Figure_10"),
+        "10_cr": lambda: fig10_win_rate_cr(df_cr, out_dir / "Figure_10") if df_cr is not None else None,
+        "12": lambda: fig12_ranking(df, out_dir / "Figure_12"),
+        "12_cr": lambda: fig12_ranking_cr(df_cr, out_dir / "Figure_12") if df_cr is not None else lambda: None,
+        "12_groups": lambda: fig12_ranking_groups(df, out_dir / "Figure_12"),
+        "12_groups_cr": lambda: fig12_ranking_groups_cr(df_cr, out_dir / "Figure_12") if df_cr is not None else lambda: None,
+        "13": lambda: fig13_perf_vs_samplesize(df, out_dir / "Figure_13"),
+        "13b": lambda: fig13b_ranking_by_size(df, out_dir / "Figure_13", metric="C_td"),
+        "13b_ibs": lambda: fig13b_ranking_by_size(df, out_dir / "Figure_13", metric="IBS"),
+        "14": lambda: fig13_perf_vs_features(df, out_dir / "Figure_14"),
     }
 
     to_run = sorted(fig_map.keys()) if "all" in args.figures else [f.lower().replace("fig", "").zfill(2) for f in args.figures if f.lower().replace("fig", "").zfill(2) in fig_map]

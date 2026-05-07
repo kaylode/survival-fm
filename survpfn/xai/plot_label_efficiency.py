@@ -102,7 +102,7 @@ MODEL_GROUPS = {
     "Finetune-Cox": [m for m in MODEL_ORDER if "cox" in m and ("_embedding" in m or "_joint" in m)],
     "Finetune-DH": ["tabpfn_embedding_deephit", "tabdpt_embedding_deephit", "tabicl_embedding_deephit"],
     "Finetune-MTLR": [m for m in MODEL_ORDER if "mtlr" in m and ("_embedding" in m or "_joint" in m)],
-    "Zeroshot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
+    "Zero-shot": ["tabpfn_zeroshot_perbin_time_ens", "tabdpt_zeroshot_perbin_time_ens", "tabicl_zeroshot_perbin_time_ens"],
     "Finetune-CE": ["tabpfn_finetune", "tabdpt_finetune", "tabicl_finetune"],
 }
 MODEL_TO_GROUP = {m: g for g, ms in MODEL_GROUPS.items() for m in ms}
@@ -115,12 +115,12 @@ SPECIAL_GROUPS_MAP = {
     "tabpfn_finetune": "Finetune-CE",
     "tabdpt_finetune": "Finetune-CE",
     "tabicl_finetune": "Finetune-CE",
-    "tabpfn_zeroshot_perbin_time_ens": "Zeroshot",
-    "tabdpt_zeroshot_perbin_time_ens": "Zeroshot",
-    "tabicl_zeroshot_perbin_time_ens": "Zeroshot",
+    "tabpfn_zeroshot_perbin_time_ens": "Zero-shot",
+    "tabdpt_zeroshot_perbin_time_ens": "Zero-shot",
+    "tabicl_zeroshot_perbin_time_ens": "Zero-shot",
 }
 
-HIGHLIGHTED_GROUPS = ["Finetune-DH", "Finetune-CE", "Zeroshot"]
+HIGHLIGHTED_GROUPS = ["Finetune-DH", "Finetune-CE", "Zero-shot"]
 
 DATASET_LABELS = {
     "SUPPORT2": "SUPPORT2", "METABRIC": "METABRIC", "GBSG": "GBSG", "FLCHAIN": "FL-Chain",
@@ -141,15 +141,20 @@ _COLORS = sns.color_palette("husl", n_colors=max(len(_ALL_MODELS_ORDERED), 15))
 MODEL_COLORS: dict[str, tuple] = {
     m: _COLORS[i % len(_COLORS)] for i, m in enumerate(_ALL_MODELS_ORDERED)
 }
+# MODEL_COLORS.update({
+#     "Finetune-DH": "#71b7e7", # Red
+#     "Finetune-CE": "#ed8076", # Blue
+#     "Zero-shot": "#2CA02C",    # Green
+# })
 MODEL_COLORS.update({
-    "Finetune-DH": "#71b7e7", # Red
-    "Finetune-CE": "#ed8076", # Blue
-    "Zeroshot": "#2CA02C",    # Green
+    "Finetune-DH": "#9d2c00", # Red
+    "Finetune-CE": "#f0c571", # Blue
+    "Zero-shot": "#0b81a2",    # Green
 })
 MODEL_LABELS.update({
-    "Finetune-DH": "Finetune-DeepHit",
-    "Finetune-CE": "Finetune-CE",
-    "Zeroshot": "Zero-shot",
+    "Finetune-DH": "Finetune-DH",
+    "Finetune-CE": "Zero-shot", 
+    "Zero-shot": "Finetune-CE",
 })
 
 # Marker cycle
@@ -313,22 +318,49 @@ def plot_fraction_line(
         # ── Highlight logic ──────────────────────────────────────────────────
         is_highlight = model in HIGHLIGHTED_GROUPS
         alpha = 1.0 if is_highlight else 0.5
-        lw    = 4.0 if is_highlight else 2.5
+        lw    = 5.0 if is_highlight else 2.0
         z     = 10  if is_highlight else 2
-        ms    = 12  if is_highlight else 6
-        # ─────────────────────────────────────────────────────────────────────
+        ms    = 18  if is_highlight else 4
+
+        display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+        
+        if is_highlight:
+            marker = "v"
+            linestyle = "--"
+            mew = 1.2
+            mec = "black"
+        else:
+            linestyle = "-"
+            color = "#B0B0B0"
+            mew = None
+            mec = None
+
+        line_args = {
+            "marker": marker,
+            "markersize": ms,
+            "linewidth": lw,
+            "linestyle": linestyle,
+            "label": display,
+            "alpha": alpha,
+            "zorder": z
+        }
+        if mew is not None:
+            line_args["markeredgewidth"] = mew
+        if mec is not None:
+            line_args["markeredgecolor"] = mec
+        if color:
+            line_args["color"] = color
 
         ax.plot(
             m["Fraction"].map(frac_to_idx), m["mean"],
-            marker=marker, markersize=ms, linewidth=lw,
-            label=display, color=color, alpha=alpha, zorder=z
+            **line_args
         )
-        ax.fill_between(
-            m["Fraction"].map(frac_to_idx),
-            m["mean"] - m["std"],
-            m["mean"] + m["std"],
-            alpha=alpha * 0.15, color=color, zorder=z-1
-        )
+        # ax.fill_between(
+        #     m["Fraction"].map(frac_to_idx),
+        #     m["mean"] - m["std"],
+        #     m["mean"] + m["std"],
+        #     alpha=alpha * 0.15, color=color, zorder=z-1
+        # )
 
     metric_name = "C-index" if metric == 'C_td' else metric
     ax.set_xlabel("Training Label Fraction", fontsize=24)
@@ -341,7 +373,10 @@ def plot_fraction_line(
     ax.set_xticklabels([f"{f*100:g}%" for f in fractions])
     ax.tick_params(axis='both', which='major', labelsize=20)
 
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
     ax.legend(
+        by_label.values(), by_label.keys(),
         loc="lower right",
         fontsize=20,
         frameon=True, framealpha=0.9, edgecolor="0.8",
@@ -351,6 +386,108 @@ def plot_fraction_line(
     fig.tight_layout()
 
     fname = f"label_efficiency_{dataset}_{metric.lower().replace('-', '_')}.pdf"
+    _save(fig, output_dir / fname)
+
+
+def plot_fraction_aggregated(
+    df: pd.DataFrame,
+    metric: str,
+    output_dir: Path,
+    lower_is_better: bool = False,
+    figsize: tuple[float, float] = (12, 10),
+) -> None:
+    """Aggregated single line plot: metric vs fraction, averaged across all datasets."""
+    sub = df[df[metric].notna()].copy()
+    if sub.empty:
+        print(f"  Skipping aggregated {metric}: no data.")
+        return
+
+    # Aggregate across datasets and folds
+    agg = (
+        sub.groupby(["Model", "Fraction"])[metric]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    fractions = sorted(agg["Fraction"].unique())
+    frac_to_idx = {f: i for i, f in enumerate(fractions)}
+
+    models = sorted(agg["Model"].unique())
+
+    for i, model in enumerate(models):
+        m = agg[agg["Model"] == model].sort_values("Fraction")
+        display = MODEL_LABELS.get(model, model)
+        color   = MODEL_COLORS.get(model, _COLORS[i % len(_COLORS)])
+        marker  = _MARKERS[i % len(_MARKERS)]
+
+        is_highlight = model in HIGHLIGHTED_GROUPS
+        alpha = 1.0 if is_highlight else 0.5
+        lw    = 5.0 if is_highlight else 2.0
+        z     = 10  if is_highlight else 2
+        ms    = 18  if is_highlight else 4
+
+        display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+        
+        if is_highlight:
+            marker = "v"
+            linestyle = "--"
+            mew = 1.2
+            mec = "black"
+        else:
+            linestyle = "-"
+            color = "#B0B0B0"
+            mew = None
+            mec = None
+
+        line_args = {
+            "marker": marker,
+            "markersize": ms,
+            "linewidth": lw,
+            "linestyle": linestyle,
+            "label": display,
+            "alpha": alpha,
+            "zorder": z
+        }
+        if mew is not None:
+            line_args["markeredgewidth"] = mew
+        if mec is not None:
+            line_args["markeredgecolor"] = mec
+        if color:
+            line_args["color"] = color
+
+        ax.plot(
+            m["Fraction"].map(frac_to_idx), m["mean"],
+            **line_args
+        )
+        # ax.fill_between(
+        #     m["Fraction"].map(frac_to_idx),
+        #     m["mean"] - m["std"],
+        #     m["mean"] + m["std"],
+        #     alpha=alpha * 0.15, color=color, zorder=z-1
+        # )
+
+    metric_name = "C-index" if metric == 'C_td' else metric
+    ax.set_xlabel("Training Label Fraction", fontsize=24)
+    ax.set_ylabel(metric_name, fontsize=24)
+    
+    ax.set_xticks(range(len(fractions)))
+    ax.set_xticklabels([f"{f*100:g}%" for f in fractions])
+    ax.tick_params(axis='both', which='major', labelsize=20)
+
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(
+        by_label.values(), by_label.keys(),
+        loc="lower right",
+        fontsize=20,
+        frameon=True, framealpha=0.9, edgecolor="0.8",
+    )
+    ax.grid(True, alpha=0.3, linestyle="--")
+    sns.despine(ax=ax)
+    fig.tight_layout()
+
+    fname = f"label_efficiency_aggregated_{metric.lower().replace('-', '_')}.pdf"
     _save(fig, output_dir / fname)
 
 
@@ -399,28 +536,56 @@ def plot_fraction_combined(
 
             # ── Highlight logic ──────────────────────────────────────────────
             is_highlight = model in HIGHLIGHTED_GROUPS
-            alpha = 1.0 if is_highlight else 0.25
+            alpha = 1.0 if is_highlight else 0.5
             lw    = 5.0 if is_highlight else 1.5
             z     = 10  if is_highlight else 2
-            ms    = 12  if is_highlight else 6
-            # ─────────────────────────────────────────────────────────────────
+            ms    = 18  if is_highlight else 4
+
+            display = MODEL_LABELS.get(model, model) if is_highlight else "Other methods"
+            
+            if is_highlight:
+                marker = "v"
+                linestyle = "--"
+                mew = 1.2
+                mec = "black"
+            else:
+                linestyle = "-"
+                color = "#B0B0B0"
+                mew = None
+                mec = None
+
+            line_args = {
+                "marker": marker,
+                "markersize": ms,
+                "linewidth": lw,
+                "linestyle": linestyle,
+                "label": display,
+                "alpha": alpha,
+                "zorder": z
+            }
+            if mew is not None:
+                line_args["markeredgewidth"] = mew
+            if mec is not None:
+                line_args["markeredgecolor"] = mec
+            if color:
+                line_args["color"] = color
 
             line, = ax.plot(
                 m["Fraction"].map(frac_to_idx), m["mean"],
-                marker=marker, markersize=ms, linewidth=lw,
-                label=display, color=color, alpha=alpha, zorder=z
+                **line_args
             )
-            ax.fill_between(
-                m["Fraction"].map(frac_to_idx),
-                m["mean"] - m["std"],
-                m["mean"] + m["std"],
-                alpha=alpha * 0.15, color=color, zorder=z-1
-            )
+            # ax.fill_between(
+            #     m["Fraction"].map(frac_to_idx),
+            #     m["mean"] - m["std"],
+            #     m["mean"] + m["std"],
+            #     alpha=alpha * 0.15, color=color, zorder=z-1
+            # )
 
             # Collect legend handles from first subplot only
             if idx == 0:
-                handles.append(line)
-                labels.append(display)
+                if display not in labels:
+                    handles.append(line)
+                    labels.append(display)
 
         ax.set_xlabel("Training Label Fraction")
         if idx == 0:
@@ -440,7 +605,7 @@ def plot_fraction_combined(
         frameon=True, framealpha=0.9, edgecolor="0.8",
         bbox_to_anchor=(0.95, 0.1),
     )
-    fig.suptitle(f"Label Efficiency — {metric}", fontsize=14, fontweight="bold", y=1.02)
+    # fig.suptitle(f"Label Efficiency — {metric}", fontsize=14, fontweight="bold", y=1.02)
     fig.tight_layout()
 
     fname = f"label_efficiency_combined_{metric.lower().replace('-', '_')}.pdf"
@@ -517,10 +682,16 @@ def main():
             )
 
         # Combined figure
-        plot_fraction_combined(
-            df, metric, output_dir,
-            lower_is_better=(metric in lower_is_better),
-        )
+        if df["Dataset"].nunique() > 1:
+            plot_fraction_combined(
+                df, metric, output_dir,
+                lower_is_better=(metric in lower_is_better),
+            )
+            
+            plot_fraction_aggregated(
+                df, metric, output_dir,
+                lower_is_better=(metric in lower_is_better),
+            )
 
     # Also save the aggregated fraction data as CSV for reference
     csv_path = output_dir / "fraction_results.csv"
