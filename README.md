@@ -1,4 +1,4 @@
-# Tabular Foundation Models Adaptation for Survival Analysis
+# Adapting Tabular Foundation Models Adaptation for Survival Analysis
 
 
 [![Paper](https://img.shields.io/badge/paper-under%20review-yellow)](.)
