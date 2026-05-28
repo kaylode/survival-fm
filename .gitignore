@@ -12,3 +12,13 @@ Dataset Sirbu
 results
 logs/
 .claude
+
+checkpoints/
+data/
+docs/
+ehr-meds/
+manusscript/
+tests/
+third_parties/
+
+*/models_diff/
