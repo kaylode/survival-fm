@@ -22,3 +22,7 @@ tests/
 third_parties/
 
 */models_diff/
+xai/
+models_diff/
+data/
+ehr-meds/
